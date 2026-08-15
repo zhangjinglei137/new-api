@@ -289,10 +289,11 @@ func fetchSyncUpstreamData(ctx context.Context, source, locale string) (modelsUR
 			}},
 		}
 		modelsEnv = upstreamEnvelope[upstreamModel]{Success: true}
+		// description 直接采用 api.json 英文原文
 		for _, entry := range entries {
 			modelsEnv.Data = append(modelsEnv.Data, upstreamModel{
 				ModelName:   entry.ID,
-				Description: service.TranslateText(entry.Description, locale),
+				Description: entry.Description,
 				VendorName:  openCodeGoSyncVendor,
 				Status:      1,
 				NameRule:    0,

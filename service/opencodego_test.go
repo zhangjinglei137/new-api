@@ -85,45 +85,6 @@ func TestParseOpenCodeGoModelEntries(t *testing.T) {
 	})
 }
 
-func TestParseGoogleTranslateResponse(t *testing.T) {
-	t.Run("single segment", func(t *testing.T) {
-		body := []byte(`[[["这是翻译后的文本","original text",null,null,10]],null,"en",null,null,null,1]`)
-		got, err := parseGoogleTranslateResponse(body)
-		require.NoError(t, err)
-		assert.Equal(t, "这是翻译后的文本", got)
-	})
-
-	t.Run("multi segment concatenation", func(t *testing.T) {
-		body := []byte(`[[["第一段","a",null,null,10],["第二段","b",null,null,10]],null,"en"]`)
-		got, err := parseGoogleTranslateResponse(body)
-		require.NoError(t, err)
-		assert.Equal(t, "第一段第二段", got)
-	})
-
-	t.Run("empty body", func(t *testing.T) {
-		_, err := parseGoogleTranslateResponse(nil)
-		require.Error(t, err)
-	})
-
-	t.Run("bad json", func(t *testing.T) {
-		_, err := parseGoogleTranslateResponse([]byte("not json"))
-		require.Error(t, err)
-	})
-
-	t.Run("no translated segments", func(t *testing.T) {
-		_, err := parseGoogleTranslateResponse([]byte(`[[],null,"en"]`))
-		require.Error(t, err)
-	})
-}
-
-func TestOpenCodeGoTranslateTextNoNetwork(t *testing.T) {
-	// 不涉及 HTTP 的分支：空文本、非中/日语言、空语言直接返回原文
-	assert.Equal(t, "", TranslateText("", "zh-CN"))
-	assert.Equal(t, "", TranslateText("   ", "ja"))
-	assert.Equal(t, "Hello World", TranslateText("Hello World", "en"))
-	assert.Equal(t, "Hello World", TranslateText("Hello World", ""))
-}
-
 func TestConvertOpenCodeGoRatioData(t *testing.T) {
 	converted, err := convertOpenCodeGoRatioData([]byte(openCodeGoAPIJSONFixture), 500)
 	require.NoError(t, err)
