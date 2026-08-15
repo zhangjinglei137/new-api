@@ -4420,6 +4420,7 @@
     "Sync Endpoint": "同期エンドポイント",
     "Sync Endpoints": "同期エンドポイント",
     "Sync Fields": "フィールド同期",
+    "Sync from the official opencode-go catalog.": "公式 opencode-go カタログから同期します。",
     "Sync from the public upstream metadata repository.": "公開上流メタデータリポジトリから同期します。",
     "Sync Now": "今すぐ同期",
     "Sync this model with official upstream": "このモデルを公式アップストリームと同期",

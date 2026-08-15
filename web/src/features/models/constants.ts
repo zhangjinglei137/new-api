@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type TFunction } from 'i18next'
+import type { TFunction } from 'i18next'
 
 import type { NameRule, ModelStatus, SyncSource } from './types'
 
@@ -187,6 +187,12 @@ export function getSyncSourceOptions(t: TFunction) {
       label: t('Official Repository'),
       value: 'official' as SyncSource,
       description: t('Sync from the public upstream metadata repository.'),
+      disabled: false,
+    },
+    {
+      label: t('OpenCode Go'),
+      value: 'opencode-go' as SyncSource,
+      description: t('Sync from the official opencode-go catalog.'),
       disabled: false,
     },
     {

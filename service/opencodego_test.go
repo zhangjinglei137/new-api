@@ -12,19 +12,19 @@ import (
 const openCodeGoAPIJSONFixture = `{
   "opencode-go": {
     "models": {
-      "gpt-5.6-luna": {"status": "", "cost": {"input": 15, "output": 60, "cache_read": 7.5}},
-      "no-cap-model": {"status": "", "cost": {"input": 1, "output": 2, "cache_read": 0.5}},
-      "deepseek-v4-pro": {"status": "", "cost": {"input": 0.435, "output": 0.87, "cache_read": 0.003625}},
-      "shared-free": {"status": "", "cost": {"input": 10, "output": 20}},
-      "deprecated-model": {"status": "deprecated", "cost": {"input": 1, "output": 2}}
+      "gpt-5.6-luna": {"id": "gpt-5.6-luna", "name": "GPT 5.6 Luna", "description": "GPT 5.6 Luna official model", "status": "", "cost": {"input": 15, "output": 60, "cache_read": 7.5}},
+      "no-cap-model": {"description": "A model without usage cap", "status": "", "cost": {"input": 1, "output": 2, "cache_read": 0.5}},
+      "deepseek-v4-pro": {"name": "DeepSeek V4 Pro", "description": "DeepSeek V4 Pro model", "status": "", "cost": {"input": 0.435, "output": 0.87, "cache_read": 0.003625}},
+      "shared-free": {"name": "Shared", "description": "shared paid description", "status": "", "cost": {"input": 10, "output": 20}},
+      "deprecated-model": {"name": "Deprecated", "description": "deprecated model", "status": "deprecated", "cost": {"input": 1, "output": 2}}
     }
   },
   "opencode": {
     "models": {
-      "hy3-free": {"status": "", "cost": {"input": 0, "output": 0}},
-      "shared-free": {"status": "", "cost": {"input": 0, "output": 0}},
-      "paid-x": {"status": "", "cost": {"input": 5, "output": 10}},
-      "dep-free": {"status": "deprecated", "cost": {"input": 0, "output": 0}}
+      "hy3-free": {"name": "Hy3 Free", "description": "Hy3 free tier", "status": "", "cost": {"input": 0, "output": 0}},
+      "shared-free": {"name": "Shared Free", "description": "shared free description", "status": "", "cost": {"input": 0, "output": 0}},
+      "paid-x": {"name": "Paid X", "description": "paid model", "status": "", "cost": {"input": 5, "output": 10}},
+      "dep-free": {"name": "Dep Free", "description": "deprecated free", "status": "deprecated", "cost": {"input": 0, "output": 0}}
     }
   }
 }`
@@ -46,6 +46,82 @@ func TestParseOpenCodeGoModels(t *testing.T) {
 		_, err := parseOpenCodeGoModels([]byte(`{"opencode-go": {"models": {"x": {"status": "deprecated", "cost": {"input": 1, "output": 1}}}}}`))
 		require.Error(t, err)
 	})
+}
+
+func TestParseOpenCodeGoModelEntries(t *testing.T) {
+	t.Run("valid api.json", func(t *testing.T) {
+		entries, err := parseOpenCodeGoModelEntries([]byte(openCodeGoAPIJSONFixture))
+		require.NoError(t, err)
+		require.Len(t, entries, 5)
+		// 排序后：deepseek-v4-pro, gpt-5.6-luna, hy3-free, no-cap-model, shared-free
+		assert.Equal(t, "deepseek-v4-pro", entries[0].ID)
+		assert.Equal(t, "DeepSeek V4 Pro", entries[0].Name)
+		assert.Equal(t, "DeepSeek V4 Pro model", entries[0].Description)
+		assert.Equal(t, "gpt-5.6-luna", entries[1].ID)
+		assert.Equal(t, "GPT 5.6 Luna", entries[1].Name)
+		assert.Equal(t, "GPT 5.6 Luna official model", entries[1].Description)
+		// -free 模型描述优先取 -free 条目
+		assert.Equal(t, "hy3-free", entries[2].ID)
+		assert.Equal(t, "Hy3 Free", entries[2].Name)
+		assert.Equal(t, "Hy3 free tier", entries[2].Description)
+		// name 缺失时回退 id
+		assert.Equal(t, "no-cap-model", entries[3].ID)
+		assert.Equal(t, "no-cap-model", entries[3].Name)
+		assert.Equal(t, "A model without usage cap", entries[3].Description)
+		// 同 id 时 -free 免费条目覆盖（含 name/description）
+		assert.Equal(t, "shared-free", entries[4].ID)
+		assert.Equal(t, "Shared Free", entries[4].Name)
+		assert.Equal(t, "shared free description", entries[4].Description)
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		_, err := parseOpenCodeGoModelEntries([]byte("{not json"))
+		require.Error(t, err)
+	})
+
+	t.Run("no valid models", func(t *testing.T) {
+		_, err := parseOpenCodeGoModelEntries([]byte(`{"opencode-go": {"models": {"x": {"status": "deprecated", "cost": {"input": 1, "output": 1}}}}}`))
+		require.Error(t, err)
+	})
+}
+
+func TestParseGoogleTranslateResponse(t *testing.T) {
+	t.Run("single segment", func(t *testing.T) {
+		body := []byte(`[[["这是翻译后的文本","original text",null,null,10]],null,"en",null,null,null,1]`)
+		got, err := parseGoogleTranslateResponse(body)
+		require.NoError(t, err)
+		assert.Equal(t, "这是翻译后的文本", got)
+	})
+
+	t.Run("multi segment concatenation", func(t *testing.T) {
+		body := []byte(`[[["第一段","a",null,null,10],["第二段","b",null,null,10]],null,"en"]`)
+		got, err := parseGoogleTranslateResponse(body)
+		require.NoError(t, err)
+		assert.Equal(t, "第一段第二段", got)
+	})
+
+	t.Run("empty body", func(t *testing.T) {
+		_, err := parseGoogleTranslateResponse(nil)
+		require.Error(t, err)
+	})
+
+	t.Run("bad json", func(t *testing.T) {
+		_, err := parseGoogleTranslateResponse([]byte("not json"))
+		require.Error(t, err)
+	})
+
+	t.Run("no translated segments", func(t *testing.T) {
+		_, err := parseGoogleTranslateResponse([]byte(`[[],null,"en"]`))
+		require.Error(t, err)
+	})
+}
+
+func TestOpenCodeGoTranslateTextNoNetwork(t *testing.T) {
+	// 不涉及 HTTP 的分支：空文本、非中/日语言、空语言直接返回原文
+	assert.Equal(t, "", TranslateText("", "zh-CN"))
+	assert.Equal(t, "", TranslateText("   ", "ja"))
+	assert.Equal(t, "Hello World", TranslateText("Hello World", "en"))
+	assert.Equal(t, "Hello World", TranslateText("Hello World", ""))
 }
 
 func TestNormalizeOpenCodeModelName(t *testing.T) {

@@ -4420,6 +4420,7 @@
     "Sync Endpoint": "Điểm cuối đồng bộ",
     "Sync Endpoints": "Điểm đồng bộ",
     "Sync Fields": "Đồng bộ trường",
+    "Sync from the official opencode-go catalog.": "Đồng bộ từ danh mục opencode-go chính thức.",
     "Sync from the public upstream metadata repository.": "Đồng bộ từ kho lưu trữ siêu dữ liệu upstream công khai.",
     "Sync Now": "Đồng bộ ngay",
     "Sync this model with official upstream": "Synchronize this model with the official source.",

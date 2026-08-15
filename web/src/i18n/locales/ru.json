@@ -4420,6 +4420,7 @@
     "Sync Endpoint": "Конечная точка синхронизации",
     "Sync Endpoints": "Точки синхронизации",
     "Sync Fields": "Синхронизировать поля",
+    "Sync from the official opencode-go catalog.": "Синхронизация из официального каталога opencode-go.",
     "Sync from the public upstream metadata repository.": "Синхронизировать из публичного репозитория метаданных верхнего уровня.",
     "Sync Now": "Синхронизировать сейчас",
     "Sync this model with official upstream": "Синхронизировать эту модель с официальным upstream",

@@ -4420,6 +4420,7 @@
     "Sync Endpoint": "Point de terminaison de synchronisation",
     "Sync Endpoints": "Points de synchronisation",
     "Sync Fields": "Synchroniser les champs",
+    "Sync from the official opencode-go catalog.": "Synchroniser depuis le catalogue officiel opencode-go.",
     "Sync from the public upstream metadata repository.": "Synchroniser depuis le dépôt de métadonnées public en amont.",
     "Sync Now": "Synchroniser maintenant",
     "Sync this model with official upstream": "Synchroniser ce modèle avec la source amont officielle",

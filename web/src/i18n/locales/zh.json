@@ -4420,6 +4420,7 @@
     "Sync Endpoint": "同步端点",
     "Sync Endpoints": "同步端点",
     "Sync Fields": "字段同步",
+    "Sync from the official opencode-go catalog.": "从官方 opencode-go 目录同步。",
     "Sync from the public upstream metadata repository.": "从公共上游元数据仓库同步。",
     "Sync Now": "立即同步",
     "Sync this model with official upstream": "将此模型与官方上游同步",

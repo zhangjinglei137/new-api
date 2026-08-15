@@ -20,8 +20,11 @@ type openCodeGoProvider struct {
 }
 
 type openCodeGoModel struct {
-	Status string         `json:"status"`
-	Cost   openCodeGoCost `json:"cost"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Status      string         `json:"status"`
+	Cost        openCodeGoCost `json:"cost"`
 }
 
 type openCodeGoCost struct {
@@ -48,6 +51,15 @@ func collectOpenCodeGoModels(upstream map[string]openCodeGoProvider) map[string]
 				continue
 			}
 			if isOpenCodeGoZeroCost(m.Cost) {
+				// 免费模型覆盖同 id 条目；name/description 缺失时回退原条目的值
+				if existing, ok := models[name]; ok {
+					if m.Name == "" {
+						m.Name = existing.Name
+					}
+					if m.Description == "" {
+						m.Description = existing.Description
+					}
+				}
 				models[name] = m
 			}
 		}
@@ -84,8 +96,8 @@ func parseOpenCodeGoModels(data []byte) ([]string, error) {
 	return names, nil
 }
 
-// FetchOpenCodeGoModels 拉取 models.opencode.ai 的官方模型列表。
-func FetchOpenCodeGoModels() ([]string, error) {
+// fetchOpenCodeGoAPIJSON 拉取 models.opencode.ai api.json 原始字节。
+func fetchOpenCodeGoAPIJSON() ([]byte, error) {
 	client, err := GetHttpClientWithProxy("")
 	if err != nil {
 		return nil, err
@@ -104,9 +116,59 @@ func FetchOpenCodeGoModels() ([]string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status code: %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
+}
+
+// FetchOpenCodeGoModels 拉取 models.opencode.ai 的官方模型列表。
+func FetchOpenCodeGoModels() ([]string, error) {
+	body, err := fetchOpenCodeGoAPIJSON()
 	if err != nil {
 		return nil, err
 	}
 	return parseOpenCodeGoModels(body)
+}
+
+// OpenCodeGoModelEntry 是 opencode-go 模型库同步使用的结构化条目。
+type OpenCodeGoModelEntry struct {
+	ID          string
+	Name        string
+	Description string
+}
+
+// parseOpenCodeGoModelEntries 解析 models.opencode.ai api.json 的结构化条目
+// 列表，集合规则与 parseOpenCodeGoModels 完全一致（同 id 时 -free 免费条目覆盖）。
+func parseOpenCodeGoModelEntries(data []byte) ([]OpenCodeGoModelEntry, error) {
+	var upstream map[string]openCodeGoProvider
+	if err := common.Unmarshal(data, &upstream); err != nil {
+		return nil, fmt.Errorf("invalid opencode api.json response: %w", err)
+	}
+	models := collectOpenCodeGoModels(upstream)
+	if len(models) == 0 {
+		return nil, fmt.Errorf("opencode api.json response contains no valid models")
+	}
+	names := make([]string, 0, len(models))
+	for name := range models {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	entries := make([]OpenCodeGoModelEntry, 0, len(names))
+	for _, name := range names {
+		m := models[name]
+		entry := OpenCodeGoModelEntry{ID: name, Description: m.Description}
+		entry.Name = m.Name
+		if entry.Name == "" {
+			entry.Name = name
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+// FetchOpenCodeGoModelEntries 拉取 models.opencode.ai 的结构化模型条目。
+func FetchOpenCodeGoModelEntries() ([]OpenCodeGoModelEntry, error) {
+	body, err := fetchOpenCodeGoAPIJSON()
+	if err != nil {
+		return nil, err
+	}
+	return parseOpenCodeGoModelEntries(body)
 }
