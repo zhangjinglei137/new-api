@@ -118,17 +118,24 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
         const icon = getCompactModelIcon(iconKey)
 
         return (
-          <div className='flex max-w-full min-w-0 items-center gap-2'>
-            <div className='flex size-5 shrink-0 items-center justify-center overflow-hidden'>
-              {icon}
+          <div className='flex min-w-0 max-w-full flex-col items-start gap-1'>
+            <div className='flex max-w-full min-w-0 items-center gap-2'>
+              <div className='flex size-5 shrink-0 items-center justify-center overflow-hidden'>
+                {icon}
+              </div>
+              <StatusBadge
+                label={name}
+                variant='neutral'
+                copyText={name}
+                size='sm'
+                className='-ml-1.5 font-mono'
+              />
             </div>
-            <StatusBadge
-              label={name}
-              variant='neutral'
-              copyText={name}
-              size='sm'
-              className='-ml-1.5 font-mono'
-            />
+            {model.display_name && model.display_name !== name && (
+              <span className='text-muted-foreground truncate text-xs'>
+                {model.display_name}
+              </span>
+            )}
           </div>
         )
       },

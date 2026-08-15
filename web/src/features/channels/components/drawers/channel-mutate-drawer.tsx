@@ -361,7 +361,9 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     (Array.isArray(values.model_proxy_rules) &&
       values.model_proxy_rules.some(
         (rule) => rule.models?.trim() || rule.proxy?.trim()
-      ))
+      )) ||
+    values.opencode_workspace_id?.trim() ||
+    values.opencode_auth_cookie?.trim()
   )
 }
 

@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -77,9 +78,13 @@ func openCodeGoEndpointForProvider(providerNpm string) string {
 // endpointTemplates 是模型端点模板（与前端 ENDPOINT_TEMPLATES 一致），
 // 供 opencode-go 同步组装端点 map。
 var endpointTemplates = map[string]map[string]any{
-	"openai":          {"path": "/v1/chat/completions", "method": "POST"},
-	"openai-response": {"path": "/v1/responses", "method": "POST"},
-	"anthropic":       {"path": "/v1/messages", "method": "POST"},
+	"openai":           {"path": "/v1/chat/completions", "method": "POST"},
+	"openai-response":  {"path": "/v1/responses", "method": "POST"},
+	"anthropic":        {"path": "/v1/messages", "method": "POST"},
+	"gemini":           {"path": "/v1beta/models/{model}:generateContent", "method": "POST"},
+	"jina-rerank":      {"path": "/rerank", "method": "POST"},
+	"image-generation": {"path": "/v1/images/generations", "method": "POST"},
+	"embeddings":       {"path": "/v1/embeddings", "method": "POST"},
 }
 
 // endpointsJSON 组装模型端点 JSON（map 形态，如
@@ -92,6 +97,30 @@ func endpointsJSON(providerNpm string) json.RawMessage {
 		return nil
 	}
 	return json.RawMessage(bytes)
+}
+
+// jsonEndpointsEqual 语义比较端点 JSON（键序/缩进无关），解析失败回退字符串比较
+func jsonEndpointsEqual(local string, upstream json.RawMessage) bool {
+	if len(upstream) == 0 {
+		return true
+	}
+	if strings.TrimSpace(local) == "" {
+		return false
+	}
+	var localMap, upstreamMap map[string]any
+	if err := common.Unmarshal([]byte(local), &localMap); err != nil {
+		return local == string(upstream)
+	}
+	if err := common.Unmarshal(upstream, &upstreamMap); err != nil {
+		return local == string(upstream)
+	}
+	return reflect.DeepEqual(localMap, upstreamMap)
+}
+
+// openCodeGoStatusToModelStatus 将 api.json 的 status 字符串映射为模型库状态。
+// deprecated 已被 service 层过滤，其余状态（空、beta、preview 等）一律启用。
+func openCodeGoStatusToModelStatus(status string) int {
+	return 1
 }
 
 func normalizeLocale(locale string) (string, bool) {
@@ -125,6 +154,7 @@ type upstreamEnvelope[T any] struct {
 
 type upstreamModel struct {
 	Description string          `json:"description"`
+	DisplayName string          `json:"display_name"`
 	Endpoints   json.RawMessage `json:"endpoints"`
 	Icon        string          `json:"icon"`
 	ModelName   string          `json:"model_name"`
@@ -367,10 +397,11 @@ func fetchSyncUpstreamData(ctx context.Context, source, locale string) (modelsUR
 		for _, entry := range entries {
 			modelsEnv.Data = append(modelsEnv.Data, upstreamModel{
 				ModelName:   entry.ID,
+				DisplayName: entry.Name,
 				Description: entry.Description,
 				Endpoints:   endpointsJSON(entry.Provider),
 				VendorName:  openCodeGoVendorForModel(entry.ID),
-				Status:      1,
+				Status:      openCodeGoStatusToModelStatus(entry.Status),
 				NameRule:    0,
 			})
 		}
@@ -501,6 +532,7 @@ func SyncUpstreamModels(c *gin.Context) {
 		// 创建模型
 		mi := &model.Model{
 			ModelName:    name,
+			DisplayName:  up.DisplayName,
 			Description:  up.Description,
 			Icon:         up.Icon,
 			Tags:         up.Tags,
@@ -540,8 +572,12 @@ func SyncUpstreamModels(c *gin.Context) {
 			newVendorID := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
 
 			// 应用字段覆盖（事务）
-			_ = model.DB.Transaction(func(tx *gorm.DB) error {
+			if err := model.DB.Transaction(func(tx *gorm.DB) error {
 				needUpdate := false
+				if containsField(ow.Fields, "display_name") {
+					local.DisplayName = up.DisplayName
+					needUpdate = true
+				}
 				if containsField(ow.Fields, "description") {
 					local.Description = up.Description
 					needUpdate = true
@@ -566,20 +602,23 @@ func SyncUpstreamModels(c *gin.Context) {
 					local.Status = chooseStatus(up.Status, local.Status)
 					needUpdate = true
 				}
-				if containsField(ow.Fields, "endpoints") && len(up.Endpoints) > 0 {
+				if containsField(ow.Fields, "endpoints") && !jsonEndpointsEqual(local.Endpoints, up.Endpoints) {
 					local.Endpoints = string(up.Endpoints)
 					needUpdate = true
 				}
 				if !needUpdate {
 					return nil
 				}
+				local.UpdatedTime = common.GetTimestamp()
 				if err := tx.Save(&local).Error; err != nil {
 					return err
 				}
 				updatedModels++
 				updatedList = append(updatedList, ow.ModelName)
 				return nil
-			})
+			}); err != nil {
+				common.SysError(fmt.Sprintf("failed to apply upstream model update for %s: %v", ow.ModelName, err))
+			}
 		}
 	}
 
@@ -708,6 +747,9 @@ func SyncUpstreamPreview(c *gin.Context) {
 			continue
 		}
 		fields := make([]conflictField, 0, 6)
+		if strings.TrimSpace(local.DisplayName) != strings.TrimSpace(up.DisplayName) {
+			fields = append(fields, conflictField{Field: "display_name", Local: local.DisplayName, Upstream: up.DisplayName})
+		}
 		if strings.TrimSpace(local.Description) != strings.TrimSpace(up.Description) {
 			fields = append(fields, conflictField{Field: "description", Local: local.Description, Upstream: up.Description})
 		}
@@ -728,7 +770,7 @@ func SyncUpstreamPreview(c *gin.Context) {
 		if local.Status != chooseStatus(up.Status, local.Status) {
 			fields = append(fields, conflictField{Field: "status", Local: local.Status, Upstream: up.Status})
 		}
-		if len(up.Endpoints) > 0 && local.Endpoints != string(up.Endpoints) {
+		if !jsonEndpointsEqual(local.Endpoints, up.Endpoints) {
 			fields = append(fields, conflictField{Field: "endpoints", Local: local.Endpoints, Upstream: string(up.Endpoints)})
 		}
 		if len(fields) > 0 {

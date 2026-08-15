@@ -39,6 +39,12 @@ func parseOpenCodeGoBalancePage(html string) (float64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("无法从 opencode 页面解析用量数据: %w", err)
 	}
+	if usagePercent < 0 {
+		usagePercent = 0
+	}
+	if usagePercent > 100 {
+		usagePercent = 100
+	}
 
 	rewardAmount := openCodeGoDefaultRewardCents
 	if match := openCodeGoRewardAmountRe.FindStringSubmatch(html); match != nil {

@@ -142,6 +142,8 @@ type OpenCodeGoModelEntry struct {
 	ID          string
 	Name        string
 	Description string
+	// Status 是 api.json 条目中的 status 字段（""、beta、preview 等；deprecated 已被过滤）。
+	Status string
 	// Provider 是 api.json 条目中 provider.npm 值（如 "@ai-sdk/openai"），无则空。
 	Provider string
 }
@@ -165,7 +167,7 @@ func parseOpenCodeGoModelEntries(data []byte) ([]OpenCodeGoModelEntry, error) {
 	entries := make([]OpenCodeGoModelEntry, 0, len(names))
 	for _, name := range names {
 		m := models[name]
-		entry := OpenCodeGoModelEntry{ID: name, Description: m.Description, Provider: m.Provider.NPM}
+		entry := OpenCodeGoModelEntry{ID: name, Description: m.Description, Status: m.Status, Provider: m.Provider.NPM}
 		entry.Name = m.Name
 		if entry.Name == "" {
 			entry.Name = name

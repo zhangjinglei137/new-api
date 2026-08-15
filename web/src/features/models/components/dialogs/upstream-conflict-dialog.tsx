@@ -58,14 +58,13 @@ import { useModels } from '../models-provider'
 
 const FIELD_LABELS: Record<string, string> = {
   description: 'Description',
+  display_name: 'Display Name',
   icon: 'Icon',
   tags: 'Tags',
   vendor: 'Vendor',
   name_rule: 'Name Rule',
   status: 'Status',
   endpoints: 'Endpoints',
-  quota_types: 'Quota Types',
-  enable_groups: 'Enable Groups',
 }
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50] as const

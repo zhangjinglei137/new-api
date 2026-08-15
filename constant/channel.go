@@ -59,7 +59,7 @@ const (
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
 	ChannelTypeOpenCodeGo     = 61
-	ChannelTypeDummy          = 61 // this one is only for count, do not add any channel after this
+	ChannelTypeDummy          = 100 // this one is only for count, do not add any channel after this
 
 )
 
