@@ -3,6 +3,8 @@ package controller
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,18 +59,20 @@ func TestOpenCodeGoEndpointForProvider(t *testing.T) {
 func TestEndpointsJSON(t *testing.T) {
 	cases := []struct {
 		providerNpm string
-		want        string
+		want        map[string]map[string]string
 	}{
-		{providerNpm: "@ai-sdk/openai", want: `["openai"]`},
-		{providerNpm: "@ai-sdk/anthropic", want: `["anthropic"]`},
-		{providerNpm: "@ai-sdk/google", want: `["gemini"]`},
-		{providerNpm: "", want: `["openai"]`},
+		{providerNpm: "@ai-sdk/openai", want: map[string]map[string]string{"openai": {"path": "/v1/chat/completions", "method": "POST"}}},
+		{providerNpm: "@ai-sdk/anthropic", want: map[string]map[string]string{"anthropic": {"path": "/v1/messages", "method": "POST"}}},
+		{providerNpm: "@ai-sdk/google", want: map[string]map[string]string{"gemini": {"path": "/v1beta/models/{model}:generateContent", "method": "POST"}}},
+		{providerNpm: "", want: map[string]map[string]string{"openai": {"path": "/v1/chat/completions", "method": "POST"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.providerNpm, func(t *testing.T) {
 			got := endpointsJSON(tc.providerNpm)
 			require.NotNil(t, got)
-			assert.Equal(t, tc.want, string(got))
+			var parsed map[string]map[string]string
+			require.NoError(t, common.Unmarshal(got, &parsed))
+			assert.Equal(t, tc.want, parsed)
 		})
 	}
 }

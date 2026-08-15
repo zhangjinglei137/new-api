@@ -73,9 +73,20 @@ func openCodeGoEndpointForProvider(providerNpm string) string {
 	}
 }
 
-// endpointsJSON 组装模型端点 JSON（数组形态，如 ["openai"]）；marshal 失败返回 nil。
+// endpointTemplates 是模型端点模板（与前端 ENDPOINT_TEMPLATES 一致），
+// 供 opencode-go 同步组装端点 map。
+var endpointTemplates = map[string]map[string]any{
+	"openai":    {"path": "/v1/chat/completions", "method": "POST"},
+	"anthropic": {"path": "/v1/messages", "method": "POST"},
+	"gemini":    {"path": "/v1beta/models/{model}:generateContent", "method": "POST"},
+}
+
+// endpointsJSON 组装模型端点 JSON（map 形态，如
+// {"openai":{"path":"/v1/chat/completions","method":"POST"}}，与模型库端点
+// 配置 UI 及 model/pricing.go 的解析格式一致）；marshal 失败返回 nil。
 func endpointsJSON(providerNpm string) json.RawMessage {
-	bytes, err := common.Marshal([]string{openCodeGoEndpointForProvider(providerNpm)})
+	endpoint := openCodeGoEndpointForProvider(providerNpm)
+	bytes, err := common.Marshal(map[string]any{endpoint: endpointTemplates[endpoint]})
 	if err != nil {
 		return nil
 	}
@@ -552,6 +563,10 @@ func SyncUpstreamModels(c *gin.Context) {
 					local.Status = chooseStatus(up.Status, local.Status)
 					needUpdate = true
 				}
+				if containsField(ow.Fields, "endpoints") && len(up.Endpoints) > 0 {
+					local.Endpoints = string(up.Endpoints)
+					needUpdate = true
+				}
 				if !needUpdate {
 					return nil
 				}
@@ -709,6 +724,9 @@ func SyncUpstreamPreview(c *gin.Context) {
 		}
 		if local.Status != chooseStatus(up.Status, local.Status) {
 			fields = append(fields, conflictField{Field: "status", Local: local.Status, Upstream: up.Status})
+		}
+		if len(up.Endpoints) > 0 && local.Endpoints != string(up.Endpoints) {
+			fields = append(fields, conflictField{Field: "endpoints", Local: local.Endpoints, Upstream: string(up.Endpoints)})
 		}
 		if len(fields) > 0 {
 			conflicts = append(conflicts, conflictItem{ModelName: local.ModelName, Fields: fields})
