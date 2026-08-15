@@ -177,7 +177,7 @@ func channelSupportsRequestPath(channel *model.Channel, requestPath string, requ
 	if channel == nil {
 		return false
 	}
-	if channel.Type != constant.ChannelTypeAdvancedCustom {
+	if !constant.IsAdvancedCustomChannelType(channel.Type) {
 		return true
 	}
 	config := channel.GetOtherSettings().AdvancedCustom

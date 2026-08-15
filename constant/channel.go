@@ -58,7 +58,8 @@ const (
 	ChannelTypeAdvancedCustom = 58
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
-	ChannelTypeDummy          // this one is only for count, do not add any channel after this
+	ChannelTypeOpenCodeGo     = 61
+	ChannelTypeDummy          = 61 // this one is only for count, do not add any channel after this
 
 )
 
@@ -124,6 +125,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //58
 	"",                                          //59
 	"",                                          //60
+	"https://opencode.ai/zen/go",                //61
 }
 
 var ChannelTypeNames = map[int]string{
@@ -184,6 +186,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeAdvancedCustom: "Advanced Custom",
 	ChannelTypeSub2API:        "Sub2API",
 	ChannelTypeNewAPI:         "New API",
+	ChannelTypeOpenCodeGo:     "OpenCode Go",
 }
 
 func GetChannelTypeName(channelType int) string {
@@ -215,4 +218,8 @@ var ChannelSpecialBases = map[string]ChannelSpecialBase{
 		ClaudeBaseURL: "https://ark.cn-beijing.volces.com/api/coding",
 		OpenAIBaseURL: "https://ark.cn-beijing.volces.com/api/coding/v3",
 	},
+}
+
+func IsAdvancedCustomChannelType(t int) bool {
+	return t == ChannelTypeAdvancedCustom || t == ChannelTypeOpenCodeGo
 }

@@ -73,6 +73,7 @@ const BRAND_AND_LITERAL_KEYS = new Set([
   'One API',
   'OpenAI',
   'OpenAIMax',
+  'OpenCode Go',
   'OpenRouter',
   'Pancake',
   'Passkey',
@@ -112,6 +113,7 @@ const BRAND_AND_LITERAL_KEYS = new Set([
   'new-api-key-tool',
   'price_xxx',
   'whsec_xxx',
+  'wrk_xxx',
 ])
 
 function isPlainObject(v) {

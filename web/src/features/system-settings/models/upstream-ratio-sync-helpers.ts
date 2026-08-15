@@ -22,6 +22,8 @@ import {
   MODELS_DEV_PRESET_NAME,
   OFFICIAL_CHANNEL_ID,
   OFFICIAL_CHANNEL_NAME,
+  OPENCODE_GO_PRESET_ID,
+  OPENCODE_GO_PRESET_NAME,
   RATIO_TYPE_OPTIONS,
 } from './constants'
 
@@ -168,6 +170,7 @@ export function getUpstreamDisplayName(sourceName: string): string {
   const synthesizedPresets = [
     { name: OFFICIAL_CHANNEL_NAME, id: OFFICIAL_CHANNEL_ID },
     { name: MODELS_DEV_PRESET_NAME, id: MODELS_DEV_PRESET_ID },
+    { name: OPENCODE_GO_PRESET_NAME, id: OPENCODE_GO_PRESET_ID },
   ]
 
   for (const preset of synthesizedPresets) {

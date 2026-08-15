@@ -1210,7 +1210,7 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 		if err != nil {
 			return nil, err
 		}
-		if savedChannel.Type != constant.ChannelTypeAdvancedCustom {
+		if !constant.IsAdvancedCustomChannelType(savedChannel.Type) {
 			return nil, fmt.Errorf("channel %d is not an advanced custom channel", req.ChannelID)
 		}
 		channel = savedChannel
@@ -1225,7 +1225,7 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 		}
 	}
 
-	if channel.Type != constant.ChannelTypeAdvancedCustom {
+	if !constant.IsAdvancedCustomChannelType(channel.Type) {
 		return nil, fmt.Errorf("channel type must be advanced custom")
 	}
 	if req.BaseURL != nil {
@@ -1283,6 +1283,23 @@ func FetchModels(c *gin.Context) {
 	}
 
 	var channel *model.Channel
+	if req.Type == constant.ChannelTypeOpenCodeGo {
+		// opencode-go 无鉴权依赖，直接拉取官方 api.json 预览（含已保存渠道）
+		models, err := service.FetchOpenCodeGoModels()
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": fmt.Sprintf("获取模型列表失败: %s", err.Error()),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    models,
+		})
+		return
+	}
 	if req.Type == constant.ChannelTypeAdvancedCustom || req.ChannelID > 0 {
 		var err error
 		channel, err = buildAdvancedCustomModelPreviewChannel(req)

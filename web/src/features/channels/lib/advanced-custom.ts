@@ -335,6 +335,37 @@ export const ADVANCED_CUSTOM_TEMPLATE_OPTIONS: AdvancedCustomTemplateOption[] =
         ],
       },
     },
+    {
+      value: 'opencode_go',
+      label: 'OpenCode Go',
+      config: {
+        advanced_routes: [
+          {
+            incoming_path: '/v1/chat/completions',
+            upstream_path: '/v1/chat/completions',
+            converter: 'none',
+          },
+          {
+            incoming_path: '/v1/messages',
+            upstream_path: '/v1/messages',
+            converter: 'none',
+            auth: apiKeyHeaderAuth(),
+          },
+          {
+            incoming_path: '/v1/responses',
+            upstream_path: '/v1/responses',
+            converter: 'none',
+            models: ['grok-4.5'],
+            auth: bearerHeaderAuth(),
+          },
+          {
+            incoming_path: '/v1/models',
+            upstream_path: '/v1/models',
+            converter: 'none',
+          },
+        ],
+      },
+    },
   ]
 
 export function cloneAdvancedCustomConfig(

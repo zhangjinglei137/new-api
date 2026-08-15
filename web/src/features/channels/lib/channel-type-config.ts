@@ -164,6 +164,17 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'Models',
     },
   },
+  61: {
+    id: 61,
+    name: CHANNEL_TYPES[61],
+    icon: 'OpenCode',
+    defaultBaseUrl: 'https://opencode.ai/zen/go',
+    hints: {
+      baseUrl: 'OpenCode Zen gateway base URL',
+      key: 'OpenCode API key',
+      models: 'Models exposed by this channel',
+    },
+  },
 }
 
 /**

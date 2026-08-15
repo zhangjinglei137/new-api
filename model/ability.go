@@ -174,7 +174,7 @@ func filterAbilitiesByRequestPathAndModel(abilities []Ability, requestPath strin
 
 	advancedConfigs := make(map[int]*dto.AdvancedCustomConfig)
 	for _, channel := range channels {
-		if channel.Type == constant.ChannelTypeAdvancedCustom {
+		if constant.IsAdvancedCustomChannelType(channel.Type) {
 			advancedConfigs[channel.Id] = channel.GetOtherSettings().AdvancedCustom
 		}
 	}

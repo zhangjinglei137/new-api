@@ -143,6 +143,7 @@ import {
 import {
   ADD_MODE_OPTIONS,
   CHANNEL_STATUS_LABELS,
+  CHANNEL_TYPE_OPENCODE_GO,
   CHANNEL_TYPE_OPTIONS,
   CHANNEL_TYPE_WARNINGS,
   ERROR_MESSAGES,
@@ -157,6 +158,8 @@ import {
   channelFormSchema,
   channelsQueryKeys,
   getAdvancedCustomStats,
+  getAdvancedCustomTemplateConfig,
+  stringifyAdvancedCustomConfig,
   transformChannelToFormDefaults,
   type ChannelFormValues,
   deduplicateKeys,
@@ -305,6 +308,8 @@ const SENSITIVE_FORM_FIELDS = [
   'upstream_model_update_auto_sync_enabled',
   'upstream_model_update_ignored_models',
   'model_proxy_rules',
+  'opencode_workspace_id',
+  'opencode_auth_cookie',
 ] satisfies (keyof ChannelFormValues)[]
 
 function readAdvancedSettingsPreference(): boolean {
@@ -1296,6 +1301,47 @@ export function ChannelMutateDrawer({
       const currentOther = form.getValues('other')
       if (!currentOther || currentOther === '') {
         form.setValue('other', 'v2.1')
+      }
+    }
+
+    // Type 61 (OpenCode Go) - prefill default routes, header override and base URL
+    if (currentType === CHANNEL_TYPE_OPENCODE_GO) {
+      const currentBaseUrlValue = form.getValues('base_url')
+      if (!currentBaseUrlValue || currentBaseUrlValue === '') {
+        form.setValue('base_url', 'https://opencode.ai/zen/go')
+      }
+      const currentAdvancedCustom = form.getValues('advanced_custom')
+      if (!currentAdvancedCustom?.trim()) {
+        form.setValue(
+          'advanced_custom',
+          stringifyAdvancedCustomConfig(
+            getAdvancedCustomTemplateConfig('opencode_go')
+          )
+        )
+      }
+      const currentHeaderOverride = form.getValues('header_override')
+      if (!currentHeaderOverride?.trim()) {
+        form.setValue(
+          'header_override',
+          JSON.stringify(
+            {
+              '*': true,
+              Authorization: 'Bearer {api_key}',
+              'x-api-key': '{api_key}',
+              'Content-Type': '{client_header:Content-Type}',
+              'User-Agent': '{client_header:User-Agent}',
+              'x-opencode-client': '{client_header:x-opencode-client}',
+              'x-opencode-project': '{client_header:x-opencode-project}',
+              'x-opencode-request': '{client_header:x-opencode-request}',
+              'x-opencode-session': '{client_header:x-opencode-session}',
+              Accept: '{client_header:Accept}',
+              Host: 'opencode.ai',
+              'Accept-Encoding': '{client_header:Accept-Encoding}',
+            },
+            null,
+            2
+          )
+        )
       }
     }
   }, [currentType, isEditing, form])
@@ -2876,6 +2922,49 @@ export function ChannelMutateDrawer({
                                   </FormItem>
                                 )}
                               />
+                            )}
+                            {currentType === CHANNEL_TYPE_OPENCODE_GO && (
+                              <>
+                                <FormField
+                                  control={form.control}
+                                  name='opencode_workspace_id'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('Workspace ID')}</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder={t('wrk_xxx')}
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'OpenCode workspace ID (e.g. wrk_xxx)'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='opencode_auth_cookie'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('Auth Cookie')}</FormLabel>
+                                      <FormControl>
+                                        <Input {...field} />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Auth cookie of the opencode.ai login session (valid for about 30 days, update manually after expiry)'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
                             )}
 
                             <ChannelAuthSection>

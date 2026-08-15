@@ -142,7 +142,9 @@ type ChannelOtherSettings struct {
 	// ModelProxyRules overrides the channel-level proxy per model.
 	// Exact model names take priority over regex rules; within the same kind,
 	// the first rule in array order wins.
-	ModelProxyRules []ModelProxyRule `json:"model_proxy_rules,omitempty"`
+	ModelProxyRules     []ModelProxyRule `json:"model_proxy_rules,omitempty"`
+	OpenCodeWorkspaceId string           `json:"opencode_workspace_id,omitempty"`
+	OpenCodeAuthCookie  string           `json:"opencode_auth_cookie,omitempty"`
 }
 
 // ResolveProxy returns the proxy URL to use for the given model.

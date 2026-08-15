@@ -46,6 +46,8 @@ import {
   MODELS_DEV_PRESET_ID,
   OFFICIAL_CHANNEL_ENDPOINT,
   OFFICIAL_CHANNEL_ID,
+  OPENCODE_GO_PRESET_ENDPOINT,
+  OPENCODE_GO_PRESET_ID,
   OPENROUTER_CHANNEL_TYPE,
   OPENROUTER_ENDPOINT,
 } from './constants'
@@ -89,6 +91,9 @@ type UpstreamRatioSyncProps = {
 // `controller/ratio_sync.go`; matching by ID alone is sufficient and avoids
 // fragile name/base_url comparisons.
 function getDefaultEndpointForChannel(channel: UpstreamChannel): string {
+  if (channel.id === OPENCODE_GO_PRESET_ID) {
+    return OPENCODE_GO_PRESET_ENDPOINT
+  }
   if (channel.id === MODELS_DEV_PRESET_ID) return MODELS_DEV_PRESET_ENDPOINT
   if (channel.id === OFFICIAL_CHANNEL_ID) return OFFICIAL_CHANNEL_ENDPOINT
   if (channel.type === OPENROUTER_CHANNEL_TYPE) return OPENROUTER_ENDPOINT

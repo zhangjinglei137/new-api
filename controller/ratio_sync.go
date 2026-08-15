@@ -21,6 +21,7 @@ import (
 
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/samber/lo"
@@ -43,6 +44,11 @@ const (
 	modelsDevHost               = "models.dev"
 	modelsDevPath               = "/api.json"
 	modelsDevInputCostRatioBase = 1000.0
+	opencodeGoPresetID          = -102
+	opencodeGoPresetName        = "opencode-go 官方"
+	opencodeGoPresetBaseURL     = "https://models.opencode.ai"
+	opencodeGoHost              = "models.opencode.ai"
+	opencodeGoPath              = "/api.json"
 )
 
 func nearlyEqual(a, b float64) bool {
@@ -242,6 +248,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 				fullURL = chItem.BaseURL + endpoint
 			}
 			isModelsDev := isModelsDevAPIEndpoint(fullURL)
+			isOpenCodeGo := isOpenCodeGoAPIEndpoint(fullURL)
 
 			uniqueName := chItem.Name
 			if chItem.ID != 0 {
@@ -331,6 +338,18 @@ func FetchUpstreamRatios(c *gin.Context) {
 				converted, err := convertModelsDevToRatioData(bytes.NewReader(bodyBytes))
 				if err != nil {
 					logger.LogWarn(c.Request.Context(), "models.dev parse failed from "+chItem.Name+": "+err.Error())
+					ch <- upstreamResult{Name: uniqueName, Err: err.Error()}
+					return
+				}
+				ch <- upstreamResult{Name: uniqueName, Data: converted}
+				return
+			}
+
+			// type5: models.opencode.ai /api.json -> convert provider model pricing to ratios
+			if isOpenCodeGo {
+				converted, err := service.ConvertOpenCodeGoToRatioData(bytes.NewReader(bodyBytes))
+				if err != nil {
+					logger.LogWarn(c.Request.Context(), "opencode-go parse failed from "+chItem.Name+": "+err.Error())
 					ch <- upstreamResult{Name: uniqueName, Err: err.Error()}
 					return
 				}
@@ -714,6 +733,21 @@ func isModelsDevAPIEndpoint(rawURL string) bool {
 	return path == modelsDevPath
 }
 
+func isOpenCodeGoAPIEndpoint(rawURL string) bool {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	if strings.ToLower(parsedURL.Hostname()) != opencodeGoHost {
+		return false
+	}
+	path := strings.TrimSuffix(parsedURL.Path, "/")
+	if path == "" {
+		path = "/"
+	}
+	return path == opencodeGoPath
+}
+
 // convertOpenRouterToRatioData parses OpenRouter's /v1/models response and converts
 // per-token USD pricing into the local ratio format.
 // model_ratio = prompt_price_per_token * 1_000_000 * (USD / 1000)
@@ -1018,6 +1052,13 @@ func GetSyncableChannels(c *gin.Context) {
 		ID:      modelsDevPresetID,
 		Name:    modelsDevPresetName,
 		BaseURL: modelsDevPresetBaseURL,
+		Status:  1,
+	})
+
+	syncableChannels = append(syncableChannels, dto.SyncableChannel{
+		ID:      opencodeGoPresetID,
+		Name:    opencodeGoPresetName,
+		BaseURL: opencodeGoPresetBaseURL,
 		Status:  1,
 	})
 

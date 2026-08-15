@@ -42,6 +42,11 @@ export const MODELS_DEV_PRESET_NAME = 'models.dev 价格预设'
 export const MODELS_DEV_PRESET_BASE_URL = 'https://models.dev'
 export const MODELS_DEV_PRESET_ENDPOINT = 'https://models.dev/api.json'
 
+export const OPENCODE_GO_PRESET_ID = -102
+export const OPENCODE_GO_PRESET_NAME = 'opencode-go 官方'
+export const OPENCODE_GO_PRESET_BASE_URL = 'https://models.opencode.ai'
+export const OPENCODE_GO_PRESET_ENDPOINT = 'https://models.opencode.ai/api.json'
+
 export const OPENROUTER_ENDPOINT = 'openrouter'
 
 // Backend channel type for OpenRouter (see constant/channel.go: ChannelTypeOpenRouter = 20)
