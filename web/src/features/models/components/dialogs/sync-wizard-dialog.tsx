@@ -62,6 +62,12 @@ export function SyncWizardDialog({
   const SYNC_SOURCE_OPTIONS = getSyncSourceOptions(t)
   const SYNC_LOCALE_OPTIONS = getSyncLocaleOptions(t)
 
+  // Restore the last-used options only when the dialog (re)opens. Do NOT add
+  // SYNC_SOURCE_OPTIONS or syncWizardOptions to the dependencies: the options
+  // array is recreated on every render and syncWizardOptions only changes from
+  // within this dialog (handleSync), so depending on them would reset the
+  // user's in-dialog selection on every render — making any non-default source
+  // (e.g. OpenCode Go) unselectable.
   useEffect(() => {
     if (open) {
       setLocale(syncWizardOptions.locale || 'zh')
@@ -74,7 +80,8 @@ export function SyncWizardDialog({
           : 'official'
       )
     }
-  }, [open, syncWizardOptions, SYNC_SOURCE_OPTIONS])
+    // eslint-disable-next-line react/exhaustive-deps -- see comment above
+  }, [open])
 
   const handleSync = async () => {
     setIsSyncing(true)

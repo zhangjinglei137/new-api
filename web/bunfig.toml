@@ -1,0 +1,4 @@
+[test]
+# Vitest-run component tests (see vitest.config.ts) are excluded from the
+# bun test runner, which collects node:test style logic tests.
+pathIgnorePatterns = ["**/dialogs/__tests__/**"]
