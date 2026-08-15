@@ -41,6 +41,66 @@ func TestChannelValidateSettingsRejectsInvalidHTTPTransport(t *testing.T) {
 	}
 }
 
+func TestChannelValidateSettingsRejectsInvalidModelProxyRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		rules   []dto.ModelProxyRule
+		wantErr string
+	}{
+		{
+			name:  "no rules is valid",
+			rules: nil,
+		},
+		{
+			name:  "exact model with empty proxy (explicit direct) is valid",
+			rules: []dto.ModelProxyRule{{Models: []string{"gpt-5.6-luna"}, Proxy: ""}},
+		},
+		{
+			name:  "valid regex rule is accepted",
+			rules: []dto.ModelProxyRule{{Models: []string{"regex:^gpt-"}, Proxy: "socks5://127.0.0.1:1080"}},
+		},
+		{
+			name:    "empty models rejected",
+			rules:   []dto.ModelProxyRule{{Proxy: "socks5://127.0.0.1:1080"}},
+			wantErr: "models must not be empty",
+		},
+		{
+			name:    "empty model entry rejected",
+			rules:   []dto.ModelProxyRule{{Models: []string{"  "}, Proxy: "socks5://127.0.0.1:1080"}},
+			wantErr: "empty entries",
+		},
+		{
+			name:    "empty regex pattern rejected",
+			rules:   []dto.ModelProxyRule{{Models: []string{"regex:"}, Proxy: ""}},
+			wantErr: "regex must not be empty",
+		},
+		{
+			name:    "invalid regex rejected",
+			rules:   []dto.ModelProxyRule{{Models: []string{"regex:("}, Proxy: ""}},
+			wantErr: "invalid regex",
+		},
+		{
+			name:    "invalid proxy rejected",
+			rules:   []dto.ModelProxyRule{{Models: []string{"gpt-5"}, Proxy: "ftp://host"}},
+			wantErr: "invalid model_proxy_rules[0].proxy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel := &Channel{}
+			channel.SetOtherSettings(dto.ChannelOtherSettings{ModelProxyRules: tt.rules})
+			err := channel.ValidateSettings()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
 func TestAdvancedCustomChannelRequiresModelListRouteOnlyWhenUpdateChecksEnabled(t *testing.T) {
 	inferenceRoute := dto.AdvancedCustomRoute{
 		IncomingPath: "/v1/chat/completions",

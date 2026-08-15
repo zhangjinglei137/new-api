@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -988,6 +989,37 @@ func (channel *Channel) ValidateSettings() error {
 	if channel.Type == constant.ChannelTypeAdvancedCustom && channelOtherSettings.UpstreamModelUpdateCheckEnabled {
 		if _, ok := channelOtherSettings.AdvancedCustom.ModelListRoute(); !ok {
 			return fmt.Errorf("advanced custom channels require a %s route when upstream model update checks are enabled", dto.AdvancedCustomModelListPath)
+		}
+	}
+	if err := validateModelProxyRules(channelOtherSettings.ModelProxyRules); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateModelProxyRules(rules []dto.ModelProxyRule) error {
+	for i, rule := range rules {
+		ruleIndex := fmt.Sprintf("model_proxy_rules[%d]", i)
+		if len(rule.Models) == 0 {
+			return fmt.Errorf("%s.models must not be empty", ruleIndex)
+		}
+		for _, model := range rule.Models {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				return fmt.Errorf("%s.models must not contain empty entries", ruleIndex)
+			}
+			if strings.HasPrefix(model, dto.ModelProxyRuleRegexPrefix) {
+				pattern := strings.TrimPrefix(model, dto.ModelProxyRuleRegexPrefix)
+				if pattern == "" {
+					return fmt.Errorf("%s.models regex must not be empty: %s", ruleIndex, model)
+				}
+				if _, err := regexp.Compile(pattern); err != nil {
+					return fmt.Errorf("%s.models contains invalid regex: %s", ruleIndex, model)
+				}
+			}
+		}
+		if _, err := common.ParseProxyURLStrict(rule.Proxy); err != nil {
+			return fmt.Errorf("invalid %s.proxy: %w", ruleIndex, err)
 		}
 	}
 	return nil

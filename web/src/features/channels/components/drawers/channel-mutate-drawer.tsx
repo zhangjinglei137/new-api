@@ -51,7 +51,11 @@ import {
   useCallback,
   useRef,
 } from 'react'
-import { type SubmitErrorHandler, useForm } from 'react-hook-form'
+import {
+  type SubmitErrorHandler,
+  useFieldArray,
+  useForm,
+} from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -300,6 +304,7 @@ const SENSITIVE_FORM_FIELDS = [
   'upstream_model_update_check_enabled',
   'upstream_model_update_auto_sync_enabled',
   'upstream_model_update_ignored_models',
+  'model_proxy_rules',
 ] satisfies (keyof ChannelFormValues)[]
 
 function readAdvancedSettingsPreference(): boolean {
@@ -347,7 +352,11 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.claude_beta_query ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
-    values.upstream_model_update_ignored_models?.trim()
+    values.upstream_model_update_ignored_models?.trim() ||
+    (Array.isArray(values.model_proxy_rules) &&
+      values.model_proxy_rules.some(
+        (rule) => rule.models?.trim() || rule.proxy?.trim()
+      ))
   )
 }
 
@@ -712,6 +721,10 @@ export function ChannelMutateDrawer({
   const form = useForm<ChannelFormValues>({
     resolver: zodResolver(channelFormSchema),
     defaultValues: CHANNEL_FORM_DEFAULT_VALUES,
+  })
+  const modelProxyRulesFields = useFieldArray({
+    control: form.control,
+    name: 'model_proxy_rules',
   })
 
   // Watch form values for conditional rendering
@@ -4315,6 +4328,86 @@ export function ChannelMutateDrawer({
                                   </FormItem>
                                 )
                               }}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name='model_proxy_rules'
+                              render={() => (
+                                <FormItem>
+                                  <FormLabel>
+                                    {t('Model Proxy Rules')}
+                                  </FormLabel>
+                                  <FormDescription>
+                                    {t(
+                                      'Per-model proxy overrides. Exact model names take priority over regex rules in array order; leave the proxy empty to force direct connection.'
+                                    )}
+                                  </FormDescription>
+                                  <div className='space-y-2'>
+                                    {modelProxyRulesFields.fields.map(
+                                      (ruleField, index) => (
+                                        <div
+                                          key={ruleField.id}
+                                          className='rounded-lg border p-3'
+                                        >
+                                          <div className='flex items-start gap-2'>
+                                            <div className='grid flex-1 gap-2'>
+                                              <Input
+                                                placeholder={t(
+                                                  'gpt-5.6-luna, regex:^gpt-'
+                                                )}
+                                                aria-label={t('Models')}
+                                                {...form.register(
+                                                  `model_proxy_rules.${index}.models`
+                                                )}
+                                              />
+                                              <Input
+                                                placeholder={t(
+                                                  'socks5://user:pass@host:port'
+                                                )}
+                                                aria-label={t(
+                                                  'Proxy Address'
+                                                )}
+                                                {...form.register(
+                                                  `model_proxy_rules.${index}.proxy`
+                                                )}
+                                              />
+                                            </div>
+                                            <Button
+                                              type='button'
+                                              variant='ghost'
+                                              size='icon'
+                                              aria-label={t('Delete rule')}
+                                              onClick={() =>
+                                                modelProxyRulesFields.remove(
+                                                  index
+                                                )
+                                              }
+                                            >
+                                              <Trash2 className='h-4 w-4' />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    size='sm'
+                                    onClick={() =>
+                                      modelProxyRulesFields.append({
+                                        models: '',
+                                        proxy: '',
+                                      })
+                                    }
+                                  >
+                                    <Plus className='mr-1 h-4 w-4' />
+                                    {t('Add Rule')}
+                                  </Button>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
                             />
 
                             <FormField

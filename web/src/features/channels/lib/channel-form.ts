@@ -70,6 +70,49 @@ function isOptionalProxyURL(value: string | undefined): boolean {
   }
 }
 
+// Per-model proxy rules (models as comma-separated text, "regex:" prefix supported).
+export interface ModelProxyRuleFormValue {
+  models?: string
+  proxy?: string
+}
+
+const MODEL_PROXY_RULE_REGEX_PREFIX = 'regex:'
+
+function splitModelProxyRuleModels(models: string | undefined): string[] {
+  return String(models || '')
+    .split(',')
+    .map((model) => model.trim())
+    .filter(Boolean)
+}
+
+export function parseModelProxyRules(
+  value: ModelProxyRuleFormValue[] | undefined
+): Array<{ models: string[]; proxy: string }> {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((rule) => ({
+      models: splitModelProxyRuleModels(rule.models),
+      proxy: String(rule.proxy || '').trim(),
+    }))
+    .filter((rule) => rule.models.length > 0)
+}
+
+function isValidModelProxyRule(rule: ModelProxyRuleFormValue): boolean {
+  const models = splitModelProxyRuleModels(rule.models)
+  if (models.length === 0) return false
+  for (const model of models) {
+    if (!model.startsWith(MODEL_PROXY_RULE_REGEX_PREFIX)) continue
+    const pattern = model.slice(MODEL_PROXY_RULE_REGEX_PREFIX.length)
+    if (!pattern) return false
+    try {
+      new RegExp(pattern)
+    } catch {
+      return false
+    }
+  }
+  return isOptionalProxyURL(rule.proxy)
+}
+
 export const HTTP_PROTOCOL_AUTO = 'auto'
 export const HTTP_PROTOCOL_HTTP1 = 'http1'
 export const MAX_HTTP2_CONNECTION_SHARDS = 8
@@ -279,6 +322,19 @@ export const channelFormSchema = z
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
     upstream_model_update_ignored_models: z.string().optional(),
+    // Per-model proxy rules (stored in settings JSON, overrides channel-level proxy)
+    model_proxy_rules: z
+      .array(
+        z.object({
+          models: z.string().optional(),
+          proxy: z.string().optional(),
+        })
+      )
+      .optional()
+      .refine(
+        (rules) => rules === undefined || rules.every(isValidModelProxyRule),
+        ERROR_MESSAGES.INVALID_MODEL_PROXY_RULES
+      ),
   })
   .superRefine((data, ctx) => {
     if (
@@ -451,6 +507,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
   advanced_custom: '',
+  model_proxy_rules: [],
 }
 
 // ============================================================================
@@ -516,6 +573,7 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
+  let modelProxyRules: ModelProxyRuleFormValue[] = []
 
   if (channel.settings) {
     try {
@@ -543,6 +601,17 @@ export function transformChannelToFormDefaults(
         : ''
       if (parsed.advanced_custom) {
         advancedCustom = stringifyAdvancedCustomConfig(parsed.advanced_custom)
+      }
+      if (Array.isArray(parsed.model_proxy_rules)) {
+        modelProxyRules = parsed.model_proxy_rules
+          .filter(
+            (rule: { models?: string[]; proxy?: string }) =>
+              Array.isArray(rule.models) && rule.models.length > 0
+          )
+          .map((rule: { models: string[]; proxy?: string }) => ({
+            models: rule.models.join(','),
+            proxy: String(rule.proxy || ''),
+          }))
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -595,6 +664,7 @@ export function transformChannelToFormDefaults(
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
+    model_proxy_rules: modelProxyRules,
   }
 }
 
@@ -754,6 +824,13 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     }
   } else if ('advanced_custom' in settingsObj) {
     delete settingsObj.advanced_custom
+  }
+
+  const modelProxyRules = parseModelProxyRules(formData.model_proxy_rules)
+  if (modelProxyRules.length > 0) {
+    settingsObj.model_proxy_rules = modelProxyRules
+  } else if ('model_proxy_rules' in settingsObj) {
+    delete settingsObj.model_proxy_rules
   }
 
   return JSON.stringify(settingsObj)

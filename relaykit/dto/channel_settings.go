@@ -65,6 +65,60 @@ const (
 	AwsKeyTypeApiKey AwsKeyType = "api_key"
 )
 
+// ModelProxyRule overrides the channel-level proxy for matching models.
+// An empty Proxy means explicit direct connection (bypassing the channel-level proxy).
+type ModelProxyRule struct {
+	// Models is a list of exact model ids; entries prefixed with "regex:" match by regexp.
+	Models []string `json:"models,omitempty"`
+	// Proxy is the proxy URL used when this rule matches. Empty means direct connection.
+	Proxy string `json:"proxy,omitempty"`
+}
+
+const ModelProxyRuleRegexPrefix = "regex:"
+
+// modelProxyRegexCache caches compiled rule regexp patterns. Rule matching runs
+// on the request hot path, so patterns must not be recompiled per request.
+var modelProxyRegexCache sync.Map // pattern string -> *regexp.Regexp
+
+func compileModelProxyRegex(pattern string) *regexp.Regexp {
+	if cached, ok := modelProxyRegexCache.Load(pattern); ok {
+		re, _ := cached.(*regexp.Regexp)
+		return re
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		re = nil
+	}
+	modelProxyRegexCache.Store(pattern, re)
+	return re
+}
+
+func modelProxyRuleExactMatch(models []string, model string) bool {
+	for _, candidate := range models {
+		if !strings.HasPrefix(candidate, ModelProxyRuleRegexPrefix) && candidate == model {
+			return true
+		}
+	}
+	return false
+}
+
+func modelProxyRuleRegexMatch(models []string, model string) bool {
+	for _, candidate := range models {
+		if !strings.HasPrefix(candidate, ModelProxyRuleRegexPrefix) {
+			continue
+		}
+		pattern := strings.TrimPrefix(candidate, ModelProxyRuleRegexPrefix)
+		if pattern == "" {
+			continue
+		}
+		re := compileModelProxyRegex(pattern)
+		if re != nil && re.MatchString(model) {
+			return true
+		}
+	}
+	return false
+}
+
 type ChannelOtherSettings struct {
 	AzureResponsesVersion                 string                `json:"azure_responses_version,omitempty"`
 	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"` // "json" or "api_key"
@@ -85,6 +139,32 @@ type ChannelOtherSettings struct {
 	UpstreamModelUpdateLastRemovedModels  []string              `json:"upstream_model_update_last_removed_models,omitempty"`  // 上次检测到的可删除模型
 	UpstreamModelUpdateIgnoredModels      []string              `json:"upstream_model_update_ignored_models,omitempty"`       // 手动忽略的模型
 	AdvancedCustom                        *AdvancedCustomConfig `json:"advanced_custom,omitempty"`
+	// ModelProxyRules overrides the channel-level proxy per model.
+	// Exact model names take priority over regex rules; within the same kind,
+	// the first rule in array order wins.
+	ModelProxyRules []ModelProxyRule `json:"model_proxy_rules,omitempty"`
+}
+
+// ResolveProxy returns the proxy URL to use for the given model.
+// Matching order: exact model names first, then regex rules, both in rule
+// array order. When no rule matches, defaultProxy (the channel-level proxy)
+// is returned. A matched rule with an empty Proxy means explicit direct
+// connection and overrides the channel-level proxy.
+func (s *ChannelOtherSettings) ResolveProxy(model string, defaultProxy string) string {
+	if s == nil || len(s.ModelProxyRules) == 0 {
+		return defaultProxy
+	}
+	for _, rule := range s.ModelProxyRules {
+		if modelProxyRuleExactMatch(rule.Models, model) {
+			return rule.Proxy
+		}
+	}
+	for _, rule := range s.ModelProxyRules {
+		if modelProxyRuleRegexMatch(rule.Models, model) {
+			return rule.Proxy
+		}
+	}
+	return defaultProxy
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

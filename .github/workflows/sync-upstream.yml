@@ -1,0 +1,45 @@
+name: Sync Upstream
+
+# 每天 UTC 00:00 自动把 QuantumNous/new-api 的 main 合并进本仓库 main,
+# 合并后有新提交即推送(push 会自动触发 Build Docker Image)。
+# 手动触发:仓库 Actions 页 -> Sync Upstream -> Run workflow。
+# 冲突时 merge 失败,workflow 标红并通过邮件通知,需手动解决。
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/QuantumNous/new-api.git
+          git fetch upstream main
+
+      - name: Merge upstream into main
+        id: merge
+        run: |
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse upstream/main)" ]; then
+            echo "Upstream is already up to date, nothing to do"
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-edit upstream/main
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push merge
+        if: steps.merge.outputs.updated == 'true'
+        run: git push origin main
