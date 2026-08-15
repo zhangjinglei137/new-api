@@ -14,6 +14,7 @@ const openCodeGoAPIJSONFixture = `{
     "models": {
       "gpt-5.6-luna": {"status": "", "cost": {"input": 15, "output": 60, "cache_read": 7.5}},
       "no-cap-model": {"status": "", "cost": {"input": 1, "output": 2, "cache_read": 0.5}},
+      "deepseek-v4-pro": {"status": "", "cost": {"input": 0.435, "output": 0.87, "cache_read": 0.003625}},
       "shared-free": {"status": "", "cost": {"input": 10, "output": 20}},
       "deprecated-model": {"status": "deprecated", "cost": {"input": 1, "output": 2}}
     }
@@ -33,7 +34,7 @@ func TestParseOpenCodeGoModels(t *testing.T) {
 		ids, err := parseOpenCodeGoModels([]byte(openCodeGoAPIJSONFixture))
 		require.NoError(t, err)
 		// deprecated 剔除、非 -free 付费模型剔除、-free 免费模型合并
-		assert.Equal(t, []string{"gpt-5.6-luna", "hy3-free", "no-cap-model", "shared-free"}, ids)
+		assert.Equal(t, []string{"deepseek-v4-pro", "gpt-5.6-luna", "hy3-free", "no-cap-model", "shared-free"}, ids)
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
@@ -96,7 +97,7 @@ func TestParseOpenCodeGoUsageCaps(t *testing.T) {
 }
 
 func TestConvertOpenCodeGoRatioData(t *testing.T) {
-	caps := map[string]int{"gpt-5.6-luna": 15}
+	caps := map[string]int{"gpt-5.6-luna": 15, "deepseek-v4-pro": 15}
 	converted, err := convertOpenCodeGoRatioData([]byte(openCodeGoAPIJSONFixture), caps, 500)
 	require.NoError(t, err)
 
@@ -119,6 +120,19 @@ func TestConvertOpenCodeGoRatioData(t *testing.T) {
 		assert.InDelta(t, 0.5, modelRatios["no-cap-model"].(float64), 1e-9)
 		assert.InDelta(t, 2.0, completionRatios["no-cap-model"].(float64), 1e-9)
 		assert.InDelta(t, 0.5, cacheRatios["no-cap-model"].(float64), 1e-9)
+	})
+
+	t.Run("cache ratio precision preserves restored price", func(t *testing.T) {
+		// deepseek-v4-pro: cache_read 0.003625 / input 0.435 = 0.00833333...(循环小数)
+		// 前端还原缓存价 = model_ratio × cache_ratio × 1000，必须接近
+		// 0.003625 × 4(系数) × USD/1000 × 1000 = 7.25，不能因比值舍入产生可见误差
+		modelRatio := modelRatios["deepseek-v4-pro"].(float64)
+		cacheRatio := cacheRatios["deepseek-v4-pro"].(float64)
+		restored := modelRatio * cacheRatio * 1000
+		assert.InDelta(t, 7.25, restored, 1e-6)
+		// 若按 6 位舍入，restored 会是 7.24999971，差 2.9e-7 < 1e-6 仍通过，
+		// 因此再断言比值本身保留 12 位精度（0.008333333333 而非 0.008333）
+		assert.InDelta(t, 0.008333333333, cacheRatio, 1e-11)
 	})
 
 	t.Run("free model ratio is zero without NaN", func(t *testing.T) {

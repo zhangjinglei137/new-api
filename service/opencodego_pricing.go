@@ -186,8 +186,14 @@ func convertOpenCodeGoRatioData(data []byte, caps map[string]int, usd float64) (
 	return converted, nil
 }
 
+// roundOpenCodeGoRatioValue 保留 15 位小数（float64 在 15 位内一般可精确表示）。
+// 注意精度：completion/cache 是相对 model_ratio 的比值（如 0.003625/0.435 =
+// 0.00833333... 循环小数），前端用 model_ratio × 比值还原实际价格。若舍入到
+// 6 位（models.dev 惯例），还原价会产生可见误差（1.74×0.008333 = 0.01449942
+// 而非 0.0145）；舍入到 12 位则误差 5.8e-10 超出前端 snapFloatDrift 的 1e-12
+// 容差，仍显示长尾。15 位舍入的误差 < 1e-15，前端可干净还原为 0.0145。
 func roundOpenCodeGoRatioValue(value float64) float64 {
-	return math.Round(value*1e6) / 1e6
+	return math.Round(value*1e15) / 1e15
 }
 
 func isValidOpenCodeGoCost(v float64) bool {
