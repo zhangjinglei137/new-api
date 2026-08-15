@@ -12,16 +12,16 @@ import (
 const openCodeGoAPIJSONFixture = `{
   "opencode-go": {
     "models": {
-      "gpt-5.6-luna": {"id": "gpt-5.6-luna", "name": "GPT 5.6 Luna", "description": "GPT 5.6 Luna official model", "status": "", "cost": {"input": 15, "output": 60, "cache_read": 7.5}},
+      "gpt-5.6-luna": {"id": "gpt-5.6-luna", "name": "GPT 5.6 Luna", "description": "GPT 5.6 Luna official model", "provider": {"npm": "@ai-sdk/openai"}, "status": "", "cost": {"input": 15, "output": 60, "cache_read": 7.5}},
       "no-cap-model": {"description": "A model without usage cap", "status": "", "cost": {"input": 1, "output": 2, "cache_read": 0.5}},
       "deepseek-v4-pro": {"name": "DeepSeek V4 Pro", "description": "DeepSeek V4 Pro model", "status": "", "cost": {"input": 0.435, "output": 0.87, "cache_read": 0.003625}},
-      "shared-free": {"name": "Shared", "description": "shared paid description", "status": "", "cost": {"input": 10, "output": 20}},
+      "shared-free": {"name": "Shared", "description": "shared paid description", "provider": {"npm": "@ai-sdk/openai"}, "status": "", "cost": {"input": 10, "output": 20}},
       "deprecated-model": {"name": "Deprecated", "description": "deprecated model", "status": "deprecated", "cost": {"input": 1, "output": 2}}
     }
   },
   "opencode": {
     "models": {
-      "hy3-free": {"name": "Hy3 Free", "description": "Hy3 free tier", "status": "", "cost": {"input": 0, "output": 0}},
+      "hy3-free": {"name": "Hy3 Free", "description": "Hy3 free tier", "provider": {"npm": "@ai-sdk/anthropic"}, "status": "", "cost": {"input": 0, "output": 0}},
       "shared-free": {"name": "Shared Free", "description": "shared free description", "status": "", "cost": {"input": 0, "output": 0}},
       "paid-x": {"name": "Paid X", "description": "paid model", "status": "", "cost": {"input": 5, "output": 10}},
       "dep-free": {"name": "Dep Free", "description": "deprecated free", "status": "deprecated", "cost": {"input": 0, "output": 0}}
@@ -60,18 +60,22 @@ func TestParseOpenCodeGoModelEntries(t *testing.T) {
 		assert.Equal(t, "gpt-5.6-luna", entries[1].ID)
 		assert.Equal(t, "GPT 5.6 Luna", entries[1].Name)
 		assert.Equal(t, "GPT 5.6 Luna official model", entries[1].Description)
+		assert.Equal(t, "@ai-sdk/openai", entries[1].Provider)
 		// -free 模型描述优先取 -free 条目
 		assert.Equal(t, "hy3-free", entries[2].ID)
 		assert.Equal(t, "Hy3 Free", entries[2].Name)
 		assert.Equal(t, "Hy3 free tier", entries[2].Description)
-		// name 缺失时回退 id
+		assert.Equal(t, "@ai-sdk/anthropic", entries[2].Provider)
+		// name 缺失时回退 id；provider 缺失时为空
 		assert.Equal(t, "no-cap-model", entries[3].ID)
 		assert.Equal(t, "no-cap-model", entries[3].Name)
 		assert.Equal(t, "A model without usage cap", entries[3].Description)
-		// 同 id 时 -free 免费条目覆盖（含 name/description）
+		assert.Equal(t, "", entries[3].Provider)
+		// 同 id 时 -free 免费条目覆盖（含 name/description）；provider 缺失时回退原条目值
 		assert.Equal(t, "shared-free", entries[4].ID)
 		assert.Equal(t, "Shared Free", entries[4].Name)
 		assert.Equal(t, "shared free description", entries[4].Description)
+		assert.Equal(t, "@ai-sdk/openai", entries[4].Provider)
 	})
 
 	t.Run("invalid json", func(t *testing.T) {

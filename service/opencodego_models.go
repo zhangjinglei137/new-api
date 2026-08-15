@@ -19,12 +19,18 @@ type openCodeGoProvider struct {
 	Models map[string]openCodeGoModel `json:"models"`
 }
 
+// openCodeGoProviderRef 是 api.json 模型条目中 provider 对象（如 {"npm": "..."}）。
+type openCodeGoProviderRef struct {
+	NPM string `json:"npm"`
+}
+
 type openCodeGoModel struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Status      string         `json:"status"`
-	Cost        openCodeGoCost `json:"cost"`
+	ID          string                `json:"id"`
+	Name        string                `json:"name"`
+	Description string                `json:"description"`
+	Status      string                `json:"status"`
+	Cost        openCodeGoCost        `json:"cost"`
+	Provider    openCodeGoProviderRef `json:"provider"`
 }
 
 type openCodeGoCost struct {
@@ -51,13 +57,16 @@ func collectOpenCodeGoModels(upstream map[string]openCodeGoProvider) map[string]
 				continue
 			}
 			if isOpenCodeGoZeroCost(m.Cost) {
-				// 免费模型覆盖同 id 条目；name/description 缺失时回退原条目的值
+				// 免费模型覆盖同 id 条目；name/description/provider 缺失时回退原条目的值
 				if existing, ok := models[name]; ok {
 					if m.Name == "" {
 						m.Name = existing.Name
 					}
 					if m.Description == "" {
 						m.Description = existing.Description
+					}
+					if m.Provider.NPM == "" {
+						m.Provider = existing.Provider
 					}
 				}
 				models[name] = m
@@ -133,6 +142,8 @@ type OpenCodeGoModelEntry struct {
 	ID          string
 	Name        string
 	Description string
+	// Provider 是 api.json 条目中 provider.npm 值（如 "@ai-sdk/openai"），无则空。
+	Provider string
 }
 
 // parseOpenCodeGoModelEntries 解析 models.opencode.ai api.json 的结构化条目
@@ -154,7 +165,7 @@ func parseOpenCodeGoModelEntries(data []byte) ([]OpenCodeGoModelEntry, error) {
 	entries := make([]OpenCodeGoModelEntry, 0, len(names))
 	for _, name := range names {
 		m := models[name]
-		entry := OpenCodeGoModelEntry{ID: name, Description: m.Description}
+		entry := OpenCodeGoModelEntry{ID: name, Description: m.Description, Provider: m.Provider.NPM}
 		entry.Name = m.Name
 		if entry.Name == "" {
 			entry.Name = name

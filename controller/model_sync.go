@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 
@@ -46,6 +47,8 @@ var openCodeGoVendorRules = []struct {
 	{regexp.MustCompile(`^qwen`), "Alibaba"},
 	{regexp.MustCompile(`^deepseek-`), "DeepSeek"},
 	{regexp.MustCompile(`^hy`), "Tencent"},
+	{regexp.MustCompile(`^nemotron`), "Nvidia"},
+	{regexp.MustCompile(`^laguna`), "Poolside"},
 }
 
 func openCodeGoVendorForModel(modelID string) string {
@@ -55,6 +58,28 @@ func openCodeGoVendorForModel(modelID string) string {
 		}
 	}
 	return openCodeGoSyncVendor
+}
+
+// openCodeGoEndpointForProvider 将 api.json 的 provider.npm 映射为端点类型：
+// @ai-sdk/anthropic → anthropic、@ai-sdk/google → gemini、其余（含空）→ openai。
+func openCodeGoEndpointForProvider(providerNpm string) string {
+	switch providerNpm {
+	case "@ai-sdk/anthropic":
+		return string(constant.EndpointTypeAnthropic)
+	case "@ai-sdk/google":
+		return string(constant.EndpointTypeGemini)
+	default:
+		return string(constant.EndpointTypeOpenAI)
+	}
+}
+
+// endpointsJSON 组装模型端点 JSON（数组形态，如 ["openai"]）；marshal 失败返回 nil。
+func endpointsJSON(providerNpm string) json.RawMessage {
+	bytes, err := common.Marshal([]string{openCodeGoEndpointForProvider(providerNpm)})
+	if err != nil {
+		return nil
+	}
+	return json.RawMessage(bytes)
 }
 
 func normalizeLocale(locale string) (string, bool) {
@@ -325,11 +350,13 @@ func fetchSyncUpstreamData(ctx context.Context, source, locale string) (modelsUR
 			})
 		}
 		modelsEnv = upstreamEnvelope[upstreamModel]{Success: true}
-		// description 直接采用 api.json 英文原文；供应商按模型 id 正则归属
+		// description 直接采用 api.json 英文原文；供应商按模型 id 正则归属；
+		// 端点按 provider.npm 映射（默认 openai），空 provider 同样写默认端点
 		for _, entry := range entries {
 			modelsEnv.Data = append(modelsEnv.Data, upstreamModel{
 				ModelName:   entry.ID,
 				Description: entry.Description,
+				Endpoints:   endpointsJSON(entry.Provider),
 				VendorName:  openCodeGoVendorForModel(entry.ID),
 				Status:      1,
 				NameRule:    0,
