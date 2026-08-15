@@ -41,12 +41,12 @@ var openCodeGoVendorRules = []struct {
 	{regexp.MustCompile(`^grok-`), "xAI"},
 	{regexp.MustCompile(`^gpt-`), "OpenAI"},
 	{regexp.MustCompile(`^glm-`), "Z.AI"},
-	{regexp.MustCompile(`^kimi-`), "Moonshot AI"},
+	{regexp.MustCompile(`^kimi-`), "Moonshot"},
 	{regexp.MustCompile(`^mimo-`), "Xiaomi"},
-	{regexp.MustCompile(`^minimax-`), "MiniMax (minimax.io)"},
-	{regexp.MustCompile(`^qwen`), "Alibaba"},
+	{regexp.MustCompile(`^minimax-`), "MiniMax"},
+	{regexp.MustCompile(`^qwen`), "Qwen"},
 	{regexp.MustCompile(`^deepseek-`), "DeepSeek"},
-	{regexp.MustCompile(`^hy`), "Tencent"},
+	{regexp.MustCompile(`^hy`), "Hunyuan"},
 	{regexp.MustCompile(`^nemotron`), "Nvidia"},
 	{regexp.MustCompile(`^laguna`), "Poolside"},
 }
@@ -61,13 +61,14 @@ func openCodeGoVendorForModel(modelID string) string {
 }
 
 // openCodeGoEndpointForProvider 将 api.json 的 provider.npm 映射为端点类型：
-// @ai-sdk/anthropic → anthropic、@ai-sdk/google → gemini、其余（含空）→ openai。
+// @ai-sdk/anthropic → anthropic、@ai-sdk/openai → openai-response、
+// 其余（含空、@ai-sdk/openai-compatible 等）→ openai。
 func openCodeGoEndpointForProvider(providerNpm string) string {
 	switch providerNpm {
 	case "@ai-sdk/anthropic":
 		return string(constant.EndpointTypeAnthropic)
-	case "@ai-sdk/google":
-		return string(constant.EndpointTypeGemini)
+	case "@ai-sdk/openai":
+		return string(constant.EndpointTypeOpenAIResponse)
 	default:
 		return string(constant.EndpointTypeOpenAI)
 	}
@@ -76,9 +77,9 @@ func openCodeGoEndpointForProvider(providerNpm string) string {
 // endpointTemplates 是模型端点模板（与前端 ENDPOINT_TEMPLATES 一致），
 // 供 opencode-go 同步组装端点 map。
 var endpointTemplates = map[string]map[string]any{
-	"openai":    {"path": "/v1/chat/completions", "method": "POST"},
-	"anthropic": {"path": "/v1/messages", "method": "POST"},
-	"gemini":    {"path": "/v1beta/models/{model}:generateContent", "method": "POST"},
+	"openai":          {"path": "/v1/chat/completions", "method": "POST"},
+	"openai-response": {"path": "/v1/responses", "method": "POST"},
+	"anthropic":       {"path": "/v1/messages", "method": "POST"},
 }
 
 // endpointsJSON 组装模型端点 JSON（map 形态，如
