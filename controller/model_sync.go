@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,32 @@ const (
 	openCodeGoSyncModelsURL = "https://models.opencode.ai/api.json"
 	openCodeGoSyncVendor    = "OpenCode Go"
 )
+
+// openCodeGoVendorRules 按模型 id 前缀正则归属供应商：本地已存在则复用
+// （ensureVendorID 先查 DB），不存在则创建；匹配不到兜底 openCodeGoSyncVendor。
+var openCodeGoVendorRules = []struct {
+	re     *regexp.Regexp
+	vendor string
+}{
+	{regexp.MustCompile(`^grok-`), "xAI"},
+	{regexp.MustCompile(`^gpt-`), "OpenAI"},
+	{regexp.MustCompile(`^glm-`), "Z.AI"},
+	{regexp.MustCompile(`^kimi-`), "Moonshot AI"},
+	{regexp.MustCompile(`^mimo-`), "Xiaomi"},
+	{regexp.MustCompile(`^minimax-`), "MiniMax (minimax.io)"},
+	{regexp.MustCompile(`^qwen`), "Alibaba"},
+	{regexp.MustCompile(`^deepseek-`), "DeepSeek"},
+	{regexp.MustCompile(`^hy`), "Tencent"},
+}
+
+func openCodeGoVendorForModel(modelID string) string {
+	for _, r := range openCodeGoVendorRules {
+		if r.re.MatchString(modelID) {
+			return r.vendor
+		}
+	}
+	return openCodeGoSyncVendor
+}
 
 func normalizeLocale(locale string) (string, bool) {
 	l := strings.ToLower(strings.TrimSpace(locale))
@@ -280,21 +307,30 @@ func fetchSyncUpstreamData(ctx context.Context, source, locale string) (modelsUR
 		if fetchErr != nil {
 			return "", "", vendorsEnv, modelsEnv, fetchErr
 		}
-		vendorsEnv = upstreamEnvelope[upstreamVendor]{
-			Success: true,
-			Data: []upstreamVendor{{
-				Name:        openCodeGoSyncVendor,
-				Description: "opencode.ai zen/go 官方模型",
+		// 供应商列表：OpenCode Go + 规则表中全部目标供应商（去重）
+		vendorSet := map[string]struct{}{openCodeGoSyncVendor: {}}
+		for _, r := range openCodeGoVendorRules {
+			vendorSet[r.vendor] = struct{}{}
+		}
+		vendorsEnv = upstreamEnvelope[upstreamVendor]{Success: true}
+		for name := range vendorSet {
+			description := ""
+			if name == openCodeGoSyncVendor {
+				description = "opencode.ai zen/go 官方模型"
+			}
+			vendorsEnv.Data = append(vendorsEnv.Data, upstreamVendor{
+				Name:        name,
+				Description: description,
 				Status:      1,
-			}},
+			})
 		}
 		modelsEnv = upstreamEnvelope[upstreamModel]{Success: true}
-		// description 直接采用 api.json 英文原文
+		// description 直接采用 api.json 英文原文；供应商按模型 id 正则归属
 		for _, entry := range entries {
 			modelsEnv.Data = append(modelsEnv.Data, upstreamModel{
 				ModelName:   entry.ID,
 				Description: entry.Description,
-				VendorName:  openCodeGoSyncVendor,
+				VendorName:  openCodeGoVendorForModel(entry.ID),
 				Status:      1,
 				NameRule:    0,
 			})
