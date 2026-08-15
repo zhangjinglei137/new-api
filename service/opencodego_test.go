@@ -124,57 +124,8 @@ func TestOpenCodeGoTranslateTextNoNetwork(t *testing.T) {
 	assert.Equal(t, "Hello World", TranslateText("Hello World", ""))
 }
 
-func TestNormalizeOpenCodeModelName(t *testing.T) {
-	cases := []struct {
-		name string
-		want string
-	}{
-		{name: "Grok 4.5", want: "grok-4.5"},
-		{name: "GPT 5.6 Luna (≤ 272K tokens)", want: "gpt-5.6-luna"},
-		{name: "Kimi K2.7 Code", want: "kimi-k2.7-code"},
-		{name: "MiMo V2.5 Pro", want: "mimo-v2.5-pro"},
-		{name: "Hy3", want: "hy3"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, normalizeOpenCodeModelName(tc.name))
-		})
-	}
-}
-
-const openCodeGoUsageCapsFixture = `# Go pricing
-| Model | Input | Output | Cached read | Cached write | Usage |
-|-------|-------|--------|-------------|--------------|-------|
-| GPT 5.6 Luna (≤ 272K tokens) | $15 | $60 | $7.50 | $15.00 | $15 |
-| Grok 4.5 | $15 | $60 | $7.50 | $15.00 | $60 |
-| Kimi K2.7 Code | $15 | $60 | $7.50 | $15.00 | $60 |
-| MiMo V2.5 Pro | $15 | $60 | $7.50 | $15.00 | $60 |
-| Hy3 | $15 | $60 | $7.50 | $15.00 | $15 |
-`
-
-func TestParseOpenCodeGoUsageCaps(t *testing.T) {
-	t.Run("pricing table", func(t *testing.T) {
-		caps, err := parseOpenCodeGoUsageCaps([]byte(openCodeGoUsageCapsFixture))
-		require.NoError(t, err)
-		assert.Equal(t, map[string]int{
-			"gpt-5.6-luna":   15,
-			"grok-4.5":       60,
-			"kimi-k2.7-code": 60,
-			"mimo-v2.5-pro":  60,
-			"hy3":            15,
-		}, caps)
-	})
-
-	t.Run("no table", func(t *testing.T) {
-		caps, err := parseOpenCodeGoUsageCaps([]byte("no pricing table here"))
-		require.NoError(t, err)
-		assert.Empty(t, caps)
-	})
-}
-
 func TestConvertOpenCodeGoRatioData(t *testing.T) {
-	caps := map[string]int{"gpt-5.6-luna": 15, "deepseek-v4-pro": 15}
-	converted, err := convertOpenCodeGoRatioData([]byte(openCodeGoAPIJSONFixture), caps, 500)
+	converted, err := convertOpenCodeGoRatioData([]byte(openCodeGoAPIJSONFixture), 500)
 	require.NoError(t, err)
 
 	modelRatios, ok := converted["model_ratio"].(map[string]any)
@@ -184,29 +135,23 @@ func TestConvertOpenCodeGoRatioData(t *testing.T) {
 	cacheRatios, ok := converted["cache_ratio"].(map[string]any)
 	require.True(t, ok, "cache_ratio missing")
 
-	t.Run("cap 15 multiplies ratio by 4", func(t *testing.T) {
-		// input 15 × USD/1000 × (60/15) = 15 × 0.5 × 4 = 30
-		assert.InDelta(t, 30.0, modelRatios["gpt-5.6-luna"].(float64), 1e-9)
+	t.Run("no cap multiplier, api.json price used as-is", func(t *testing.T) {
+		// input 15 × USD/1000 = 15 × 0.5 = 7.5（无额度系数）
+		assert.InDelta(t, 7.5, modelRatios["gpt-5.6-luna"].(float64), 1e-9)
 		assert.InDelta(t, 4.0, completionRatios["gpt-5.6-luna"].(float64), 1e-9)
 		assert.InDelta(t, 0.5, cacheRatios["gpt-5.6-luna"].(float64), 1e-9)
-	})
-
-	t.Run("missing cap defaults to 60", func(t *testing.T) {
-		// input 1 × 0.5 × 1 = 0.5
-		assert.InDelta(t, 0.5, modelRatios["no-cap-model"].(float64), 1e-9)
-		assert.InDelta(t, 2.0, completionRatios["no-cap-model"].(float64), 1e-9)
-		assert.InDelta(t, 0.5, cacheRatios["no-cap-model"].(float64), 1e-9)
 	})
 
 	t.Run("cache ratio precision preserves restored price", func(t *testing.T) {
 		// deepseek-v4-pro: cache_read 0.003625 / input 0.435 = 0.00833333...(循环小数)
 		// 前端还原缓存价 = model_ratio × cache_ratio × 1000，必须接近
-		// 0.003625 × 4(系数) × USD/1000 × 1000 = 7.25，不能因比值舍入产生可见误差
+		// 0.003625 × USD/1000 × 1000 = 1.8125，不能因比值舍入产生可见误差
 		modelRatio := modelRatios["deepseek-v4-pro"].(float64)
+		assert.InDelta(t, 0.2175, modelRatio, 1e-9)
 		cacheRatio := cacheRatios["deepseek-v4-pro"].(float64)
 		restored := modelRatio * cacheRatio * 1000
-		assert.InDelta(t, 7.25, restored, 1e-6)
-		// 若按 6 位舍入，restored 会是 7.24999971，差 2.9e-7 < 1e-6 仍通过，
+		assert.InDelta(t, 1.8125, restored, 1e-6)
+		// 若按 6 位舍入，restored 会差 2.9e-7 < 1e-6 仍通过，
 		// 因此再断言比值本身保留 12 位精度（0.008333333333 而非 0.008333）
 		assert.InDelta(t, 0.008333333333, cacheRatio, 1e-11)
 	})
@@ -238,7 +183,7 @@ func TestConvertOpenCodeGoRatioData(t *testing.T) {
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
-		_, err := convertOpenCodeGoRatioData([]byte("{not json"), caps, 500)
+		_, err := convertOpenCodeGoRatioData([]byte("{not json"), 500)
 		require.Error(t, err)
 	})
 }
