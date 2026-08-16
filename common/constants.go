@@ -186,6 +186,20 @@ func IsValidateRole(role int) bool {
 	return role == RoleGuestUser || role == RoleCommonUser || role == RoleAdminUser || role == RoleRootUser
 }
 
+// ensureNonEmptyVersion 兜底版本兜底规则：构建时 ldflags 可能注入空版本字符串
+// （例如仓库 VERSION 文件为空时 Dockerfile 的 $(cat VERSION) 输出为空），导致
+// /api/status 等接口返回空版本、前端显示"版本未知"。这里统一回退到默认占位版本。
+func ensureNonEmptyVersion(v string) string {
+	if v == "" {
+		return "v0.0.0"
+	}
+	return v
+}
+
+func init() {
+	Version = ensureNonEmptyVersion(Version)
+}
+
 var (
 	FileUploadPermission    = RoleGuestUser
 	FileDownloadPermission  = RoleGuestUser
