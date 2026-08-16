@@ -1,11 +1,11 @@
-name: Publish Docker image (manual branch)
+name: Publish Docker image (manual)
 
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: "Branch name to build (e.g. alpha, nightly)"
-        required: true
+      version:
+        description: 'Version (leave empty for auto: main-<date>-<sha>)'
+        required: false
         type: string
 
 jobs:
@@ -24,24 +24,21 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 1
-          ref: ${{ inputs.branch }}
 
       - name: Resolve Docker tags
         id: version
-        env:
-          BRANCH_NAME: ${{ inputs.branch }}
         run: |
-          TAG_PREFIX=$(printf '%s' "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^[.-]+//; s/[.-]+$//')
-          TAG_PREFIX=${TAG_PREFIX:0:105}
-          TAG_PREFIX=$(printf '%s' "$TAG_PREFIX" | sed -E 's/[.-]+$//')
-          if [ -z "$TAG_PREFIX" ]; then
-            echo "::error::Branch '$BRANCH_NAME' cannot be converted to a valid Docker tag prefix"
-            exit 1
-          fi
-
+          BRANCH_NAME="main"
+          TAG_PREFIX="main"
           SHA=$(git rev-parse HEAD)
           SHORT_SHA=$(git rev-parse --short HEAD)
-          VERSION="${TAG_PREFIX}-$(date +'%Y%m%d')-${SHORT_SHA}"
+          CUSTOM_VERSION="${{ github.event.inputs.version }}"
+          if [ -n "$CUSTOM_VERSION" ]; then
+            TAG_PREFIX="$CUSTOM_VERSION"
+            VERSION="$CUSTOM_VERSION"
+          else
+            VERSION="${TAG_PREFIX}-$(date +'%Y%m%d')-${SHORT_SHA}"
+          fi
 
           echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"

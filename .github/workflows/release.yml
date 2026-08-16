@@ -1,13 +1,14 @@
-name: Release (Linux, macOS, Windows)
+﻿name: Release (Linux, macOS, Windows)
 permissions:
   contents: write
 
 on:
   workflow_dispatch:
     inputs:
-      name:
-        description: 'reason'
+      version:
+        description: 'Version tag (leave empty for auto: v1.0.0-rc.24-<date>-<sha>)'
         required: false
+        type: string
   push:
     tags:
       - '*'
@@ -24,7 +25,13 @@ jobs:
           fetch-depth: 0
       - name: Determine Version
         run: |
-          VERSION=$(git describe --tags)
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+            VERSION=$(git describe --tags)
+          else
+            VERSION="v1.0.0-rc.24-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -55,8 +62,9 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ env.VERSION }}
+          generate_release_notes: true
           files: |
             new-api-*
             checksums-linux.txt
@@ -73,7 +81,13 @@ jobs:
           fetch-depth: 0
       - name: Determine Version
         run: |
-          VERSION=$(git describe --tags)
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+            VERSION=$(git describe --tags)
+          else
+            VERSION="v1.0.0-rc.24-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -100,8 +114,9 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ env.VERSION }}
+          generate_release_notes: true
           files: |
             new-api-macos-*
             checksums-macos.txt
@@ -121,7 +136,13 @@ jobs:
           fetch-depth: 0
       - name: Determine Version
         run: |
-          VERSION=$(git describe --tags)
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+            VERSION=$(git describe --tags)
+          else
+            VERSION="v1.0.0-rc.24-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -147,8 +168,9 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ env.VERSION }}
+          generate_release_notes: true
           files: |
             new-api-*.exe
             checksums-windows.txt
