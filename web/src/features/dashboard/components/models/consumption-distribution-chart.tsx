@@ -30,6 +30,7 @@ import {
 } from '@/features/dashboard/constants'
 import { processChartData } from '@/features/dashboard/lib'
 import type {
+  ChartMetric,
   ConsumptionDistributionChartType,
   QuotaDataItem,
 } from '@/features/dashboard/types'
@@ -46,6 +47,7 @@ interface ConsumptionDistributionChartProps {
   loading?: boolean
   timeGranularity?: TimeGranularity
   defaultChartType?: ConsumptionDistributionChartType
+  metric: ChartMetric
 }
 
 const CHART_TYPE_ICONS: Record<
@@ -104,9 +106,10 @@ export function ConsumptionDistributionChart(
         props.loading ? [] : props.data,
         timeGranularity,
         t,
-        chartRadius
+        chartRadius,
+        props.metric
       ),
-    [props.data, props.loading, timeGranularity, t, chartRadius]
+    [props.data, props.loading, timeGranularity, t, chartRadius, props.metric]
   )
   const spec = chartType === 'bar' ? chartData.spec_line : chartData.spec_area
   const specType = typeof spec?.type === 'string' ? spec.type : chartType
@@ -115,6 +118,7 @@ export function ConsumptionDistributionChart(
     specType,
     props.loading ? 'loading' : 'ready',
     props.data.length,
+    props.metric,
     resolvedTheme,
     customization.preset,
   ].join('-')
@@ -126,9 +130,13 @@ export function ConsumptionDistributionChart(
           <IconBadge tone='success' size='sm'>
             <WalletCards />
           </IconBadge>
-          <div className='text-sm font-semibold'>{t('Quota Distribution')}</div>
+          <div className='text-sm font-semibold'>
+            {props.metric === 'tokens'
+              ? t('Token Distribution')
+              : t('Quota Distribution')}
+          </div>
           <span className='text-muted-foreground text-xs'>
-            {t('Total:')} {chartData.totalQuotaDisplay}
+            {t('Total:')} {chartData.totalMetricDisplay}
           </span>
         </div>
 

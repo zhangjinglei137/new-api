@@ -35,6 +35,7 @@ import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { MetricToggle } from './components/models/metric-toggle'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
@@ -52,8 +53,10 @@ import {
   DASHBOARD_SECTION_IDS,
 } from './section-registry'
 import type {
+  ChartMetric,
   DashboardChartPreferences,
   DashboardFilters,
+  ModelDistributionChartTab,
   QuotaDataItem,
   UserChartsFilters,
 } from './types'
@@ -83,9 +86,21 @@ const LazyLogStatCards = lazy(() =>
   }))
 )
 
-const LazyModelCharts = lazy(() =>
-  import('./components/models/model-charts').then((m) => ({
-    default: m.ModelCharts,
+const LazyModelDistributionChart = lazy(() =>
+  import('./components/models/model-distribution-chart').then((m) => ({
+    default: m.ModelDistributionChart,
+  }))
+)
+
+const LazyModelTrendChart = lazy(() =>
+  import('./components/models/model-trend-chart').then((m) => ({
+    default: m.ModelTrendChart,
+  }))
+)
+
+const LazyTokenDistributionChart = lazy(() =>
+  import('./components/models/token-distribution-chart').then((m) => ({
+    default: m.TokenDistributionChart,
   }))
 )
 
@@ -243,8 +258,20 @@ export function Dashboard() {
     []
   )
 
+  // Toggling the amount/token metric only changes the chart metric; the time
+  // range and granularity stay put, unlike a full preferences change.
+  const handleChartMetricChange = useCallback((chartMetric: ChartMetric) => {
+    setChartPreferences((prev) => {
+      const next = { ...prev, chartMetric }
+      saveChartPreferences(next)
+      return next
+    })
+  }, [])
+
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
+  const distributionTab: ModelDistributionChartTab =
+    chartPreferences.modelAnalyticsChart === 'top' ? 'top' : 'proportion'
   const visibleSections = useMemo(
     () =>
       DASHBOARD_SECTION_IDS.filter(
@@ -266,6 +293,10 @@ export function Dashboard() {
   const modelActions =
     activeSection === 'models' ? (
       <>
+        <MetricToggle
+          value={chartPreferences.chartMetric}
+          onChange={handleChartMetricChange}
+        />
         <ModelsChartPreferences
           preferences={chartPreferences}
           onPreferencesChange={handleChartPreferencesChange}
@@ -373,18 +404,40 @@ export function Dashboard() {
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
                     }
+                    metric={chartPreferences.chartMetric}
                   />
                 </Suspense>
               </FadeIn>
               <FadeIn delay={0.15}>
                 <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyModelCharts
+                  <LazyModelDistributionChart
                     data={modelData}
                     loading={dataLoading}
-                    defaultChartTab={chartPreferences.modelAnalyticsChart}
+                    defaultChartTab={distributionTab}
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
                     }
+                    metric={chartPreferences.chartMetric}
+                  />
+                </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.2}>
+                <Suspense fallback={<ModelChartsFallback />}>
+                  <LazyTokenDistributionChart
+                    filters={modelFilters}
+                    metric={chartPreferences.chartMetric}
+                  />
+                </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.25}>
+                <Suspense fallback={<ModelChartsFallback />}>
+                  <LazyModelTrendChart
+                    data={modelData}
+                    loading={dataLoading}
+                    timeGranularity={
+                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
+                    }
+                    metric={chartPreferences.chartMetric}
                   />
                 </Suspense>
               </FadeIn>

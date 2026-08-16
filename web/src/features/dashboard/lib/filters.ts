@@ -26,6 +26,7 @@ import {
   TIME_RANGE_BY_GRANULARITY,
 } from '@/features/dashboard/constants'
 import type {
+  ChartMetric,
   ConsumptionDistributionChartType,
   DashboardChartPreferences,
   DashboardFilters,
@@ -53,6 +54,10 @@ function isModelAnalyticsChartTab(
   value: unknown
 ): value is ModelAnalyticsChartTab {
   return value === 'trend' || value === 'proportion' || value === 'top'
+}
+
+function isChartMetric(value: unknown): value is ChartMetric {
+  return value === 'quota' || value === 'tokens'
 }
 
 function isTimeRangePresetDays(value: unknown): value is number {
@@ -113,6 +118,9 @@ export function getSavedChartPreferences(): DashboardChartPreferences {
       modelAnalyticsChart: isModelAnalyticsChartTab(parsed.modelAnalyticsChart)
         ? parsed.modelAnalyticsChart
         : fallbackPreferences.modelAnalyticsChart,
+      chartMetric: isChartMetric(parsed.chartMetric)
+        ? parsed.chartMetric
+        : fallbackPreferences.chartMetric,
       defaultTimeRangeDays: isTimeRangePresetDays(parsed.defaultTimeRangeDays)
         ? parsed.defaultTimeRangeDays
         : fallbackPreferences.defaultTimeRangeDays,

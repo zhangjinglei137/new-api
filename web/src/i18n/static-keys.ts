@@ -552,6 +552,21 @@ export const STATIC_I18N_KEYS = [
   'The model that was requested',
   'The upstream channel that served the requests',
 
+  // Dashboard models metric toggle & chart titles
+  'Metric',
+  'Proportion',
+  'Ranking',
+  'Model Distribution',
+  'API Key Distribution',
+  'Model Trend',
+  'Token Distribution',
+  'Quota Ranking',
+  'Token Ranking',
+  'Quota Trend',
+  'Token Trend',
+  'Deleted token ({{id}})',
+  'Unknown Token',
+
   // Misc
   'Cancel',
   'Status',

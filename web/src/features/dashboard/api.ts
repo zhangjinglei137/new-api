@@ -21,6 +21,7 @@ import { api } from '@/lib/api'
 import type {
   FlowQuotaDataItem,
   QuotaDataItem,
+  TokenQuotaDataItem,
   UptimeGroupResult,
 } from './types'
 
@@ -79,6 +80,25 @@ export async function getFlowQuotaDates(
   const res = await api.get<{
     success: boolean
     data?: FlowQuotaDataItem[]
+    message?: string
+  }>(endpoint, { params })
+  return res.data
+}
+
+// Get token quota data grouped by API key within a time range.
+// Admin users get all keys; regular users get only their own.
+export async function getTokenQuotaDates(
+  params: {
+    start_timestamp: number
+    end_timestamp: number
+    default_time?: string
+  },
+  isAdmin = false
+) {
+  const endpoint = isAdmin ? '/api/data/tokens' : '/api/data/tokens/self'
+  const res = await api.get<{
+    success: boolean
+    data?: TokenQuotaDataItem[]
     message?: string
   }>(endpoint, { params })
   return res.data
