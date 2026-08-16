@@ -96,7 +96,8 @@ func getRootFlowQuotaData(startTime int64, endTime int64, username string) ([]*F
 func GetAllTokenQuotaData(startTime int64, endTime int64, username string) ([]*FlowQuotaData, error) {
 	query := DB.Table("quota_data").
 		Select("token_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
-		Where("created_at >= ? and created_at <= ?", startTime, endTime)
+		Where("created_at >= ? and created_at <= ?", startTime, endTime).
+		Where("token_id > 0")
 	if username != "" {
 		query = query.Where("username = ?", username)
 	}
@@ -117,6 +118,7 @@ func GetTokenQuotaDataByUserId(userId int, startTime int64, endTime int64) ([]*F
 	err := DB.Table("quota_data").
 		Select("token_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
 		Where("user_id = ? and created_at >= ? and created_at <= ?", userId, startTime, endTime).
+		Where("token_id > 0").
 		Group("token_id").
 		Order("quota DESC").
 		Find(&rows).Error

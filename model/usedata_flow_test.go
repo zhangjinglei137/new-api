@@ -241,7 +241,7 @@ func TestGetTokenQuotaDataGroupsByToken(t *testing.T) {
 		Quota:     70,
 		TokenUsed: 30,
 	})
-	// 无 token 的旧数据行也参与分组（与 /api/data 口径一致），TokenID 为 0
+	// 无 token 的旧数据行(TokenID 为 0)不参与按 token 分组统计,应被过滤
 	seedFlowQuotaData(t, QuotaData{
 		UserID:    1,
 		Username:  "alice",
@@ -252,17 +252,10 @@ func TestGetTokenQuotaDataGroupsByToken(t *testing.T) {
 		TokenUsed: 999,
 	})
 
-	// 全站统计：按 token_id 汇总 count/quota/token_used，按 quota 降序
+	// 全站统计：按 token_id 汇总 count/quota/token_used，按 quota 降序；TokenID 为 0 的行被排除
 	allRows, err := GetAllTokenQuotaData(900, 2000, "")
 	require.NoError(t, err)
-	require.Len(t, allRows, 3)
-	require.Equal(t, FlowQuotaData{
-		TokenID:   0,
-		TokenName: "",
-		TokenUsed: 999,
-		Count:     99,
-		Quota:     999,
-	}, *allRows[0])
+	require.Len(t, allRows, 2)
 	// Token 11 已软删除，名称留空；三行合并为一行
 	require.Equal(t, FlowQuotaData{
 		TokenID:   11,
@@ -270,23 +263,22 @@ func TestGetTokenQuotaDataGroupsByToken(t *testing.T) {
 		TokenUsed: 70,
 		Count:     4,
 		Quota:     175,
-	}, *allRows[1])
+	}, *allRows[0])
 	require.Equal(t, FlowQuotaData{
 		TokenID:   22,
 		TokenName: "backup",
 		TokenUsed: 30,
 		Count:     3,
 		Quota:     70,
-	}, *allRows[2])
+	}, *allRows[1])
 
 	// username 过滤生效，仅保留该用户的行
 	aliceRows, err := GetAllTokenQuotaData(900, 2000, "alice")
 	require.NoError(t, err)
-	require.Len(t, aliceRows, 2)
-	require.Equal(t, 0, aliceRows[0].TokenID)
-	require.Equal(t, 11, aliceRows[1].TokenID)
-	require.Equal(t, 175, aliceRows[1].Quota)
-	require.Equal(t, 70, aliceRows[1].TokenUsed)
+	require.Len(t, aliceRows, 1)
+	require.Equal(t, 11, aliceRows[0].TokenID)
+	require.Equal(t, 175, aliceRows[0].Quota)
+	require.Equal(t, 70, aliceRows[0].TokenUsed)
 
 	// 用户视角：按 user_id 过滤
 	selfRows, err := GetTokenQuotaDataByUserId(2, 900, 2000)

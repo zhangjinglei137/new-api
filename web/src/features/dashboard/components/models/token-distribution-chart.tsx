@@ -79,8 +79,7 @@ function buildTokenDistributionData(
       prev.value += metricValue(row)
       return
     }
-    const name =
-      row.token_name || (id > 0 ? deletedTokenLabel(id) : t('Unknown Token'))
+    const name = row.token_name || deletedTokenLabel(id)
     totals.set(id, { name, value: metricValue(row) })
   })
 
