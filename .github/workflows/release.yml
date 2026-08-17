@@ -6,10 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (leave empty for auto: v1.0.0-rc.24-<date>-<sha>)'
+        description: 'Version tag (leave empty for auto: <upstream-tag>-<date>-<time>)'
         required: false
         type: string
   push:
+    branches: [main]
     tags:
       - '*'
       - '!*-alpha*'
@@ -30,7 +31,11 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            VERSION="v1.0.0-rc.24-$(TZ=Asia/Shanghai date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            if [ -z "$UPSTREAM_TAG" ]; then
+              UPSTREAM_TAG="v1.0.0-rc.24"
+            fi
+            VERSION="${UPSTREAM_TAG}-$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M')"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -86,7 +91,11 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            VERSION="v1.0.0-rc.24-$(TZ=Asia/Shanghai date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            if [ -z "$UPSTREAM_TAG" ]; then
+              UPSTREAM_TAG="v1.0.0-rc.24"
+            fi
+            VERSION="${UPSTREAM_TAG}-$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M')"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -141,7 +150,11 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            VERSION="v1.0.0-rc.24-$(TZ=Asia/Shanghai date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            if [ -z "$UPSTREAM_TAG" ]; then
+              UPSTREAM_TAG="v1.0.0-rc.24"
+            fi
+            VERSION="${UPSTREAM_TAG}-$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M')"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
