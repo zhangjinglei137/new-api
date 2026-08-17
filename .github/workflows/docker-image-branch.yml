@@ -41,7 +41,7 @@ jobs:
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v0.0.0"
             fi
-            VERSION="${UPSTREAM_TAG}-$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M')"
+            VERSION="${UPSTREAM_TAG}-$(node -e "const{execSync}=require('child_process');const t=+execSync('git show -s --format=%ct HEAD');console.log(new Date((t+28800)*1000).toISOString().replace(/[-T:]/g,'').slice(0,12))")"
           fi
 
           echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"

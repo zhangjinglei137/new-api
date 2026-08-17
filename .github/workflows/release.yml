@@ -35,7 +35,7 @@ jobs:
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v1.0.0-rc.24"
             fi
-            VERSION="${UPSTREAM_TAG}-$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M')"
+            VERSION="${UPSTREAM_TAG}-$(node -e "const{execSync}=require('child_process');const t=+execSync('git show -s --format=%ct HEAD');console.log(new Date((t+28800)*1000).toISOString().replace(/[-T:]/g,'').slice(0,12))")"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -69,6 +69,7 @@ jobs:
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
           tag_name: ${{ env.VERSION }}
+          update_release_body: true
           generate_release_notes: true
           files: |
             new-api-*
@@ -95,7 +96,7 @@ jobs:
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v1.0.0-rc.24"
             fi
-            VERSION="${UPSTREAM_TAG}-$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M')"
+            VERSION="${UPSTREAM_TAG}-$(node -e "const{execSync}=require('child_process');const t=+execSync('git show -s --format=%ct HEAD');console.log(new Date((t+28800)*1000).toISOString().replace(/[-T:]/g,'').slice(0,12))")"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -125,6 +126,7 @@ jobs:
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
           tag_name: ${{ env.VERSION }}
+          update_release_body: true
           generate_release_notes: true
           files: |
             new-api-macos-*
@@ -154,7 +156,7 @@ jobs:
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v1.0.0-rc.24"
             fi
-            VERSION="${UPSTREAM_TAG}-$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M')"
+            VERSION="${UPSTREAM_TAG}-$(node -e "const{execSync}=require('child_process');const t=+execSync('git show -s --format=%ct HEAD');console.log(new Date((t+28800)*1000).toISOString().replace(/[-T:]/g,'').slice(0,12))")"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -183,6 +185,7 @@ jobs:
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
           tag_name: ${{ env.VERSION }}
+          update_release_body: true
           generate_release_notes: true
           files: |
             new-api-*.exe
