@@ -58,7 +58,6 @@ import { useModels } from '../models-provider'
 
 const FIELD_LABELS: Record<string, string> = {
   description: 'Description',
-  display_name: 'Display Name',
   icon: 'Icon',
   tags: 'Tags',
   vendor: 'Vendor',

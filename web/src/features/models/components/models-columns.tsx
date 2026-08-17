@@ -131,11 +131,6 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
                 className='-ml-1.5 font-mono'
               />
             </div>
-            {model.display_name && model.display_name !== name && (
-              <span className='text-muted-foreground truncate text-xs'>
-                {model.display_name}
-              </span>
-            )}
           </div>
         )
       },

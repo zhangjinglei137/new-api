@@ -154,7 +154,6 @@ type upstreamEnvelope[T any] struct {
 
 type upstreamModel struct {
 	Description string          `json:"description"`
-	DisplayName string          `json:"display_name"`
 	Endpoints   json.RawMessage `json:"endpoints"`
 	Icon        string          `json:"icon"`
 	ModelName   string          `json:"model_name"`
@@ -397,7 +396,6 @@ func fetchSyncUpstreamData(ctx context.Context, source, locale string) (modelsUR
 		for _, entry := range entries {
 			modelsEnv.Data = append(modelsEnv.Data, upstreamModel{
 				ModelName:   entry.ID,
-				DisplayName: entry.Name,
 				Description: entry.Description,
 				Endpoints:   endpointsJSON(entry.Provider),
 				VendorName:  openCodeGoVendorForModel(entry.ID),
@@ -532,7 +530,6 @@ func SyncUpstreamModels(c *gin.Context) {
 		// 创建模型
 		mi := &model.Model{
 			ModelName:    name,
-			DisplayName:  up.DisplayName,
 			Description:  up.Description,
 			Icon:         up.Icon,
 			Tags:         up.Tags,
@@ -574,10 +571,6 @@ func SyncUpstreamModels(c *gin.Context) {
 			// 应用字段覆盖（事务）
 			if err := model.DB.Transaction(func(tx *gorm.DB) error {
 				needUpdate := false
-				if containsField(ow.Fields, "display_name") {
-					local.DisplayName = up.DisplayName
-					needUpdate = true
-				}
 				if containsField(ow.Fields, "description") {
 					local.Description = up.Description
 					needUpdate = true
@@ -747,9 +740,6 @@ func SyncUpstreamPreview(c *gin.Context) {
 			continue
 		}
 		fields := make([]conflictField, 0, 6)
-		if strings.TrimSpace(local.DisplayName) != strings.TrimSpace(up.DisplayName) {
-			fields = append(fields, conflictField{Field: "display_name", Local: local.DisplayName, Upstream: up.DisplayName})
-		}
 		if strings.TrimSpace(local.Description) != strings.TrimSpace(up.Description) {
 			fields = append(fields, conflictField{Field: "description", Local: local.Description, Upstream: up.Description})
 		}

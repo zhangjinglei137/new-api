@@ -131,7 +131,7 @@ func TestSyncUpstreamModelsCreatesModelWithSyncOfficial(t *testing.T) {
 		Enabled:   true,
 	}).Error)
 
-	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-create-model","display_name":"Sync Created Model","description":"upstream desc","status":1,"vendor_name":"OpenAI","endpoints":{"openai":{"path":"/v1/chat/completions","method":"POST"}}}]}`
+	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-create-model","description":"upstream desc","status":1,"vendor_name":"OpenAI","endpoints":{"openai":{"path":"/v1/chat/completions","method":"POST"}}}]}`
 	vendorsJSON := `{"success":true,"message":"","data":[{"name":"OpenAI","status":1}]}`
 	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
 
@@ -142,7 +142,6 @@ func TestSyncUpstreamModelsCreatesModelWithSyncOfficial(t *testing.T) {
 	var created model.Model
 	require.NoError(t, db.Where("model_name = ?", "zz-sync-create-model").First(&created).Error)
 	assert.Equal(t, 1, created.SyncOfficial)
-	assert.Equal(t, "Sync Created Model", created.DisplayName)
 	assert.Equal(t, "upstream desc", created.Description)
 }
 
@@ -150,7 +149,6 @@ func TestSyncUpstreamModelsOverwriteSkipsSyncDisabledAndKeepsOfficial(t *testing
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.Model{
 		ModelName:    "zz-sync-overwrite-model",
-		DisplayName:  "old name",
 		Description:  "old desc",
 		Status:       1,
 		SyncOfficial: 1,
@@ -165,11 +163,11 @@ func TestSyncUpstreamModelsOverwriteSkipsSyncDisabledAndKeepsOfficial(t *testing
 	require.NoError(t, db.Create(skipModel).Error)
 	require.NoError(t, db.Model(&model.Model{}).Where("id = ?", skipModel.Id).Update("sync_official", 0).Error)
 
-	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-overwrite-model","display_name":"new name","description":"new desc","status":1,"vendor_name":"OpenAI"},{"model_name":"zz-sync-skip-model","display_name":"should not apply","description":"should not apply","status":1,"vendor_name":"OpenAI"}]}`
+	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-overwrite-model","description":"new desc","status":1,"vendor_name":"OpenAI"},{"model_name":"zz-sync-skip-model","description":"should not apply","status":1,"vendor_name":"OpenAI"}]}`
 	vendorsJSON := `{"success":true,"message":"","data":[{"name":"OpenAI","status":1}]}`
 	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
 
-	body := `{"overwrite":[{"model_name":"zz-sync-overwrite-model","fields":["display_name","description"]},{"model_name":"zz-sync-skip-model","fields":["display_name","description"]}]}`
+	body := `{"overwrite":[{"model_name":"zz-sync-overwrite-model","fields":["description"]},{"model_name":"zz-sync-skip-model","fields":["description"]}]}`
 	resp := runSyncUpstreamModels(t, body)
 
 	// sync_official = 0 的模型被跳过，仅 1 个模型被更新
@@ -177,13 +175,11 @@ func TestSyncUpstreamModelsOverwriteSkipsSyncDisabledAndKeepsOfficial(t *testing
 
 	var overwritten model.Model
 	require.NoError(t, db.Where("model_name = ?", "zz-sync-overwrite-model").First(&overwritten).Error)
-	assert.Equal(t, "new name", overwritten.DisplayName)
 	assert.Equal(t, "new desc", overwritten.Description)
 	assert.Equal(t, 1, overwritten.SyncOfficial)
 
 	var skipped model.Model
 	require.NoError(t, db.Where("model_name = ?", "zz-sync-skip-model").First(&skipped).Error)
-	assert.Equal(t, "", skipped.DisplayName)
 	assert.Equal(t, "keep desc", skipped.Description)
 	assert.Equal(t, 0, skipped.SyncOfficial)
 }
