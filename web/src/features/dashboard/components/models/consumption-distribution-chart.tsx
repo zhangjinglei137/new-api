@@ -47,7 +47,7 @@ interface ConsumptionDistributionChartProps {
   loading?: boolean
   timeGranularity?: TimeGranularity
   defaultChartType?: ConsumptionDistributionChartType
-  metric: ChartMetric
+  metric?: ChartMetric
 }
 
 const CHART_TYPE_ICONS: Record<
@@ -123,6 +123,15 @@ export function ConsumptionDistributionChart(
     customization.preset,
   ].join('-')
 
+  let title: string
+  if (props.metric === 'count') {
+    title = t('Count Distribution')
+  } else if (props.metric === 'tokens') {
+    title = t('Token Distribution')
+  } else {
+    title = t('Quota Distribution')
+  }
+
   return (
     <div className='overflow-hidden rounded-lg border'>
       <div className='flex w-full flex-col gap-1.5 border-b px-3 py-2 sm:gap-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between'>
@@ -130,13 +139,9 @@ export function ConsumptionDistributionChart(
           <IconBadge tone='success' size='sm'>
             <WalletCards />
           </IconBadge>
-          <div className='text-sm font-semibold'>
-            {props.metric === 'tokens'
-              ? t('Token Distribution')
-              : t('Quota Distribution')}
-          </div>
+          <div className='text-sm font-semibold'>{title}</div>
           <span className='text-muted-foreground text-xs'>
-            {t('Total:')} {chartData.totalMetricDisplay}
+            {t('Total:')} {chartData.totalQuotaDisplay}
           </span>
         </div>
 

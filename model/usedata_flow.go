@@ -20,6 +20,7 @@ type FlowQuotaData struct {
 	TokenUsed   int    `json:"token_used" gorm:"column:token_used"`
 	Count       int    `json:"count" gorm:"column:count"`
 	Quota       int    `json:"quota" gorm:"column:quota"`
+	CreatedAt   int64  `json:"created_at" gorm:"column:created_at"`
 }
 
 func GetFlowQuotaData(startTime int64, endTime int64, username string, userID int, role int) ([]*FlowQuotaData, error) {
@@ -89,43 +90,6 @@ func getRootFlowQuotaData(startTime int64, endTime int64, username string) ([]*F
 		return rows, err
 	}
 	return rows, fillFlowChannelNames(rows)
-}
-
-// GetAllTokenQuotaData 按 token 分组统计全站使用量，username 非空时仅统计该用户。
-// 统计口径与 /api/data 一致，不做 flow 接口的 use_group 过滤。
-func GetAllTokenQuotaData(startTime int64, endTime int64, username string) ([]*FlowQuotaData, error) {
-	query := DB.Table("quota_data").
-		Select("token_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
-		Where("created_at >= ? and created_at <= ?", startTime, endTime).
-		Where("token_id > 0")
-	if username != "" {
-		query = query.Where("username = ?", username)
-	}
-	rows := make([]*FlowQuotaData, 0)
-	err := query.
-		Group("token_id").
-		Order("quota DESC").
-		Find(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	return rows, fillFlowTokenNames(rows)
-}
-
-// GetTokenQuotaDataByUserId 按 token 分组统计指定用户的使用量。
-func GetTokenQuotaDataByUserId(userId int, startTime int64, endTime int64) ([]*FlowQuotaData, error) {
-	rows := make([]*FlowQuotaData, 0)
-	err := DB.Table("quota_data").
-		Select("token_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
-		Where("user_id = ? and created_at >= ? and created_at <= ?", userId, startTime, endTime).
-		Where("token_id > 0").
-		Group("token_id").
-		Order("quota DESC").
-		Find(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	return rows, fillFlowTokenNames(rows)
 }
 
 func fillFlowTokenNames(rows []*FlowQuotaData) error {
@@ -212,4 +176,59 @@ func fillFlowChannelNames(rows []*FlowQuotaData) error {
 		}
 	}
 	return nil
+}
+
+// GetTokenQuotaTrendData 按 token + created_at 分组统计使用量,供 API 调用趋势图使用。
+// userID 为 0 时统计全站;userID > 0 时仅统计该用户。
+func GetTokenQuotaTrendData(userID int, startTime int64, endTime int64) ([]*FlowQuotaData, error) {
+	query := DB.Table("quota_data").
+		Select("token_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").
+		Where("created_at >= ? and created_at <= ?", startTime, endTime).
+		Where("token_id > 0")
+	if userID > 0 {
+		query = query.Where("user_id = ?", userID)
+	}
+	rows := make([]*FlowQuotaData, 0)
+	err := query.Group("token_id, created_at").Order("created_at ASC, quota DESC").Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, fillFlowTokenNames(rows)
+}
+
+// GetAllTokenQuotaData 按 token 分组统计全站使用量，username 非空时仅统计该用户。
+// 统计口径与 /api/data 一致，不做 flow 接口的 use_group 过滤。
+func GetAllTokenQuotaData(startTime int64, endTime int64, username string) ([]*FlowQuotaData, error) {
+	query := DB.Table("quota_data").
+		Select("token_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
+		Where("created_at >= ? and created_at <= ?", startTime, endTime).
+		Where("token_id > 0")
+	if username != "" {
+		query = query.Where("username = ?", username)
+	}
+	rows := make([]*FlowQuotaData, 0)
+	err := query.
+		Group("token_id").
+		Order("quota DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, fillFlowTokenNames(rows)
+}
+
+// GetTokenQuotaDataByUserId 按 token 分组统计指定用户的使用量。
+func GetTokenQuotaDataByUserId(userId int, startTime int64, endTime int64) ([]*FlowQuotaData, error) {
+	rows := make([]*FlowQuotaData, 0)
+	err := DB.Table("quota_data").
+		Select("token_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
+		Where("user_id = ? and created_at >= ? and created_at <= ?", userId, startTime, endTime).
+		Where("token_id > 0").
+		Group("token_id").
+		Order("quota DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, fillFlowTokenNames(rows)
 }

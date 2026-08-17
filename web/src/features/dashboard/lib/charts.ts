@@ -26,6 +26,7 @@ import type {
   ProcessedUserChartData,
 } from '@/features/dashboard/types'
 import { getCurrencyDisplay } from '@/lib/currency'
+import { formatCompactMetric } from '@/lib/format'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 
 type TFunction = (key: string) => string
@@ -51,7 +52,7 @@ export function getDashboardChartColors(domainLength: number): string[] {
   )
 }
 
-function renderQuotaCompat(rawQuota: number, digits = 4): string {
+export function renderQuotaCompat(rawQuota: number, digits = 4): string {
   const { config, meta } = getCurrencyDisplay()
   if (meta.kind === 'tokens') return rawQuota.toLocaleString()
   const usd = rawQuota / config.quotaPerUnit
@@ -65,22 +66,17 @@ function renderQuotaCompat(rawQuota: number, digits = 4): string {
   return symbol + fixed
 }
 
-function formatTokenCount(value: number): string {
-  return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-    value
-  )
-}
-
-// Formats a raw metric value for display: quota amounts use the currency
-// rendering, token counts use plain integer grouping.
+/**
+ * Format a raw metric value for display: quota amounts use the currency
+ * rendering, token and call counts use the compact K/M/G/T form.
+ */
 export function formatChartMetricValue(
   value: number,
   metric: ChartMetric = 'quota',
   digits = 4
 ): string {
-  return metric === 'tokens'
-    ? formatTokenCount(value)
-    : renderQuotaCompat(value, digits)
+  if (metric === 'quota') return renderQuotaCompat(value, digits)
+  return formatCompactMetric(value)
 }
 
 /**
@@ -95,21 +91,39 @@ export function processChartData(
 ): ProcessedChartData {
   const tt: TFunction = t ?? ((x) => x)
   const otherLabel = tt('Other')
-  const isTokens = metric === 'tokens'
+
+  let pieTitle: string
+  let rankTitle: string
+  let trendTitle: string
+  if (metric === 'tokens') {
+    pieTitle = tt('Token Distribution')
+    rankTitle = tt('Token Ranking')
+    trendTitle = tt('Token Trend')
+  } else if (metric === 'count') {
+    pieTitle = tt('Count Distribution')
+    rankTitle = tt('Count Ranking')
+    trendTitle = tt('Count Trend')
+  } else {
+    pieTitle = tt('Quota Distribution')
+    rankTitle = tt('Quota Ranking')
+    trendTitle = tt('Quota Trend')
+  }
 
   const formatInt = (value: number) =>
     Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
   const formatQuotaValue = (value: number) => renderQuotaCompat(value, 4)
   const formatQuotaTotal = (value: number) => renderQuotaCompat(value, 2)
   const formatMetricValue = (value: number) =>
-    isTokens ? formatInt(value) : formatQuotaValue(value)
+    metric === 'quota' ? formatQuotaValue(value) : formatCompactMetric(value)
   const formatMetricTotal = (value: number) =>
-    isTokens ? formatInt(value) : formatQuotaTotal(value)
-  const pieTitle = isTokens
-    ? tt('Token Distribution')
-    : tt('Quota Distribution')
-  const rankTitle = isTokens ? tt('Token Ranking') : tt('Quota Ranking')
-  const trendTitle = isTokens ? tt('Token Trend') : tt('Quota Trend')
+    metric === 'quota' ? formatQuotaTotal(value) : formatCompactMetric(value)
+  const metricValueOf = (
+    stats?: { quota: number; count: number; tokens: number }
+  ) => {
+    if (metric === 'tokens') return Number(stats?.tokens) || 0
+    if (metric === 'count') return Number(stats?.count) || 0
+    return Number(stats?.quota) || 0
+  }
 
   const MAX_TOOLTIP_MODELS = 15
   const isOtherTooltipKey = (key: string) =>
@@ -245,12 +259,8 @@ export function processChartData(
 
   const { config } = getCurrencyDisplay()
   const quotaPerUnit = config.quotaPerUnit
-
-  const metricValueOf = (
-    stats?: { quota: number; count: number; tokens: number }
-  ) => (isTokens ? Number(stats?.tokens) || 0 : Number(stats?.quota) || 0)
   const usageOf = (rawValue: number) => {
-    if (isTokens) return rawValue
+    if (metric !== 'quota') return rawValue
     return rawValue ? Number((rawValue / quotaPerUnit).toFixed(4)) : 0
   }
 
@@ -342,8 +352,8 @@ export function processChartData(
     (sum, x) => sum + (Number(x.quota) || 0),
     0
   )
-  const totalTokens = [...modelTotalsMap.values()].reduce(
-    (sum, x) => sum + (Number(x.tokens) || 0),
+  const totalMetricRaw = Array.from(modelTotalsMap.values()).reduce(
+    (sum, stats) => sum + metricValueOf(stats),
     0
   )
 
@@ -355,7 +365,7 @@ export function processChartData(
     }))
     .sort((a, b) => b.value - a.value)
 
-  // Stacked bar: model metric distribution (quota amount or token count)
+  // Stacked bar: model metric distribution (quota -> USD)
   const lineValues: Array<{
     Time: string
     Model: string
@@ -725,7 +735,7 @@ export function processChartData(
     },
     totalQuotaDisplay: formatQuotaTotal(totalQuotaRaw),
     totalCountDisplay: formatInt(totalTimes),
-    totalMetricDisplay: formatMetricTotal(isTokens ? totalTokens : totalQuotaRaw),
+    totalMetricDisplay: formatMetricTotal(totalMetricRaw),
   }
 }
 

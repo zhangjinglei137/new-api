@@ -103,7 +103,6 @@ export const STATIC_I18N_KEYS = [
   'Successfully created {{count}} API Key(s)',
   'Successfully deleted {{count}} API key(s)',
   'Enter API key for this channel',
-  'OpenCode Go',
 
   // Users
   'Root',
@@ -552,20 +551,17 @@ export const STATIC_I18N_KEYS = [
   'The model that was requested',
   'The upstream channel that served the requests',
 
-  // Dashboard models metric toggle & chart titles
-  'Metric',
+  // Dashboard chart metric/option labels (passed to t at runtime)
+  'Quota',
+  'Tokens',
+  'Count',
+  'Call Trend',
+  'Call Distribution',
+  'Call Ranking',
+  'Bar Chart',
+  'Area Chart',
   'Proportion',
   'Ranking',
-  'Model Distribution',
-  'API Key Distribution',
-  'Model Trend',
-  'Token Distribution',
-  'Quota Ranking',
-  'Token Ranking',
-  'Quota Trend',
-  'Token Trend',
-  'Deleted token ({{id}})',
-  'Unknown Token',
 
   // Misc
   'Cancel',

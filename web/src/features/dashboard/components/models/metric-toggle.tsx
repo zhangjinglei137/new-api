@@ -16,16 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Hash, WalletCards } from 'lucide-react'
+import { Activity, Hash, WalletCards, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { METRIC_OPTIONS } from '@/features/dashboard/constants'
 import type { ChartMetric } from '@/features/dashboard/types'
 
-const METRIC_ICONS: Record<ChartMetric, typeof WalletCards> = {
+const METRIC_ICONS: Record<ChartMetric, LucideIcon> = {
   quota: WalletCards,
   tokens: Hash,
+  count: Activity,
 }
 
 interface MetricToggleProps {

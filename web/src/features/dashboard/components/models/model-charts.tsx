@@ -18,57 +18,85 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { VChart } from '@visactor/react-vchart'
 import { PieChart as PieChartIcon } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { IconBadge } from '@/components/ui/icon-badge'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
+import { useTheme } from '@/context/theme-provider'
 import {
   DEFAULT_TIME_GRANULARITY,
-  MODEL_DISTRIBUTION_CHART_OPTIONS,
+  MODEL_ANALYTICS_CHART_OPTIONS,
 } from '@/features/dashboard/constants'
 import { processChartData } from '@/features/dashboard/lib'
 import type {
   ChartMetric,
-  ModelDistributionChartTab,
+  ModelAnalyticsChartTab,
   QuotaDataItem,
 } from '@/features/dashboard/types'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
 import type { TimeGranularity } from '@/lib/time'
-import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
 
-type ChartSpecKey = 'spec_pie' | 'spec_rank_bar'
+let themeManagerPromise: Promise<
+  (typeof import('@visactor/vchart'))['ThemeManager']
+> | null = null
 
-const CHART_SPEC_KEYS: Record<ModelDistributionChartTab, ChartSpecKey> = {
+type ChartSpecKey = 'spec_model_line' | 'spec_pie' | 'spec_rank_bar'
+
+const CHART_SPEC_KEYS: Record<ModelAnalyticsChartTab, ChartSpecKey> = {
+  trend: 'spec_model_line',
   proportion: 'spec_pie',
   top: 'spec_rank_bar',
 }
 
-interface ModelDistributionChartProps {
+interface ModelChartsProps {
   data: QuotaDataItem[]
   loading?: boolean
   timeGranularity?: TimeGranularity
-  defaultChartTab?: ModelDistributionChartTab
-  metric: ChartMetric
+  defaultChartTab?: ModelAnalyticsChartTab
+  metric?: ChartMetric
 }
 
-export function ModelDistributionChart(props: ModelDistributionChartProps) {
+export function ModelCharts(props: ModelChartsProps) {
   const { t } = useTranslation()
-  const { resolvedTheme, themeReady } = useChartTheme()
+  const { resolvedTheme } = useTheme()
   const { customization } = useThemeCustomization()
   const chartRadius = useThemeRadiusPx(
     '--radius-md',
     `${customization.preset}:${customization.radius}`
   )
-  const [activeTab, setActiveTab] = useState<ModelDistributionChartTab>(
-    props.defaultChartTab ?? 'proportion'
+  const [activeTab, setActiveTab] = useState<ModelAnalyticsChartTab>(
+    props.defaultChartTab ?? 'trend'
   )
+  const [themeReady, setThemeReady] = useState(false)
+  const themeManagerRef = useRef<
+    (typeof import('@visactor/vchart'))['ThemeManager'] | null
+  >(null)
   const timeGranularity = props.timeGranularity ?? DEFAULT_TIME_GRANULARITY
 
   useEffect(() => {
     if (props.defaultChartTab) setActiveTab(props.defaultChartTab)
   }, [props.defaultChartTab])
+
+  useEffect(() => {
+    const updateTheme = async () => {
+      setThemeReady(false)
+
+      if (!themeManagerPromise) {
+        themeManagerPromise = import('@visactor/vchart').then(
+          (m) => m.ThemeManager
+        )
+      }
+
+      const ThemeManager = await themeManagerPromise
+      themeManagerRef.current = ThemeManager
+      ThemeManager.setCurrentTheme(resolvedTheme === 'dark' ? 'dark' : 'light')
+      setThemeReady(true)
+    }
+
+    updateTheme()
+  }, [resolvedTheme])
 
   const chartData = useMemo(
     () =>
@@ -89,7 +117,6 @@ export function ModelDistributionChart(props: ModelDistributionChartProps) {
     specType,
     props.loading ? 'loading' : 'ready',
     props.data.length,
-    props.metric,
     resolvedTheme,
     customization.preset,
   ].join('-')
@@ -102,15 +129,15 @@ export function ModelDistributionChart(props: ModelDistributionChartProps) {
             <PieChartIcon />
           </IconBadge>
           <div className='text-sm font-semibold'>
-            {t('Model Distribution')}
+            {t('Model Call Analytics')}
           </div>
           <span className='text-muted-foreground text-xs'>
-            {t('Total:')} {chartData.totalMetricDisplay}
+            {t('Total:')} {chartData.totalCountDisplay}
           </span>
         </div>
 
         <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:w-auto'>
-          {MODEL_DISTRIBUTION_CHART_OPTIONS.map((tab) => (
+          {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
             <button
               key={tab.value}
               type='button'

@@ -56,7 +56,6 @@ import type {
   ChartMetric,
   DashboardChartPreferences,
   DashboardFilters,
-  ModelDistributionChartTab,
   QuotaDataItem,
   UserChartsFilters,
 } from './types'
@@ -86,27 +85,21 @@ const LazyLogStatCards = lazy(() =>
   }))
 )
 
-const LazyModelDistributionChart = lazy(() =>
-  import('./components/models/model-distribution-chart').then((m) => ({
-    default: m.ModelDistributionChart,
-  }))
-)
-
-const LazyModelTrendChart = lazy(() =>
-  import('./components/models/model-trend-chart').then((m) => ({
-    default: m.ModelTrendChart,
-  }))
-)
-
-const LazyTokenDistributionChart = lazy(() =>
-  import('./components/models/token-distribution-chart').then((m) => ({
-    default: m.TokenDistributionChart,
+const LazyModelCharts = lazy(() =>
+  import('./components/models/model-charts').then((m) => ({
+    default: m.ModelCharts,
   }))
 )
 
 const LazyConsumptionDistributionChart = lazy(() =>
   import('./components/models/consumption-distribution-chart').then((m) => ({
     default: m.ConsumptionDistributionChart,
+  }))
+)
+
+const LazyApiCharts = lazy(() =>
+  import('./components/models/api-charts').then((m) => ({
+    default: m.ApiCharts,
   }))
 )
 
@@ -258,8 +251,8 @@ export function Dashboard() {
     []
   )
 
-  // Toggling the amount/token metric only changes the chart metric; the time
-  // range and granularity stay put, unlike a full preferences change.
+  // Toggling the quota/tokens/count metric only changes the chart metric; the
+  // time range and granularity stay put, unlike a full preferences change.
   const handleChartMetricChange = useCallback((chartMetric: ChartMetric) => {
     setChartPreferences((prev) => {
       const next = { ...prev, chartMetric }
@@ -270,8 +263,6 @@ export function Dashboard() {
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
-  const distributionTab: ModelDistributionChartTab =
-    chartPreferences.modelAnalyticsChart === 'top' ? 'top' : 'proportion'
   const visibleSections = useMemo(
     () =>
       DASHBOARD_SECTION_IDS.filter(
@@ -410,10 +401,10 @@ export function Dashboard() {
               </FadeIn>
               <FadeIn delay={0.15}>
                 <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyModelDistributionChart
+                  <LazyModelCharts
                     data={modelData}
                     loading={dataLoading}
-                    defaultChartTab={distributionTab}
+                    defaultChartTab={chartPreferences.modelAnalyticsChart}
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
                     }
@@ -423,20 +414,8 @@ export function Dashboard() {
               </FadeIn>
               <FadeIn delay={0.2}>
                 <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyTokenDistributionChart
+                  <LazyApiCharts
                     filters={modelFilters}
-                    metric={chartPreferences.chartMetric}
-                  />
-                </Suspense>
-              </FadeIn>
-              <FadeIn delay={0.25}>
-                <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyModelTrendChart
-                    data={modelData}
-                    loading={dataLoading}
-                    timeGranularity={
-                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
-                    }
                     metric={chartPreferences.chartMetric}
                   />
                 </Suspense>

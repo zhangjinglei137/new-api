@@ -24,8 +24,14 @@ import { useTranslation } from 'react-i18next'
 
 import { IconBadge } from '@/components/ui/icon-badge'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
-import { getTokenQuotaDates } from '@/features/dashboard/api'
-import { MODEL_DISTRIBUTION_CHART_OPTIONS } from '@/features/dashboard/constants'
+import {
+  getTokenQuotaDates,
+  getTokenQuotaTrendDates,
+} from '@/features/dashboard/api'
+import {
+  DEFAULT_TIME_GRANULARITY,
+  MODEL_ANALYTICS_CHART_OPTIONS,
+} from '@/features/dashboard/constants'
 import { buildQueryParams, getDefaultDays } from '@/features/dashboard/lib'
 import {
   formatChartMetricValue,
@@ -34,57 +40,91 @@ import {
 import type {
   ChartMetric,
   DashboardFilters,
-  ModelDistributionChartTab,
+  ModelAnalyticsChartTab,
   TokenQuotaDataItem,
+  TokenQuotaTrendItem,
 } from '@/features/dashboard/types'
 import { ROLE } from '@/lib/roles'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
-import { computeTimeRange } from '@/lib/time'
+import {
+  computeTimeRange,
+  formatChartTime,
+  type TimeGranularity,
+} from '@/lib/time'
 import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useAuthStore } from '@/stores/auth-store'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TokenChartSpec = Record<string, any>
+type ApiChartSpec = Record<string, any>
 
 const MAX_RANK_TOKENS = 20
+const MAX_TREND_TOKENS = 20
 
-interface TokenDistributionData {
-  spec_pie: TokenChartSpec
-  spec_rank: TokenChartSpec
+type TFunction = (key: string) => string
+
+function metricValueOf(
+  row: Pick<TokenQuotaDataItem, 'count' | 'quota' | 'token_used'>,
+  metric: ChartMetric
+): number {
+  if (metric === 'count') return Number(row.count) || 0
+  if (metric === 'tokens') return Number(row.token_used) || 0
+  return Number(row.quota) || 0
+}
+
+function tokenLabel(
+  row: Pick<TokenQuotaDataItem, 'token_id' | 'token_name'>,
+  deletedTokenLabel: (id: number) => string,
+  t: TFunction
+): string {
+  const id = Number(row.token_id) || 0
+  if (row.token_name) return row.token_name
+  return id > 0 ? deletedTokenLabel(id) : t('Unknown Token')
+}
+
+interface ApiChartData {
+  spec_pie: ApiChartSpec
+  spec_rank: ApiChartSpec
+  spec_trend: ApiChartSpec
   totalDisplay: string
 }
 
-function buildTokenDistributionData(
+function buildApiChartData(
   rows: TokenQuotaDataItem[],
+  trendRows: TokenQuotaTrendItem[],
   metric: ChartMetric,
-  t: (key: string) => string,
+  timeGranularity: TimeGranularity,
+  t: TFunction,
   deletedTokenLabel: (id: number) => string,
   chartCornerRadius?: number
-): TokenDistributionData {
-  const isTokens = metric === 'tokens'
+): ApiChartData {
   const otherLabel = t('Other')
-  const pieTitle = isTokens ? t('Token Distribution') : t('Quota Distribution')
-  const rankTitle = isTokens ? t('Token Ranking') : t('Quota Ranking')
-  const metricValue = (row: TokenQuotaDataItem) =>
-    isTokens ? Number(row.token_used) || 0 : Number(row.quota) || 0
+  const pieTitle = t('Call Distribution')
+  const rankTitle = t('Call Ranking')
+  const trendTitle = t('Call Trend')
   const formatValue = (value: number) => formatChartMetricValue(value, metric)
+  const formatTotal = (value: number) =>
+    formatChartMetricValue(value, metric, 2)
 
-  // Aggregate by token id; token_name is empty for deleted keys.
+  // Distribution (pie) and ranking (bar) share the per-token aggregation.
   const totals = new Map<number, { name: string; value: number }>()
   rows.forEach((row) => {
     const id = Number(row.token_id) || 0
     const prev = totals.get(id)
     if (prev) {
-      prev.value += metricValue(row)
+      prev.value += metricValueOf(row, metric)
       return
     }
-    const name = row.token_name || deletedTokenLabel(id)
-    totals.set(id, { name, value: metricValue(row) })
+    totals.set(id, {
+      name: tokenLabel(row, deletedTokenLabel, t),
+      value: metricValueOf(row, metric),
+    })
   })
 
   const entries = [...totals.values()].sort((a, b) => b.value - a.value)
   const totalValue = entries.reduce((sum, entry) => sum + entry.value, 0)
+  const empty = entries.length === 0
+  const subtext = empty ? t('No data available') : undefined
 
   const pieValues = entries.map((entry) => ({
     type: entry.name,
@@ -107,17 +147,65 @@ function buildTokenDistributionData(
     }))
   }
 
-  const colorDomain = [
-    ...new Set([...entries.map((entry) => entry.name), otherLabel]),
-  ]
-  const color = {
+  const pieColorDomain = entries.map((entry) => entry.name)
+  const pieColor = {
     type: 'ordinal',
-    domain: colorDomain,
-    range: getDashboardChartColors(colorDomain.length),
+    domain: pieColorDomain,
+    range: getDashboardChartColors(pieColorDomain.length),
   }
 
-  const empty = entries.length === 0
-  const subtext = empty ? t('No data available') : undefined
+  const rankColorDomain = [...new Set([...rankValues.map((v) => v.Token)])]
+  const rankColor = {
+    type: 'ordinal',
+    domain: rankColorDomain,
+    range: getDashboardChartColors(rankColorDomain.length),
+  }
+
+  // Trend (area): aggregate by (time bucket, token) with a Map, then keep the
+  // top tokens by total and merge the rest into "Other".
+  const timeTokenMap = new Map<string, Map<string, number>>()
+  const tokenTotals = new Map<string, number>()
+  trendRows.forEach((row) => {
+    const timeKey = formatChartTime(Number(row.created_at), timeGranularity)
+    const name = tokenLabel(row, deletedTokenLabel, t)
+    const value = metricValueOf(row, metric)
+    if (!timeTokenMap.has(timeKey)) timeTokenMap.set(timeKey, new Map())
+    const tokenMap = timeTokenMap.get(timeKey)!
+    tokenMap.set(name, (tokenMap.get(name) || 0) + value)
+    tokenTotals.set(name, (tokenTotals.get(name) || 0) + value)
+  })
+
+  const rankedTrendTokens = [...tokenTotals.entries()].sort(
+    (a, b) => b[1] - a[1]
+  )
+  const topTrendTokens = rankedTrendTokens
+    .slice(0, MAX_TREND_TOKENS)
+    .map(([name]) => name)
+  const topTrendTokenSet = new Set(topTrendTokens)
+  const hasOtherTokens = rankedTrendTokens.length > MAX_TREND_TOKENS
+  const sortedTimes = [...timeTokenMap.keys()].sort()
+
+  const trendValues: Array<{ Time: string; Token: string; Value: number }> = []
+  sortedTimes.forEach((time) => {
+    const tokenMap = timeTokenMap.get(time)!
+    topTrendTokens.forEach((name) => {
+      trendValues.push({ Time: time, Token: name, Value: tokenMap.get(name) || 0 })
+    })
+    if (hasOtherTokens) {
+      let otherValue = 0
+      tokenMap.forEach((value, name) => {
+        if (!topTrendTokenSet.has(name)) otherValue += value
+      })
+      trendValues.push({ Time: time, Token: otherLabel, Value: otherValue })
+    }
+  })
+
+  const trendColorDomain = [...topTrendTokens, otherLabel]
+  const trendColor = {
+    type: 'ordinal',
+    domain: trendColorDomain,
+    range: getDashboardChartColors(trendColorDomain.length),
+  }
 
   return {
     spec_pie: {
@@ -141,7 +229,7 @@ function buildTokenDistributionData(
       title: { visible: true, text: pieTitle, subtext },
       legends: { visible: true, orient: 'left' },
       label: { visible: true },
-      color,
+      color: pieColor,
       tooltip: {
         mark: {
           content: [
@@ -163,7 +251,7 @@ function buildTokenDistributionData(
       yField: 'Value',
       seriesField: 'Token',
       legends: { visible: false },
-      color,
+      color: rankColor,
       title: { visible: true, text: rankTitle, subtext },
       bar: {
         state: { hover: { stroke: '#000', lineWidth: 1 } },
@@ -182,16 +270,92 @@ function buildTokenDistributionData(
       background: { fill: 'transparent' },
       animation: true,
     },
-    totalDisplay: formatChartMetricValue(totalValue, metric, 2),
+    spec_trend: {
+      type: 'area',
+      data: [{ id: 'trendData', values: trendValues }],
+      xField: 'Time',
+      yField: 'Value',
+      seriesField: 'Token',
+      stack: false,
+      legends: { visible: true, selectMode: 'single' },
+      color: trendColor,
+      title: { visible: true, text: trendTitle, subtext },
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: (datum: Record<string, unknown>) => datum?.Token,
+              value: (datum: Record<string, unknown>) =>
+                formatValue(Number(datum?.Value) || 0),
+            },
+          ],
+        },
+        dimension: {
+          content: [
+            {
+              key: (datum: Record<string, unknown>) => datum?.Token,
+              value: (datum: Record<string, unknown>) =>
+                Number(datum?.Value) || 0,
+            },
+          ],
+          updateContent: (
+            array: Array<{
+              key: string
+              value: string | number
+            }>
+          ) => {
+            array.sort(
+              (a, b) => (Number(b.value) || 0) - (Number(a.value) || 0)
+            )
+            let sum = 0
+            for (let i = 0; i < array.length; i++) {
+              const v = Number(array[i].value) || 0
+              sum += v
+              array[i].value = formatValue(v)
+            }
+            array.unshift({
+              key: t('Total:'),
+              value: formatValue(sum),
+            })
+            return array
+          },
+        },
+      },
+      area: {
+        style: {
+          fillOpacity: 0.08,
+          curveType: 'monotone',
+        },
+      },
+      line: {
+        style: {
+          lineWidth: 2,
+          curveType: 'monotone',
+        },
+      },
+      point: { visible: false },
+      background: { fill: 'transparent' },
+      animation: true,
+    },
+    totalDisplay: formatTotal(totalValue),
   }
 }
 
-interface TokenDistributionChartProps {
-  filters: DashboardFilters
+const CHART_SPEC_KEYS: Record<
+  ModelAnalyticsChartTab,
+  'spec_pie' | 'spec_rank' | 'spec_trend'
+> = {
+  trend: 'spec_trend',
+  proportion: 'spec_pie',
+  top: 'spec_rank',
+}
+
+interface ApiChartsProps {
+  filters?: DashboardFilters
   metric: ChartMetric
 }
 
-export function TokenDistributionChart(props: TokenDistributionChartProps) {
+export function ApiCharts(props: ApiChartsProps) {
   const { t } = useTranslation()
   const { resolvedTheme, themeReady } = useChartTheme()
   const { customization } = useThemeCustomization()
@@ -199,11 +363,11 @@ export function TokenDistributionChart(props: TokenDistributionChartProps) {
     '--radius-md',
     `${customization.preset}:${customization.radius}`
   )
-  const [activeTab, setActiveTab] = useState<ModelDistributionChartTab>(
-    'proportion'
-  )
+  const [activeTab, setActiveTab] = useState<ModelAnalyticsChartTab>('trend')
   const user = useAuthStore((state) => state.auth.user)
   const isAdmin = Boolean(user?.role && user.role >= ROLE.ADMIN)
+  const timeGranularity =
+    props.filters?.time_granularity ?? DEFAULT_TIME_GRANULARITY
 
   const timeRange = useMemo(
     () =>
@@ -226,33 +390,41 @@ export function TokenDistributionChart(props: TokenDistributionChartProps) {
     [timeRange, props.filters?.time_granularity]
   )
 
-  const { data: tokenRows, isLoading } = useQuery({
-    queryKey: ['dashboard', 'tokens', queryParams, isAdmin],
+  const { data: rows, isLoading } = useQuery({
+    queryKey: ['dashboard', 'api-charts', 'dates', queryParams, isAdmin],
     queryFn: () => getTokenQuotaDates(queryParams, isAdmin),
+    select: (res) => res.data ?? [],
+    staleTime: 60_000,
+  })
+
+  const { data: trendRows, isLoading: trendLoading } = useQuery({
+    queryKey: ['dashboard', 'api-charts', 'trend', queryParams, isAdmin],
+    queryFn: () => getTokenQuotaTrendDates(queryParams, isAdmin),
     select: (res) => res.data ?? [],
     staleTime: 60_000,
   })
 
   const chartData = useMemo(
     () =>
-      buildTokenDistributionData(
-        isLoading ? [] : (tokenRows ?? []),
+      buildApiChartData(
+        isLoading ? [] : (rows ?? []),
+        trendLoading ? [] : (trendRows ?? []),
         props.metric,
+        timeGranularity,
         t,
         (id) => t('Deleted token ({{id}})', { id }),
         chartRadius
       ),
-    [tokenRows, isLoading, props.metric, t, chartRadius]
+    [rows, trendRows, isLoading, trendLoading, props.metric, timeGranularity, t, chartRadius]
   )
 
-  const spec =
-    activeTab === 'proportion' ? chartData.spec_pie : chartData.spec_rank
+  const spec = chartData[CHART_SPEC_KEYS[activeTab]]
   const specType = typeof spec?.type === 'string' ? spec.type : activeTab
   const chartKey = [
     activeTab,
     specType,
-    isLoading ? 'loading' : 'ready',
-    tokenRows?.length ?? 0,
+    isLoading || trendLoading ? 'loading' : 'ready',
+    (rows?.length ?? 0) + (trendRows?.length ?? 0),
     props.metric,
     resolvedTheme,
     customization.preset,
@@ -265,16 +437,14 @@ export function TokenDistributionChart(props: TokenDistributionChartProps) {
           <IconBadge tone='info' size='sm'>
             <KeyRound />
           </IconBadge>
-          <div className='text-sm font-semibold'>
-            {t('API Key Distribution')}
-          </div>
+          <div className='text-sm font-semibold'>{t('API Call Analytics')}</div>
           <span className='text-muted-foreground text-xs'>
             {t('Total:')} {chartData.totalDisplay}
           </span>
         </div>
 
         <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:w-auto'>
-          {MODEL_DISTRIBUTION_CHART_OPTIONS.map((tab) => (
+          {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
             <button
               key={tab.value}
               type='button'

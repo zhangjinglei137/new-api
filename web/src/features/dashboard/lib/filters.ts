@@ -57,7 +57,7 @@ function isModelAnalyticsChartTab(
 }
 
 function isChartMetric(value: unknown): value is ChartMetric {
-  return value === 'quota' || value === 'tokens'
+  return value === 'quota' || value === 'tokens' || value === 'count'
 }
 
 function isTimeRangePresetDays(value: unknown): value is number {

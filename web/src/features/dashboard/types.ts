@@ -33,6 +33,25 @@ export interface QuotaDataItem {
   quota?: number
 }
 
+export interface TokenQuotaDataItem {
+  token_id?: number
+  token_name?: string
+  count?: number
+  quota?: number
+  token_used?: number
+}
+
+export interface TokenQuotaTrendItem {
+  token_id?: number
+  token_name?: string
+  created_at: number
+  count?: number
+  quota?: number
+  token_used?: number
+}
+
+export type ChartMetric = 'quota' | 'tokens' | 'count'
+
 export interface FlowQuotaDataItem {
   user_id?: number
   username?: string
@@ -48,17 +67,7 @@ export interface FlowQuotaDataItem {
   quota?: number
 }
 
-export interface TokenQuotaDataItem {
-  token_id?: number
-  token_name?: string
-  count?: number
-  quota?: number
-  token_used?: number
-}
-
 export type FlowMetric = 'quota' | 'tokens' | 'requests'
-
-export type ChartMetric = 'quota' | 'tokens'
 
 export type FlowOverflowMode = 'aggregate' | 'hide'
 
@@ -205,14 +214,12 @@ export type ConsumptionDistributionChartType = 'bar' | 'area'
 
 export type ModelAnalyticsChartTab = 'trend' | 'proportion' | 'top'
 
-export type ModelDistributionChartTab = 'proportion' | 'top'
-
 export interface DashboardChartPreferences {
   consumptionDistributionChart: ConsumptionDistributionChartType
   modelAnalyticsChart: ModelAnalyticsChartTab
-  chartMetric: ChartMetric
   defaultTimeRangeDays: number
   defaultTimeGranularity: TimeGranularity
+  chartMetric: ChartMetric
 }
 
 // User analytics selections are held by the dashboard parent so they survive
@@ -257,8 +264,6 @@ export interface ProcessedChartData {
   spec_rank_bar: VChartSpec
   totalQuotaDisplay: string
   totalCountDisplay: string
-  // Total of the active metric (quota amount in "quota" mode, token count in
-  // "tokens" mode), formatted for display in the chart headers.
   totalMetricDisplay: string
 }
 

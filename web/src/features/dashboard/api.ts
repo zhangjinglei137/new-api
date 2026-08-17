@@ -22,6 +22,7 @@ import type {
   FlowQuotaDataItem,
   QuotaDataItem,
   TokenQuotaDataItem,
+  TokenQuotaTrendItem,
   UptimeGroupResult,
 } from './types'
 
@@ -99,6 +100,27 @@ export async function getTokenQuotaDates(
   const res = await api.get<{
     success: boolean
     data?: TokenQuotaDataItem[]
+    message?: string
+  }>(endpoint, { params })
+  return res.data
+}
+
+// Get per-token usage trend rows (grouped by token + time bucket).
+// Admin users get all keys; regular users get only their own.
+export async function getTokenQuotaTrendDates(
+  params: {
+    start_timestamp: number
+    end_timestamp: number
+    default_time?: string
+  },
+  isAdmin = false
+) {
+  const endpoint = isAdmin
+    ? '/api/data/tokens/trend'
+    : '/api/data/tokens/trend/self'
+  const res = await api.get<{
+    success: boolean
+    data?: TokenQuotaTrendItem[]
     message?: string
   }>(endpoint, { params })
   return res.data

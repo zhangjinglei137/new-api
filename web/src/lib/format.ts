@@ -50,6 +50,41 @@ export function formatCompactNumber(
   }).format(value as number)
 }
 
+/**
+ * Format a numeric metric for compact display.
+ *
+ * The value is first formatted with thousand separators (no decimals);
+ * only when the resulting string is 9+ characters (including commas) is it
+ * abbreviated with 1000-based suffixes (K/M/G/T, 1e3/1e6/1e9/1e12; larger
+ * values keep the T suffix). At most one decimal is kept and a trailing
+ * ".0" is stripped (1.2K / 12K / 1.5M / 999M / 1.2G).
+ *
+ * Intl compact notation is intentionally avoided because it emits localized
+ * units (万/亿) in Chinese environments.
+ */
+export function formatCompactMetric(
+  value: number | null | undefined
+): string {
+  if (value == null || Number.isNaN(value as number)) return '-'
+  const full = Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 0,
+  }).format(value as number)
+  if (full.length < 9) return full
+
+  const sign = value < 0 ? '-' : ''
+  const suffixes = ['K', 'M', 'G', 'T'] as const
+  let scaled = Math.abs(value as number)
+  let suffix = ''
+  for (const s of suffixes) {
+    if (scaled < 1000) break
+    scaled /= 1000
+    suffix = s
+  }
+  const fixed = scaled.toFixed(1)
+  const text = fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed
+  return `${sign}${text}${suffix}`
+}
+
 export function formatPercent(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value as number)) return '-'
   return Intl.NumberFormat(undefined, {

@@ -187,3 +187,60 @@ func GetTokenQuotaDates(c *gin.Context) {
 	})
 	return
 }
+
+func GetAllTokenQuotaTrendDates(c *gin.Context) {
+	startTimestamp, err := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid params")
+		return
+	}
+	endTimestamp, err := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid params")
+		return
+	}
+	dates, err := model.GetTokenQuotaTrendData(0, startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    dates,
+	})
+	return
+}
+
+func GetTokenQuotaTrendDates(c *gin.Context) {
+	userId := c.GetInt("id")
+	startTimestamp, err := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid params")
+		return
+	}
+	endTimestamp, err := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid params")
+		return
+	}
+	// 判断时间跨度是否超过 1 个月
+	if endTimestamp-startTimestamp > 2592000 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "时间跨度不能超过 1 个月",
+		})
+		return
+	}
+	dates, err := model.GetTokenQuotaTrendData(userId, startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    dates,
+	})
+	return
+}
