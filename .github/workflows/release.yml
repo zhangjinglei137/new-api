@@ -30,7 +30,7 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            VERSION="v1.0.0-rc.24-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+            VERSION="v1.0.0-rc.24-$(TZ=Asia/Shanghai date +'%Y%m%d')-$(git rev-parse --short HEAD)"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -86,7 +86,7 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            VERSION="v1.0.0-rc.24-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+            VERSION="v1.0.0-rc.24-$(TZ=Asia/Shanghai date +'%Y%m%d')-$(git rev-parse --short HEAD)"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -141,7 +141,7 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            VERSION="v1.0.0-rc.24-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+            VERSION="v1.0.0-rc.24-$(TZ=Asia/Shanghai date +'%Y%m%d')-$(git rev-parse --short HEAD)"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

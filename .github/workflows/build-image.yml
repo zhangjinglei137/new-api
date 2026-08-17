@@ -38,7 +38,7 @@ jobs:
           if [ -z "$UPSTREAM_TAG" ]; then
             UPSTREAM_TAG="v0.0.0"
           fi
-          echo "${UPSTREAM_TAG}-$(date -u +'%Y%m%d-%H%M')" > VERSION
+          echo "${UPSTREAM_TAG}-$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M')" > VERSION
           echo "Publishing version: $(cat VERSION)"
 
       - name: Set up Docker Buildx
@@ -76,7 +76,7 @@ jobs:
 
       - name: Create & push manifests
         run: |
-          DATE=$(date -u +%Y%m%d-%H%M)
+          DATE=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)
           docker buildx imagetools create \
             -t thntime/new-api:${DATE} \
             thntime/new-api:edge-amd64 \
