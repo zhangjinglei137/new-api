@@ -41,6 +41,23 @@ export async function updateSystemOption(request: UpdateOptionRequest) {
   return res.data
 }
 
+export type UpdateCheckRelease = {
+  tag_name: string
+  name?: string
+  body?: string
+  html_url?: string
+  published_at?: string
+}
+
+export async function checkUpdate() {
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data?: UpdateCheckRelease
+  }>('/api/update/check')
+  return res.data
+}
+
 export async function confirmPaymentCompliance() {
   const res = await api.post<ConfirmPaymentComplianceResponse>(
     '/api/option/payment_compliance',

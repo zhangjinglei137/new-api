@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label'
 import { Markdown } from '@/components/ui/markdown'
 import { formatTimestamp, formatTimestampToDate } from '@/lib/format'
 
-import { updateSystemOption } from '../api'
+import { checkUpdate, updateSystemOption } from '../api'
 import { SettingsSection } from '../components/settings-section'
 import type { OperationsSettings } from '../types'
 
@@ -76,14 +76,7 @@ export function UpdateCheckerSection({
   const handleCheckUpdates = async () => {
     setChecking(true)
     try {
-      const response = await fetch('/api/update/check', {
-        headers: { Accept: 'application/json' },
-      })
-      const payload = (await response.json()) as {
-        success: boolean
-        message?: string
-        data?: ReleaseInfo
-      }
+      const payload = await checkUpdate()
       if (!payload.success || !payload.data?.tag_name) {
         throw new Error(payload.message || t('Failed to check for updates'))
       }
