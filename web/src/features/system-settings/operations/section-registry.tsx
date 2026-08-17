@@ -131,11 +131,12 @@ const OPERATIONS_SECTIONS = [
     id: 'update-checker',
     titleKey: 'System maintenance',
     build: (
-      _settings: OperationsSettings,
+      settings: OperationsSettings,
       currentVersion?: string | null,
       startTime?: number | null
     ) => (
       <UpdateCheckerSection
+        settings={settings}
         currentVersion={currentVersion}
         startTime={startTime}
       />

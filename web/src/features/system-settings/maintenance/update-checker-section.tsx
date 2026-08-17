@@ -23,10 +23,14 @@ import { toast } from 'sonner'
 
 import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Markdown } from '@/components/ui/markdown'
 import { formatTimestamp, formatTimestampToDate } from '@/lib/format'
 
+import { updateSystemOption } from '../api'
 import { SettingsSection } from '../components/settings-section'
+import type { OperationsSettings } from '../types'
 
 type ReleaseInfo = {
   tag_name: string
@@ -37,54 +41,63 @@ type ReleaseInfo = {
 }
 
 type UpdateCheckerSectionProps = {
+  settings: OperationsSettings
   currentVersion?: string | null
   startTime?: number | null
 }
 
 export function UpdateCheckerSection({
+  settings,
   currentVersion,
   startTime,
 }: UpdateCheckerSectionProps) {
   const { t } = useTranslation()
   const [checking, setChecking] = useState(false)
+  const [savingProxy, setSavingProxy] = useState(false)
+  const [proxy, setProxy] = useState(settings.UpdateCheckProxy ?? '')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [release, setRelease] = useState<ReleaseInfo | null>(null)
 
   const uptime = startTime ? formatTimestamp(startTime) : t('Unknown')
   const version = currentVersion || t('Unknown')
 
+  const saveProxy = async () => {
+    setSavingProxy(true)
+    try {
+      await updateSystemOption({ key: 'UpdateCheckProxy', value: proxy.trim() })
+      toast.success(t('Proxy saved'))
+    } catch {
+      toast.error(t('Failed to save proxy'))
+    } finally {
+      setSavingProxy(false)
+    }
+  }
+
   const handleCheckUpdates = async () => {
     setChecking(true)
     try {
-      const response = await fetch(
-        'https://api.github.com/repos/zhangjinglei137/new-api/releases/latest',
-        {
-          headers: {
-            Accept: 'application/vnd.github+json',
-            'User-Agent': 'new-api-dashboard',
-          },
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error(t('Failed to contact GitHub releases API'))
+      const response = await fetch('/api/update/check', {
+        headers: { Accept: 'application/json' },
+      })
+      const payload = (await response.json()) as {
+        success: boolean
+        message?: string
+        data?: ReleaseInfo
+      }
+      if (!payload.success || !payload.data?.tag_name) {
+        throw new Error(payload.message || t('Failed to check for updates'))
       }
 
-      const data = (await response.json()) as ReleaseInfo
-      if (!data?.tag_name) {
-        throw new Error(t('Unexpected release payload'))
-      }
-
-      if (currentVersion && data.tag_name === currentVersion) {
+      if (currentVersion && payload.data.tag_name === currentVersion) {
         toast.success(
           t('You are running the latest version ({{version}}).', {
-            version: data.tag_name,
+            version: payload.data.tag_name,
           })
         )
         return
       }
 
-      setRelease(data)
+      setRelease(payload.data)
       setDialogOpen(true)
     } catch (error) {
       const message =
@@ -120,6 +133,33 @@ export function UpdateCheckerSection({
               </div>
               <div className='text-lg font-semibold'>{uptime}</div>
             </div>
+          </div>
+
+          <div className='space-y-2'>
+            <Label htmlFor='update-check-proxy'>
+              {t('Update check proxy')}
+            </Label>
+            <div className='flex gap-2'>
+              <Input
+                id='update-check-proxy'
+                value={proxy}
+                onChange={(event) => setProxy(event.target.value)}
+                placeholder='http://127.0.0.1:7890'
+              />
+              <Button
+                type='button'
+                variant='secondary'
+                onClick={saveProxy}
+                disabled={savingProxy}
+              >
+                {savingProxy ? t('Saving...') : t('Save')}
+              </Button>
+            </div>
+            <p className='text-muted-foreground text-sm'>
+              {t(
+                'Optional outbound proxy for checking updates. Leave empty to connect directly with a domestic mirror fallback.'
+              )}
+            </p>
           </div>
 
           <Button onClick={handleCheckUpdates} disabled={checking}>
