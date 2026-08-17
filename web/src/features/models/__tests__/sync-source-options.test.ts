@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+import { describe, expect, test } from 'vitest'
 import type { TFunction } from 'i18next'
 
 import { getSyncSourceOptions } from '../constants'
@@ -32,7 +31,7 @@ describe('getSyncSourceOptions', () => {
     const options = getSyncSourceOptions(t)
     const opencodeGo = options.find((option) => option.value === 'opencode-go')
 
-    assert.deepEqual(opencodeGo, {
+    expect(opencodeGo).toStrictEqual({
       label: 'OpenCode Go',
       value: 'opencode-go' as SyncSource,
       description: 'Sync from the official opencode-go catalog.',
@@ -44,11 +43,13 @@ describe('getSyncSourceOptions', () => {
     const options = getSyncSourceOptions(t)
 
     const official = options.find((option) => option.value === 'official')
-    assert.ok(official)
-    assert.equal(official.disabled, false)
+    expect(official).toBeTruthy()
+    if (!official) throw new Error('Expected official source option')
+    expect(official.disabled).toBe(false)
 
     const config = options.find((option) => option.value === 'config')
-    assert.ok(config)
-    assert.equal(config.disabled, true)
+    expect(config).toBeTruthy()
+    if (!config) throw new Error('Expected config source option')
+    expect(config.disabled).toBe(true)
   })
 })

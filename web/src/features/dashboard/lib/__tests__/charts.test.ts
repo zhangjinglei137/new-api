@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+import { describe, expect, test } from 'vitest'
 
 import type { QuotaDataItem } from '../../types'
 import { processChartData } from '../charts'
@@ -53,17 +52,17 @@ describe('processChartData metric switching', () => {
         v.value,
       ])
     )
-    assert.equal(pie.get('gpt-4.1'), 1000)
-    assert.equal(pie.get('claude-4-sonnet'), 500)
+    expect(pie.get('gpt-4.1')).toBe(1000)
+    expect(pie.get('claude-4-sonnet')).toBe(500)
 
     const rank = (result.spec_rank_bar.data[0].values as RankDatum[]).find(
       (v) => v.Model === 'gpt-4.1'
     )
-    assert.equal(rank?.Value, 1000)
+    expect(rank?.Value).toBe(1000)
 
-    assert.equal(result.spec_pie.title.text, 'Quota Distribution')
-    assert.equal(result.spec_rank_bar.title.text, 'Quota Ranking')
-    assert.equal(result.spec_model_line.title.text, 'Quota Trend')
+    expect(result.spec_pie.title.text).toBe('Quota Distribution')
+    expect(result.spec_rank_bar.title.text).toBe('Quota Ranking')
+    expect(result.spec_model_line.title.text).toBe('Quota Trend')
   })
 
   test('tokens mode aggregates pie/rank/trend by token_used and titles reflect tokens', () => {
@@ -75,17 +74,17 @@ describe('processChartData metric switching', () => {
         v.value,
       ])
     )
-    assert.equal(pie.get('gpt-4.1'), 500)
-    assert.equal(pie.get('claude-4-sonnet'), 200)
+    expect(pie.get('gpt-4.1')).toBe(500)
+    expect(pie.get('claude-4-sonnet')).toBe(200)
 
     const rank = (result.spec_rank_bar.data[0].values as RankDatum[]).find(
       (v) => v.Model === 'gpt-4.1'
     )
-    assert.equal(rank?.Value, 500)
+    expect(rank?.Value).toBe(500)
 
-    assert.equal(result.spec_pie.title.text, 'Token Distribution')
-    assert.equal(result.spec_rank_bar.title.text, 'Token Ranking')
-    assert.equal(result.spec_model_line.title.text, 'Token Trend')
+    expect(result.spec_pie.title.text).toBe('Token Distribution')
+    expect(result.spec_rank_bar.title.text).toBe('Token Ranking')
+    expect(result.spec_model_line.title.text).toBe('Token Trend')
   })
 
   test('consumption distribution Usage tracks the active metric', () => {
@@ -112,18 +111,18 @@ describe('processChartData metric switching', () => {
     )
 
     // Raw metric value differs by mode.
-    assert.equal(quotaTotals.get('gpt-4.1')?.rawValue, 1000)
-    assert.equal(tokenTotals.get('gpt-4.1')?.rawValue, 500)
+    expect(quotaTotals.get('gpt-4.1')?.rawValue).toBe(1000)
+    expect(tokenTotals.get('gpt-4.1')?.rawValue).toBe(500)
     // Tokens mode keeps Usage as the raw count; quota mode converts to USD.
-    assert.equal(tokenTotals.get('gpt-4.1')?.Usage, 500)
-    assert.ok((quotaTotals.get('gpt-4.1')?.Usage ?? 0) > 0)
-    assert.ok((quotaTotals.get('gpt-4.1')?.Usage ?? 0) < 1000)
+    expect(tokenTotals.get('gpt-4.1')?.Usage).toBe(500)
+    expect((quotaTotals.get('gpt-4.1')?.Usage ?? 0) > 0).toBeTruthy()
+    expect((quotaTotals.get('gpt-4.1')?.Usage ?? 0) < 1000).toBeTruthy()
   })
 
   test('empty data still produces metric-specific specs', () => {
     const result = processChartData([], 'day', undefined, undefined, 'tokens')
-    assert.equal(result.spec_pie.title.text, 'Token Distribution')
-    assert.equal(result.spec_rank_bar.title.text, 'Token Ranking')
-    assert.deepEqual(result.spec_pie.data[0].values, [])
+    expect(result.spec_pie.title.text).toBe('Token Distribution')
+    expect(result.spec_rank_bar.title.text).toBe('Token Ranking')
+    expect(result.spec_pie.data[0].values).toStrictEqual([])
   })
 })

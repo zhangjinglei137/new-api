@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+import { describe, expect, test } from 'vitest'
 
 import {
   CHANNEL_FORM_DEFAULT_VALUES,
@@ -30,25 +29,24 @@ import { channelSchema } from '../../types'
 
 describe('Model proxy rules', () => {
   test('parseModelProxyRules splits comma-separated models and drops empty rules', () => {
-    assert.deepEqual(
+    expect(
       parseModelProxyRules([
         { models: ' gpt-5.6-luna, regex:^gpt- ', proxy: ' socks5://127.0.0.1:1080 ' },
         { models: 'claude-3.7', proxy: '' },
         { models: '   ', proxy: 'http://127.0.0.1:8080' },
-      ]),
-      [
-        {
-          models: ['gpt-5.6-luna', 'regex:^gpt-'],
-          proxy: 'socks5://127.0.0.1:1080',
-        },
-        { models: ['claude-3.7'], proxy: '' },
-      ]
-    )
+      ])
+    ).toStrictEqual([
+      {
+        models: ['gpt-5.6-luna', 'regex:^gpt-'],
+        proxy: 'socks5://127.0.0.1:1080',
+      },
+      { models: ['claude-3.7'], proxy: '' },
+    ])
   })
 
   test('parseModelProxyRules returns empty array for missing value', () => {
-    assert.deepEqual(parseModelProxyRules(undefined), [])
-    assert.deepEqual(parseModelProxyRules([]), [])
+    expect(parseModelProxyRules(undefined)).toStrictEqual([])
+    expect(parseModelProxyRules([])).toStrictEqual([])
   })
 
   test('form accepts valid rules with exact and regex models', () => {
@@ -61,7 +59,7 @@ describe('Model proxy rules', () => {
         { models: 'regex:^gpt-', proxy: '' },
       ],
     })
-    assert.equal(result.success, true)
+    expect(result.success).toBe(true)
   })
 
   test('form rejects a rule with empty models', () => {
@@ -71,7 +69,7 @@ describe('Model proxy rules', () => {
       models: 'gpt-5.6-luna',
       model_proxy_rules: [{ models: '  ', proxy: 'socks5://127.0.0.1:1080' }],
     })
-    assert.equal(result.success, false)
+    expect(result.success).toBe(false)
   })
 
   test('form rejects a rule with an invalid regex', () => {
@@ -81,7 +79,7 @@ describe('Model proxy rules', () => {
       models: 'gpt-5.6-luna',
       model_proxy_rules: [{ models: 'regex:(', proxy: '' }],
     })
-    assert.equal(result.success, false)
+    expect(result.success).toBe(false)
   })
 
   test('form rejects a rule with an invalid proxy address', () => {
@@ -91,7 +89,7 @@ describe('Model proxy rules', () => {
       models: 'gpt-5.6-luna',
       model_proxy_rules: [{ models: 'gpt-5.6-luna', proxy: 'ftp://host' }],
     })
-    assert.equal(result.success, false)
+    expect(result.success).toBe(false)
   })
 
   test('create payload serializes normalized rules into settings', () => {
@@ -106,7 +104,7 @@ describe('Model proxy rules', () => {
       ],
     })
     const settings = JSON.parse(payload.channel.settings ?? '{}')
-    assert.deepEqual(settings.model_proxy_rules, [
+    expect(settings.model_proxy_rules).toStrictEqual([
       {
         models: ['gpt-5.6-luna', 'regex:^gpt-'],
         proxy: 'socks5://127.0.0.1:1080',
@@ -123,7 +121,7 @@ describe('Model proxy rules', () => {
       model_proxy_rules: [{ models: '', proxy: '' }],
     })
     const settings = JSON.parse(payload.channel.settings ?? '{}')
-    assert.equal('model_proxy_rules' in settings, false)
+    expect('model_proxy_rules' in settings).toBe(false)
   })
 
   test('form defaults round-trip rules loaded from channel settings', () => {
@@ -145,7 +143,7 @@ describe('Model proxy rules', () => {
       }),
     })
     const defaults = transformChannelToFormDefaults(channel)
-    assert.deepEqual(defaults.model_proxy_rules, [
+    expect(defaults.model_proxy_rules).toStrictEqual([
       { models: 'gpt-5.6-luna,regex:^gpt-', proxy: 'socks5://127.0.0.1:1080' },
     ])
   })
