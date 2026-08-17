@@ -37,7 +37,11 @@ jobs:
             TAG_PREFIX="$CUSTOM_VERSION"
             VERSION="$CUSTOM_VERSION"
           else
-            VERSION="${TAG_PREFIX}-$(date +'%Y%m%d')-${SHORT_SHA}"
+            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            if [ -z "$UPSTREAM_TAG" ]; then
+              UPSTREAM_TAG="v0.0.0"
+            fi
+            VERSION="${UPSTREAM_TAG}-$(date -u +'%Y%m%d-%H%M')"
           fi
 
           echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
