@@ -39,7 +39,7 @@ import { getChannelTypeIcon, getKeyPromptForType } from '../channel-utils'
 import { channelSchema } from '../../types'
 
 // The same prefill the drawer applies when type 61 is selected: the
-// opencode_go template (4 routes) serialized into the advanced_custom field.
+// opencode_go template (7 routes) serialized into the advanced_custom field.
 const OPENCODE_GO_TEMPLATE_CONFIG = stringifyAdvancedCustomConfig(
   getAdvancedCustomTemplateConfig('opencode_go')
 )
@@ -88,25 +88,59 @@ describe('OpenCode Go channel', () => {
 
     const config = getAdvancedCustomTemplateConfig('opencode_go')
     const routes = config.advanced_routes ?? []
-    expect(routes.length).toBe(4)
+    expect(routes.length).toBe(7)
     expect(
       routes.map((route) => route.incoming_path)
     ).toStrictEqual([
       '/v1/chat/completions',
+      '/v1/chat/completions',
       '/v1/messages',
+      '/v1/messages',
+      '/v1/responses',
       '/v1/responses',
       '/v1/models',
     ])
 
-    const responsesRoute = routes[2]
-    expect(responsesRoute.models).toStrictEqual(['grok-4.5'])
+    // *-free 模型走 zen 网关（完整 URL，忽略渠道 base URL），且排在各自
+    // zen/go 兜底路由之前，保证首条命中优先分流。
+    const freeChatRoute = routes[0]
+    expect(freeChatRoute.upstream_path).toBe(
+      'https://opencode.ai/zen/v1/chat/completions'
+    )
+    expect(freeChatRoute.models).toStrictEqual(['re:.*-free$'])
+
+    const freeMessagesRoute = routes[2]
+    expect(freeMessagesRoute.upstream_path).toBe(
+      'https://opencode.ai/zen/v1/messages'
+    )
+    expect(freeMessagesRoute.models).toStrictEqual(['re:.*-free$'])
+    expect(freeMessagesRoute.auth).toStrictEqual({
+      type: 'header',
+      name: 'x-api-key',
+      value: '{api_key}',
+    })
+
+    const freeResponsesRoute = routes[4]
+    expect(freeResponsesRoute.upstream_path).toBe(
+      'https://opencode.ai/zen/v1/responses'
+    )
+    expect(freeResponsesRoute.models).toStrictEqual(['re:.*-free$'])
+    expect(freeResponsesRoute.auth).toStrictEqual({
+      type: 'header',
+      name: 'Authorization',
+      value: 'Bearer {api_key}',
+    })
+
+    // zen/go 兜底路由保持相对路径，镜像各自端点的 auth。
+    const responsesRoute = routes[5]
+    expect(responsesRoute.models).toBeUndefined()
     expect(responsesRoute.auth).toStrictEqual({
       type: 'header',
       name: 'Authorization',
       value: 'Bearer {api_key}',
     })
 
-    const messagesRoute = routes[1]
+    const messagesRoute = routes[3]
     expect(messagesRoute.auth).toStrictEqual({
       type: 'header',
       name: 'x-api-key',
@@ -151,7 +185,7 @@ describe('OpenCode Go channel', () => {
     expect(
       (settings.advanced_custom as { advanced_routes?: unknown[] })
         .advanced_routes?.length
-    ).toBe(4)
+    ).toBe(7)
 
     // Editing a channel restores the values from the stored settings JSON.
     const channel = channelSchema.parse({
@@ -190,7 +224,7 @@ describe('OpenCode Go channel', () => {
   })
 
   test('rejects type 61 without an advanced_custom config', () => {
-    const result = channelFormSchema.safeParse(opencodeForm({ type: 61, advanced_custom: '' }))
+    const result = channelFormSchema.safeParse(opencodeForm({ type: 99, advanced_custom: '' }))
     expect(result.success).toBe(false)
     if (!result.success) {
     expect(

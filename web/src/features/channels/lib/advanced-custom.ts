@@ -340,10 +340,25 @@ export const ADVANCED_CUSTOM_TEMPLATE_OPTIONS: AdvancedCustomTemplateOption[] =
       label: 'OpenCode Go',
       config: {
         advanced_routes: [
+          // *-free 模型走 zen 网关（完整 URL，忽略渠道 base URL），必须排在
+          // 各自 zen/go 兜底路由之前，保证首条命中优先分流。
+          {
+            incoming_path: '/v1/chat/completions',
+            upstream_path: 'https://opencode.ai/zen/v1/chat/completions',
+            converter: 'none',
+            models: ['re:.*-free$'],
+          },
           {
             incoming_path: '/v1/chat/completions',
             upstream_path: '/v1/chat/completions',
             converter: 'none',
+          },
+          {
+            incoming_path: '/v1/messages',
+            upstream_path: 'https://opencode.ai/zen/v1/messages',
+            converter: 'none',
+            models: ['re:.*-free$'],
+            auth: apiKeyHeaderAuth(),
           },
           {
             incoming_path: '/v1/messages',
@@ -353,9 +368,15 @@ export const ADVANCED_CUSTOM_TEMPLATE_OPTIONS: AdvancedCustomTemplateOption[] =
           },
           {
             incoming_path: '/v1/responses',
+            upstream_path: 'https://opencode.ai/zen/v1/responses',
+            converter: 'none',
+            models: ['re:.*-free$'],
+            auth: bearerHeaderAuth(),
+          },
+          {
+            incoming_path: '/v1/responses',
             upstream_path: '/v1/responses',
             converter: 'none',
-            models: ['grok-4.5'],
             auth: bearerHeaderAuth(),
           },
           {

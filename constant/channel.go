@@ -58,7 +58,7 @@ const (
 	ChannelTypeAdvancedCustom = 58
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
-	ChannelTypeOpenCodeGo     = 61
+	ChannelTypeOpenCodeGo     = 99
 	ChannelTypeDummy          = 100 // this one is only for count, do not add any channel after this
 
 )
@@ -125,7 +125,45 @@ var ChannelBaseURLs = []string{
 	"",                                          //58
 	"",                                          //59
 	"",                                          //60
-	"https://opencode.ai/zen/go",                //61
+	"",                                          //61
+	"",                                          //62
+	"",                                          //63
+	"",                                          //64
+	"",                                          //65
+	"",                                          //66
+	"",                                          //67
+	"",                                          //68
+	"",                                          //69
+	"",                                          //70
+	"",                                          //71
+	"",                                          //72
+	"",                                          //73
+	"",                                          //74
+	"",                                          //75
+	"",                                          //76
+	"",                                          //77
+	"",                                          //78
+	"",                                          //79
+	"",                                          //80
+	"",                                          //81
+	"",                                          //82
+	"",                                          //83
+	"",                                          //84
+	"",                                          //85
+	"",                                          //86
+	"",                                          //87
+	"",                                          //88
+	"",                                          //89
+	"",                                          //90
+	"",                                          //91
+	"",                                          //92
+	"",                                          //93
+	"",                                          //94
+	"",                                          //95
+	"",                                          //96
+	"",                                          //97
+	"",                                          //98
+	"https://opencode.ai/zen/go",                //99
 }
 
 var ChannelTypeNames = map[int]string{
