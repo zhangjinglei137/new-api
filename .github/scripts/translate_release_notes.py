@@ -11,10 +11,16 @@ Translation priority: OpenAI-compatible LLM (env TRANSLATE_API_BASE/KEY/MODEL)
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.parse
 import urllib.request
+
+# Windows runners default to cp1252; force UTF-8 for I/O.
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 UPSTREAM_REPO = "QuantumNous/new-api"
 
@@ -43,7 +49,7 @@ def http_get_json(url, headers=None):
 
 def http_post_json(url, data, headers=None):
     req = urllib.request.Request(url, data=data, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=60) as resp:
         return json.load(resp)
 
 
@@ -59,13 +65,42 @@ def fetch_upstream_body(tag):
         return ""
 
 
-def fetch_local_commits():
-    """Commits in this repo that are not in upstream/main, excluding merges."""
+def prev_release_tag():
+    """Most recent local release tag (format vX-YYYYMMDDHHMM), or None."""
     try:
         out = subprocess.run(
-            ["git", "log", "--no-merges", "--oneline", "upstream/main..HEAD"],
-            capture_output=True, text=True, timeout=60, check=True,
+            ["git", "tag", "--list", "--sort=-creatordate"],
+            capture_output=True, text=True, timeout=30, check=True,
         ).stdout
+    except Exception as exc:  # noqa: BLE001
+        print(f"warn: git tag failed: {exc}", file=sys.stderr)
+        return None
+    for t in out.splitlines():
+        if re.match(r".*-\d{12}$", t):
+            return t
+    return None
+
+
+def fetch_local_commits():
+    """Fork-only commits since the previous local release, excluding merges.
+
+    Falls back to all fork-only commits when no previous release tag exists.
+    """
+    prev = prev_release_tag()
+    try:
+        if prev:
+            out = subprocess.run(
+                ["git", "log", "--no-merges", "--oneline",
+                 f"{prev}..HEAD", "--not", "upstream/main"],
+                capture_output=True, text=True, timeout=60, check=True,
+            ).stdout
+            print(f"info: fork commits since {prev}")
+        else:
+            out = subprocess.run(
+                ["git", "log", "--no-merges", "--oneline", "upstream/main..HEAD"],
+                capture_output=True, text=True, timeout=60, check=True,
+            ).stdout
+            print("info: no previous release tag, listing all fork-only commits")
     except Exception as exc:  # noqa: BLE001
         print(f"warn: git log failed: {exc}", file=sys.stderr)
         return []
@@ -157,7 +192,11 @@ def main():
     args = ap.parse_args()
 
     local = fetch_local_commits()
-    local_section = summarize_local(local) if local else "- （无独有改动）"
+    if local:
+        local_section = summarize_local(local)
+    else:
+        # 仅合并上游、无本仓库独有改动时, 只说明合并的上游版本
+        local_section = f"- 同步合并上游 {args.tag}"
 
     body = fetch_upstream_body(args.tag)
     if body:
@@ -166,7 +205,7 @@ def main():
         upstream_section = (f"- 未获取到上游 {args.tag} release notes，"
                             f"详见 [上游仓库](https://github.com/{UPSTREAM_REPO}/releases/tag/{args.tag})。")
 
-    with open(args.out, "w") as f:
+    with open(args.out, "w", encoding="utf-8") as f:
         f.write(f"# {args.version}\n\n")
         f.write(f"## 本仓库改动\n\n{local_section.strip()}\n\n")
         f.write(f"## 上游仓库改动\n\n{upstream_section.strip()}\n")
