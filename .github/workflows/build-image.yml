@@ -34,7 +34,7 @@ jobs:
         run: |
           # Version = upstream latest tag + build timestamp, e.g. v1.0.0-rc.24-20260817-1504.
           # Falls back to v0.0.0 when the upstream GitHub API is unreachable.
-          UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+          UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
           if [ -z "$UPSTREAM_TAG" ]; then
             UPSTREAM_TAG="v0.0.0"
           fi

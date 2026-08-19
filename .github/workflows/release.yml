@@ -31,13 +31,20 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v1.0.0-rc.24"
             fi
             VERSION="${UPSTREAM_TAG}-$(node -e "const{execSync}=require('child_process');const t=+execSync('git show -s --format=%ct HEAD');console.log(new Date((t+28800)*1000).toISOString().replace(/[-T:]/g,'').slice(0,12))")"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Fetch upstream for release notes
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/QuantumNous/new-api.git
+          git fetch --quiet upstream main
+      - name: Generate release notes
+        run: python3 .github/scripts/translate_release_notes.py --tag "${VERSION%-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]}" --version "$VERSION" --out release-notes.md
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
@@ -70,7 +77,7 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           update_release_body: true
-          generate_release_notes: true
+          body_path: release-notes.md
           files: |
             new-api-*
             checksums-linux.txt
@@ -92,13 +99,20 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v1.0.0-rc.24"
             fi
             VERSION="${UPSTREAM_TAG}-$(node -e "const{execSync}=require('child_process');const t=+execSync('git show -s --format=%ct HEAD');console.log(new Date((t+28800)*1000).toISOString().replace(/[-T:]/g,'').slice(0,12))")"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Fetch upstream for release notes
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/QuantumNous/new-api.git
+          git fetch --quiet upstream main
+      - name: Generate release notes
+        run: python3 .github/scripts/translate_release_notes.py --tag "${VERSION%-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]}" --version "$VERSION" --out release-notes.md
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
@@ -127,7 +141,7 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           update_release_body: true
-          generate_release_notes: true
+          body_path: release-notes.md
           files: |
             new-api-macos-*
             checksums-macos.txt
@@ -152,13 +166,20 @@ jobs:
           elif git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             VERSION=$(git describe --tags)
           else
-            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v1.0.0-rc.24"
             fi
             VERSION="${UPSTREAM_TAG}-$(node -e "const{execSync}=require('child_process');const t=+execSync('git show -s --format=%ct HEAD');console.log(new Date((t+28800)*1000).toISOString().replace(/[-T:]/g,'').slice(0,12))")"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Fetch upstream for release notes
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/QuantumNous/new-api.git
+          git fetch --quiet upstream main
+      - name: Generate release notes
+        run: python3 .github/scripts/translate_release_notes.py --tag "${VERSION%-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]}" --version "$VERSION" --out release-notes.md
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
@@ -186,7 +207,7 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           update_release_body: true
-          generate_release_notes: true
+          body_path: release-notes.md
           files: |
             new-api-*.exe
             checksums-windows.txt
