@@ -2,8 +2,8 @@
 """Build bilingual release notes for a fork release.
 
 Output markdown has two sections:
-  ## 本仓库改动  - commits in this repo not in upstream/main (translated when possible)
-  ## 上游仓库改动 - upstream release notes summary, translated to Chinese
+  ## 本仓库改动  - fork-only commits summarized as concise Chinese feature bullets
+  ## 上游仓库改动 - upstream release notes fully translated to Chinese
 
 Translation priority: OpenAI-compatible LLM (env TRANSLATE_API_BASE/KEY/MODEL)
 > Google free gtx endpoint > original text. The output file is always written.
@@ -17,7 +17,22 @@ import urllib.parse
 import urllib.request
 
 UPSTREAM_REPO = "QuantumNous/new-api"
-CHANGELOG_MARK = "## What's Changed"
+
+SYSTEM_UPSTREAM = (
+    "你是专业的英文->简体中文技术翻译。把用户提供的上游软件 release notes 完整翻译成简体中文。"
+    "规则：保留全部 Markdown 语法（#、*、-、**、`）、链接、PR 编号（#1234）与作者名（@xxx）不变；"
+    "标题（## Highlights 等）翻译为常用中文章节名（如 ## 亮点、## 新功能、## 错误修复、## 改进、"
+    "## 变更列表、## 新贡献者）；逐条翻译列表项；PR 条目格式保持「- 类型(模块)：中文标题（@作者，链接）」；"
+    "术语准确（channel=渠道、billing=计费、quota=配额、gateway=网关、upstream=上游、"
+    "responses API=Responses API、provider=提供商）；不添加原文没有的内容。"
+)
+
+SYSTEM_LOCAL = (
+    "你是资深软件维护者。把以下「本仓库相对上游的独有 git 提交列表」归纳为简洁的中文功能说明，"
+    "输出 3-6 条 bullet（格式：- 中文描述）。规则：按功能归并同类提交（同一功能的多次迭代合并为一条）；"
+    "忽略 ci:/chore:/revert:/docs:/deps 类纯工程杂项，除非它们代表用户可见的发布/构建能力；"
+    "保留关键英文术语（如 opencode-go、Docker）；只基于提交内容归纳，不编造。"
+)
 
 
 def http_get_json(url, headers=None):
@@ -54,16 +69,10 @@ def fetch_local_commits():
     except Exception as exc:  # noqa: BLE001
         print(f"warn: git log failed: {exc}", file=sys.stderr)
         return []
-    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
-    # keep short sha + subject, drop the author's "@x in url" style suffix if any
-    return lines
+    return [ln.strip() for ln in out.splitlines() if ln.strip()]
 
 
-def translate(text):
-    return translate_llm(text) or translate_google(text) or None
-
-
-def translate_llm(text):
+def translate_llm(text, system_prompt):
     base = os.environ.get("TRANSLATE_API_BASE", "https://api.openai.com/v1").rstrip("/")
     key = os.environ.get("TRANSLATE_API_KEY", "")
     model = os.environ.get("TRANSLATE_MODEL", "gpt-4o-mini")
@@ -73,11 +82,7 @@ def translate_llm(text):
         "model": model,
         "temperature": 0.2,
         "messages": [
-            {"role": "system", "content": (
-                "你是专业的英文->简体中文技术翻译。把用户提供的 Markdown 文本翻译成简体中文。"
-                "规则：保留全部 Markdown 语法、链接、代码、PR 编号（#1234）、commit 短哈希（7位十六进制）"
-                "与作者名（@xxx）不变；只翻译可读文本；术语准确（channel=渠道、billing=计费、quota=配额、"
-                "gateway=网关、upstream=上游）；不添加原文没有的内容；逐行对应，不合并行。")},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": text},
         ],
     }
@@ -93,6 +98,7 @@ def translate_llm(text):
 
 
 def translate_google(text):
+    """Translate line-grouped chunks via Google's free gtx endpoint."""
     lines = text.splitlines()
     chunks, cur = [], ""
     for line in lines:
@@ -119,6 +125,30 @@ def translate_google(text):
     return "\n".join(out)
 
 
+def translate(text, system_prompt):
+    return translate_llm(text, system_prompt) or translate_google(text) or None
+
+
+def summarize_local(commits):
+    """Feature-level Chinese bullets; fallback: noise-filtered translated titles."""
+    text = "\n".join(f"- {c}" for c in commits)
+    t = translate_llm(text, SYSTEM_LOCAL)
+    if t:
+        return t.strip()
+
+    # fallback: drop engineering-noise commits, translate titles via Google
+    def is_noise(c):
+        subj = c.split(" ", 1)[1] if " " in c else c
+        kind = subj.split(":", 1)[0].split("(", 1)[0].lower()
+        return kind in {"ci", "chore", "revert", "docs", "deps", "test"}
+
+    kept = [f"- {c}" for c in commits if not is_noise(c)]
+    if not kept:
+        return "- （无）"
+    t = translate_google("\n".join(kept))
+    return (t.strip() if t else "\n".join(kept))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", required=True, help="upstream release tag, e.g. v1.0.0-rc.25")
@@ -126,30 +156,20 @@ def main():
     ap.add_argument("--out", required=True, help="output markdown file")
     args = ap.parse_args()
 
-    # --- local (fork-only) changes -------------------------------------
     local = fetch_local_commits()
-    local_section = "\n".join(f"- {ln}" for ln in local) if local else "- （无独有改动）"
-    t_local = translate(local_section)
-    if t_local:
-        local_section = t_local.strip()
+    local_section = summarize_local(local) if local else "- （无独有改动）"
 
-    # --- upstream release notes ----------------------------------------
     body = fetch_upstream_body(args.tag)
     if body:
-        head, sep, tail = body.partition(CHANGELOG_MARK)
-        head = head.strip()
-        tail = (CHANGELOG_MARK + tail).strip() if sep else ""
-        translated = translate(head) or head
-        upstream_section = translated.strip() + ("\n\n" + tail if tail else "")
+        upstream_section = translate(body, SYSTEM_UPSTREAM) or body
     else:
-        upstream_section = f"- 未获取到上游 {args.tag} release notes，详见 [上游仓库](https://github.com/{UPSTREAM_REPO}/releases/tag/{args.tag})。"
+        upstream_section = (f"- 未获取到上游 {args.tag} release notes，"
+                            f"详见 [上游仓库](https://github.com/{UPSTREAM_REPO}/releases/tag/{args.tag})。")
 
     with open(args.out, "w") as f:
         f.write(f"# {args.version}\n\n")
-        f.write(f"## 本仓库改动\n\n{local_section}\n\n")
-        f.write(f"## 上游仓库改动\n\n{upstream_section}\n\n")
-        f.write("---\n\n")
-        f.write(f"## 上游英文原文（{args.tag}）\n\n{body if body else '_（无）_'}\n")
+        f.write(f"## 本仓库改动\n\n{local_section.strip()}\n\n")
+        f.write(f"## 上游仓库改动\n\n{upstream_section.strip()}\n")
     print(f"ok: wrote {args.out}")
 
 
