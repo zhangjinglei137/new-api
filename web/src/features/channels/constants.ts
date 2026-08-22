@@ -23,6 +23,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const CHANNEL_TYPE_NEW_API = 60
 export const CHANNEL_TYPE_OPENCODE_GO = 99
+export const CHANNEL_TYPE_CODEX = 57
 
 export const CHANNEL_TYPES = {
   0: 'Unknown',
@@ -274,6 +275,7 @@ export const SUCCESS_MESSAGES = {
   COPIED: 'Channel copied successfully',
   TAG_SET: 'Tag set successfully',
   BATCH_DELETED: 'Channels deleted successfully',
+  RESET_BALANCE: 'Balance and used quota reset successfully',
 } as const
 
 // ============================================================================

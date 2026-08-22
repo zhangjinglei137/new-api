@@ -573,6 +573,34 @@ func UpdateChannelBalance(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+func ResetChannelBalance(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channel, err := model.CacheGetChannel(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	// 防御性兜底：Codex 渠道余额由上游管理，不支持重置（前端已隐藏，此处防直接调接口清零）。
+	if channel.Type == constant.ChannelTypeCodex {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "Codex 渠道余额由上游管理，不支持重置",
+		})
+		return
+	}
+	if err := channel.ResetBalanceAndUsedQuota(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	recordManageAudit(c, "channel.reset_balance", map[string]interface{}{"id": channel.Id, "name": channel.Name})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
 func updateAllChannelsBalance() error {
 	channels, err := model.GetAllChannels(0, 0, true, false)
 	if err != nil {

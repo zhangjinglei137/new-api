@@ -33,6 +33,7 @@ import {
   Trash2,
   RefreshCw,
   Loader2,
+  RotateCcw,
 } from 'lucide-react'
 import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -59,10 +60,11 @@ import {
 } from '@/lib/admin-permissions'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { MODEL_FETCHABLE_TYPES } from '../constants'
+import { CHANNEL_TYPE_CODEX, MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   channelsQueryKeys,
   handleDeleteChannel,
+  handleResetChannelBalance,
   handleTestChannel,
   handleToggleChannelStatus,
   isChannelEnabled,
@@ -85,6 +87,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.auth.user)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
 
@@ -94,6 +97,11 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     currentUser,
     ADMIN_PERMISSION_RESOURCES.CHANNEL,
     ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
+  )
+  const canOperate = hasPermission(
+    currentUser,
+    ADMIN_PERMISSION_RESOURCES.CHANNEL,
+    ADMIN_PERMISSION_ACTIONS.OPERATE
   )
 
   const handleEdit = () => {
@@ -289,6 +297,21 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
+          {/* Reset Balance and Used Quota */}
+          {channel.type !== CHANNEL_TYPE_CODEX && canOperate && (
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault()
+                setResetConfirmOpen(true)
+              }}
+            >
+              {t('Reset balance and used quota')}
+              <DropdownMenuShortcut>
+                <RotateCcw size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+
           {/* Fetch Models */}
           <DropdownMenuItem onClick={handleFetchModels}>
             {t('Fetch Models')}
@@ -396,6 +419,21 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           if (!canEditSensitive) return
           handleDeleteChannel(channel.id, queryClient)
           setDeleteConfirmOpen(false)
+        }}
+      />
+
+      <ConfirmDialog
+        open={resetConfirmOpen}
+        onOpenChange={setResetConfirmOpen}
+        title={t('Reset balance and used quota')}
+        desc={t(
+          'This will set the balance and used quota of "{{name}}" to 0. This action cannot be undone.',
+          { name: channel.name }
+        )}
+        confirmText={t('Reset')}
+        handleConfirm={() => {
+          handleResetChannelBalance(channel.id, queryClient)
+          setResetConfirmOpen(false)
         }}
       />
     </div>

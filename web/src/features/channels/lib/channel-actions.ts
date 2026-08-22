@@ -36,6 +36,7 @@ import {
   editTagChannels,
   testAllChannels,
   updateAllChannelsBalance,
+  resetChannelBalance,
 } from '../api'
 import { CHANNEL_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import type { ChannelTestResponse, CopyChannelParams } from '../types'
@@ -356,6 +357,28 @@ export async function handleCopyChannel(
     }
   } catch {
     toast.error(i18next.t('Failed to copy channel'))
+  }
+}
+
+/**
+ * Reset a channel's balance and used quota
+ */
+export async function handleResetChannelBalance(
+  id: number,
+  queryClient?: QueryClient,
+  onSuccess?: () => void
+): Promise<void> {
+  try {
+    const response = await resetChannelBalance(id)
+    if (response.success) {
+      toast.success(i18next.t(SUCCESS_MESSAGES.RESET_BALANCE))
+      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      onSuccess?.()
+    } else {
+      toast.error(response.message || i18next.t(ERROR_MESSAGES.UPDATE_FAILED))
+    }
+  } catch {
+    toast.error(i18next.t(ERROR_MESSAGES.UPDATE_FAILED))
   }
 }
 

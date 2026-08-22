@@ -609,6 +609,20 @@ func (channel *Channel) UpdateBalance(balance float64) {
 	}
 }
 
+// ResetBalanceAndUsedQuota 将渠道的 balance 与 used_quota 都置 0。
+// 必须用 map 只写这两个字段（gorm 会跳过结构体零值，无法写入 0），
+// 且不复用 UpdateBalance(0)（那会连带覆盖 balance_updated_time）。
+func (channel *Channel) ResetBalanceAndUsedQuota() error {
+	err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(map[string]interface{}{
+		"balance":     0,
+		"used_quota":  0,
+	}).Error
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to reset balance and used quota: channel_id=%d, error=%v", channel.Id, err))
+	}
+	return err
+}
+
 func (channel *Channel) Delete() error {
 	var err error
 	err = DB.Delete(channel).Error
