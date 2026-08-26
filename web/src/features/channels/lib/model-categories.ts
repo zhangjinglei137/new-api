@@ -66,7 +66,11 @@ const MODEL_CATEGORY_RULES: readonly ModelCategoryRule[] = [
     ],
     pattern: /(?:^|[/.:])aqa$/,
   },
-  { name: 'xAI', keywords: ['x-ai/', 'xai/', 'xai-', 'grok'] },
+  {
+    name: 'xAI',
+    keywords: ['x-ai/', 'xai-', 'grok'],
+    pattern: /(?:^|[/.:])xai(?=$|[/.:-])/,
+  },
   { name: 'DeepSeek', keywords: ['deepseek'] },
   {
     name: 'Qwen',
