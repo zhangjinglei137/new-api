@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
@@ -24,12 +25,21 @@ const ChannelName = "CommandCode"
 type Adaptor struct {
 }
 
+// isClaudeModel 判断上游模型是否为 Anthropic/Claude 模型。
+// Command Code 的 /v1/messages 端点只支持 Anthropic 模型，
+// OpenAI/OSS 模型（如 MiniMax M3）必须走 /v1/chat/completions。
+func isClaudeModel(modelName string) bool {
+	return strings.Contains(strings.ToLower(modelName), "claude")
+}
+
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	// Claude 模型走 Anthropic Messages 端点；OpenAI/OSS 模型（如 MiniMax M3）
+	// 只能走 OpenAI Chat Completions 端点。
 	path := "/v1/chat/completions"
-	if info.RelayFormat == types.RelayFormatClaude {
+	if info.RelayFormat == types.RelayFormatClaude && isClaudeModel(info.UpstreamModelName) {
 		path = "/v1/messages"
 	}
 	return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, path, info.ChannelType), nil
@@ -51,9 +61,22 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
-	// Command Code exposes an Anthropic Messages compatible endpoint,
-	// pass the request through as-is.
-	return request, nil
+	if isClaudeModel(info.UpstreamModelName) {
+		// Command Code exposes an Anthropic Messages compatible endpoint,
+		// pass the request through as-is.
+		return request, nil
+	}
+	// OpenAI/OSS 模型只能走 /v1/chat/completions，将 Claude 请求转换为
+	// OpenAI Chat Completions 请求。
+	result, err := service.ConvertRequestByID(c, info, relayconvert.ConverterClaudeMessagesToOpenAIChat, request)
+	if err != nil {
+		return nil, err
+	}
+	chatRequest, ok := result.Value.(*dto.GeneralOpenAIRequest)
+	if !ok {
+		return nil, fmt.Errorf("expected OpenAI chat completions request, got %T", result.Value)
+	}
+	return chatRequest, nil
 }
 
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
@@ -104,7 +127,14 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		return openai.OaiChatToResponsesHandler(c, info, resp)
 	}
 	if info.RelayFormat == types.RelayFormatClaude {
-		adaptor := claude.Adaptor{}
+		if isClaudeModel(info.UpstreamModelName) {
+			// 上游 /v1/messages 直接返回 Anthropic Messages 格式，透传。
+			adaptor := claude.Adaptor{}
+			return adaptor.DoResponse(c, resp, info)
+		}
+		// OpenAI/OSS 模型走了 /v1/chat/completions，上游返回 OpenAI Chat
+		// Completions 格式，由 openai adaptor 按 info.RelayFormat 转换回 Claude。
+		adaptor := openai.Adaptor{}
 		return adaptor.DoResponse(c, resp, info)
 	}
 	adaptor := openai.Adaptor{}
