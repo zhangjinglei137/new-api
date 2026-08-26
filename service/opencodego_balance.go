@@ -22,10 +22,13 @@ const (
 )
 
 var (
-	openCodeGoMonthlyUsageRe = regexp.MustCompile(`monthlyUsage:\$R\[\d+\]=\{status:"[^"]*",resetInSec:(\d+),usagePercent:(\d+)\}`)
+	// 兼容新旧工作区页面：新页面 usagePercent 为浮点（如 65.8）且 status 为 "ok"，
+	// 旧页面为整数（如 40）且 status 为 "active"。
+	openCodeGoMonthlyUsageRe = regexp.MustCompile(`monthlyUsage:\$R\[\d+\]=\{status:"[^"]*",resetInSec:\d+,usagePercent:([\d.]+)`)
 	openCodeGoRewardAmountRe = regexp.MustCompile(`rewardAmount[=:]\s*(\d+)`)
-	openCodeGoRewardsRe      = regexp.MustCompile(`(?s)rewards:\$R\[\d+\]=\[(.*?)\]\)`)
-	openCodeGoRewardEntryRe  = regexp.MustCompile(`\{id:"([^"]+)",source:"([^"]+)",status:"([^"]+)",email:"([^"]+)",amount:(\d+)`)
+	// 新页面 rewards 段以 ]}) 结尾（rewards 位于 referral 对象内），旧页面以 ]) 结尾。
+	openCodeGoRewardsRe     = regexp.MustCompile(`(?s)rewards:\$R\[\d+\]=\[(.*?)\](?:\)|\}\))`)
+	openCodeGoRewardEntryRe = regexp.MustCompile(`\{id:"([^"]+)",source:"([^"]+)",status:"([^"]+)",email:"([^"]+)",amount:(\d+)`)
 )
 
 // parseOpenCodeGoBalancePage 从 opencode 工作区页面 HTML 中解析剩余额度（美元）。
@@ -35,7 +38,7 @@ func parseOpenCodeGoBalancePage(html string) (float64, error) {
 	if monthlyMatch == nil {
 		return 0, fmt.Errorf("无法从 opencode 页面解析用量数据，请检查 Workspace ID 与 Cookie 是否有效")
 	}
-	usagePercent, err := strconv.Atoi(monthlyMatch[2])
+	usagePercent, err := strconv.ParseFloat(monthlyMatch[1], 64)
 	if err != nil {
 		return 0, fmt.Errorf("无法从 opencode 页面解析用量数据: %w", err)
 	}
@@ -65,7 +68,7 @@ func parseOpenCodeGoBalancePage(html string) (float64, error) {
 		unused = len(entries) - applied
 	}
 
-	return float64(openCodeGoMonthlyCapUSD)*(1-float64(usagePercent)/100) + float64(unused)*float64(rewardAmount)/100, nil
+	return float64(openCodeGoMonthlyCapUSD)*(1-usagePercent/100) + float64(unused)*float64(rewardAmount)/100, nil
 }
 
 // UpdateOpenCodeGoBalance 通过 opencode 工作区页面查询剩余额度（美元）。
