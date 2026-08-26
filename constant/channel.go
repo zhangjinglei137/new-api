@@ -58,6 +58,7 @@ const (
 	ChannelTypeAdvancedCustom = 58
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
+	ChannelTypeCommandCode    = 98
 	ChannelTypeOpenCodeGo     = 99
 	ChannelTypeDummy          = 100 // this one is only for count, do not add any channel after this
 
@@ -162,7 +163,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //95
 	"",                                          //96
 	"",                                          //97
-	"",                                          //98
+	"https://api.commandcode.ai/provider",       //98
 	"https://opencode.ai/zen/go",                //99
 }
 
@@ -224,6 +225,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeAdvancedCustom: "Advanced Custom",
 	ChannelTypeSub2API:        "Sub2API",
 	ChannelTypeNewAPI:         "New API",
+	ChannelTypeCommandCode:    "CommandCode",
 	ChannelTypeOpenCodeGo:     "OpenCode Go",
 }
 
