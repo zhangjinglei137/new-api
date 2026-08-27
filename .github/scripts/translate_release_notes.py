@@ -69,8 +69,22 @@ def fetch_upstream_body(tag):
         return ""
 
 
-def prev_release_tag():
-    """Most recent local release tag (format vX-YYYYMMDDHHMM), or None."""
+def base_version(version):
+    """Strip the trailing -YYYYMMDDHHMM suffix to get the base version."""
+    return re.sub(r"-\d{12}$", "", version)
+
+
+def prev_release_tag(current_base):
+    """Most recent local release tag of the previous version, or None.
+
+    Picks the tag with the highest base version strictly older than
+    current_base; among same-version tags the one with the latest creatordate.
+    This makes the commit range start from the previous version's last release
+    instead of the most recent release, so re-releasing the same version does
+    not truncate the local-changes list.
+    """
+    mcur = re.search(r"v\d+\.\d+\.\d+-rc\.(\d+)", current_base)
+    current_key = int(mcur.group(1)) if mcur else None
     try:
         out = subprocess.run(
             ["git", "tag", "--list", "--sort=-creatordate"],
@@ -80,18 +94,28 @@ def prev_release_tag():
     except Exception as exc:  # noqa: BLE001
         print(f"warn: git tag failed: {exc}", file=sys.stderr)
         return None
+    best = None
     for t in out.splitlines():
-        if re.match(r".*-\d{12}$", t):
-            return t
-    return None
+        if not re.match(r".*-\d{12}$", t):
+            continue  # only fork release tags carry the -YYYYMMDDHHMM suffix
+        base = re.sub(r"-\d{12}$", "", t)
+        m = re.search(r"v\d+\.\d+\.\d+-rc\.(\d+)", base)
+        if not m:
+            continue
+        key = int(m.group(1))
+        if current_key is not None and key >= current_key:
+            continue
+        if best is None or key > best[0]:
+            best = (key, t)
+    return best[1] if best else None
 
 
-def fetch_local_commits():
-    """Fork-only commits since the previous local release, excluding merges.
+def fetch_local_commits(current_base):
+    """Fork-only commits since the previous version's release, excluding merges.
 
     Falls back to all fork-only commits when no previous release tag exists.
     """
-    prev = prev_release_tag()
+    prev = prev_release_tag(current_base)
     try:
         if prev:
             out = subprocess.run(
@@ -192,7 +216,7 @@ def main():
     ap.add_argument("--out", required=True, help="output markdown file")
     args = ap.parse_args()
 
-    local = fetch_local_commits()
+    local = fetch_local_commits(base_version(args.version))
     if local:
         local_section = summarize_local(local)
     else:
