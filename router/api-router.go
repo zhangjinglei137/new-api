@@ -295,6 +295,7 @@ func SetApiRouter(router *gin.Engine) {
 			systemInfoRoute.DELETE("/instances/:node_name", controller.DeleteStaleSystemInstance)
 		}
 
+		// /api/data/* 数据看板统计接口（模型/用户/令牌/渠道维度，均基于 quota_data 聚合）
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
 		dataRoute.GET("/users", middleware.AdminAuth(), controller.GetQuotaDatesByUser)
