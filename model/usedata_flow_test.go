@@ -191,3 +191,198 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, "default", rows[1].UseGroup)
 	require.Equal(t, 25, rows[1].Quota)
 }
+
+func TestGetAllChannelQuotaData(t *testing.T) {
+	truncateTables(t)
+	seedFlowLookupData(t)
+
+	// 渠道 1（east）：跨 use_group/多行，应合并且不受 use_group 过滤影响
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		TokenID:   11,
+		UseGroup:  "vip",
+		ModelName: "gpt-a",
+		ChannelID: 1,
+		CreatedAt: 1000,
+		Count:     2,
+		Quota:     100,
+		TokenUsed: 40,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    2,
+		Username:  "bob",
+		TokenID:   22,
+		UseGroup:  "default",
+		ModelName: "gpt-a",
+		ChannelID: 1,
+		CreatedAt: 1100,
+		Count:     3,
+		Quota:     50,
+		TokenUsed: 20,
+	})
+	// 渠道 2（west）
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		TokenID:   11,
+		UseGroup:  "vip",
+		ModelName: "gpt-b",
+		ChannelID: 2,
+		CreatedAt: 1200,
+		Count:     1,
+		Quota:     25,
+		TokenUsed: 10,
+	})
+	// 渠道 3：已删除渠道，名称应回退为 "channel-3"
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		TokenID:   11,
+		UseGroup:  "vip",
+		ModelName: "gpt-c",
+		ChannelID: 3,
+		CreatedAt: 1300,
+		Count:     4,
+		Quota:     200,
+		TokenUsed: 80,
+	})
+	// channel_id = 0 的行应被排除
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		TokenID:   11,
+		UseGroup:  "vip",
+		ModelName: "legacy",
+		CreatedAt: 1400,
+		Count:     99,
+		Quota:     999,
+		TokenUsed: 999,
+	})
+
+	rows, err := GetAllChannelQuotaData(900, 2000)
+	require.NoError(t, err)
+	// channel_id=0 的行被排除，剩余 channel 1/2/3 三个分组
+	require.Len(t, rows, 3)
+	// Order: quota DESC
+	require.Equal(t, FlowQuotaData{
+		ChannelID:   3,
+		ChannelName: "channel-3",
+		TokenUsed:   80,
+		Count:       4,
+		Quota:       200,
+	}, *rows[0])
+	require.Equal(t, FlowQuotaData{
+		ChannelID:   1,
+		ChannelName: "east",
+		TokenUsed:   60,
+		Count:       5,
+		Quota:       150,
+	}, *rows[1])
+	require.Equal(t, FlowQuotaData{
+		ChannelID:   2,
+		ChannelName: "west",
+		TokenUsed:   10,
+		Count:       1,
+		Quota:       25,
+	}, *rows[2])
+}
+
+func TestGetChannelQuotaTrendData(t *testing.T) {
+	truncateTables(t)
+	seedFlowLookupData(t)
+
+	// 渠道 1（east）：不同 created_at 产生多行
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		TokenID:   11,
+		UseGroup:  "vip",
+		ModelName: "gpt-a",
+		ChannelID: 1,
+		CreatedAt: 1000,
+		Count:     2,
+		Quota:     100,
+		TokenUsed: 40,
+	})
+	// 渠道 1（east）：同一 created_at 的两行应合并
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    2,
+		Username:  "bob",
+		TokenID:   22,
+		UseGroup:  "default",
+		ModelName: "gpt-a",
+		ChannelID: 1,
+		CreatedAt: 1100,
+		Count:     3,
+		Quota:     50,
+		TokenUsed: 20,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		TokenID:   11,
+		UseGroup:  "vip",
+		ModelName: "gpt-a",
+		ChannelID: 1,
+		CreatedAt: 1100,
+		Count:     1,
+		Quota:     25,
+		TokenUsed: 10,
+	})
+	// 渠道 2（west）
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		TokenID:   11,
+		UseGroup:  "vip",
+		ModelName: "gpt-b",
+		ChannelID: 2,
+		CreatedAt: 1200,
+		Count:     1,
+		Quota:     25,
+		TokenUsed: 10,
+	})
+	// channel_id = 0 的行应被排除
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		TokenID:   11,
+		UseGroup:  "vip",
+		ModelName: "legacy",
+		CreatedAt: 1400,
+		Count:     99,
+		Quota:     999,
+		TokenUsed: 999,
+	})
+
+	rows, err := GetChannelQuotaTrendData(900, 2000)
+	require.NoError(t, err)
+	// channel_id=0 被排除；channel 1 在 1000/1100 两行，channel 2 在 1200 一行
+	require.Len(t, rows, 3)
+	// Order: created_at ASC, quota DESC
+	require.Equal(t, FlowQuotaData{
+		ChannelID:   1,
+		ChannelName: "east",
+		TokenUsed:   40,
+		Count:       2,
+		Quota:       100,
+		CreatedAt:   1000,
+	}, *rows[0])
+	require.Equal(t, FlowQuotaData{
+		ChannelID:   1,
+		ChannelName: "east",
+		TokenUsed:   30,
+		Count:       4,
+		Quota:       75,
+		CreatedAt:   1100,
+	}, *rows[1])
+	require.Equal(t, FlowQuotaData{
+		ChannelID:   2,
+		ChannelName: "west",
+		TokenUsed:   10,
+		Count:       1,
+		Quota:       25,
+		CreatedAt:   1200,
+	}, *rows[2])
+}

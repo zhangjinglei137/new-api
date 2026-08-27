@@ -305,6 +305,8 @@ func SetApiRouter(router *gin.Engine) {
 		dataRoute.GET("/tokens/self", middleware.UserAuth(), controller.GetTokenQuotaDates)
 		dataRoute.GET("/tokens/trend", middleware.AdminAuth(), controller.GetAllTokenQuotaTrendDates)
 		dataRoute.GET("/tokens/trend/self", middleware.UserAuth(), controller.GetTokenQuotaTrendDates)
+		dataRoute.GET("/channels", middleware.AdminAuth(), controller.GetAllChannelQuotaDates)
+		dataRoute.GET("/channels/trend", middleware.AdminAuth(), controller.GetAllChannelQuotaTrendDates)
 
 		logRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{

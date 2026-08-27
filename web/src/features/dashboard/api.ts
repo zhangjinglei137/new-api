@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import type {
+  ChannelQuotaDataItem,
+  ChannelQuotaTrendItem,
   FlowQuotaDataItem,
   QuotaDataItem,
   TokenQuotaDataItem,
@@ -123,6 +125,35 @@ export async function getTokenQuotaTrendDates(
     data?: TokenQuotaTrendItem[]
     message?: string
   }>(endpoint, { params })
+  return res.data
+}
+
+// Get per-channel quota data grouped by channel within a time range.
+// Admin-only: channel analytics is sensitive and has no /self variant.
+export async function getChannelQuotaDates(params: {
+  start_timestamp: number
+  end_timestamp: number
+  default_time?: string
+}) {
+  const res = await api.get<{
+    success: boolean
+    data?: ChannelQuotaDataItem[]
+    message?: string
+  }>('/api/data/channels', { params })
+  return res.data
+}
+
+// Get per-channel usage trend rows (grouped by channel + time bucket).
+export async function getChannelQuotaTrendDates(params: {
+  start_timestamp: number
+  end_timestamp: number
+  default_time?: string
+}) {
+  const res = await api.get<{
+    success: boolean
+    data?: ChannelQuotaTrendItem[]
+    message?: string
+  }>('/api/data/channels/trend', { params })
   return res.data
 }
 

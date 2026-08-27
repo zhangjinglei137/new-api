@@ -103,6 +103,12 @@ const LazyApiCharts = lazy(() =>
   }))
 )
 
+const LazyChannelCharts = lazy(() =>
+  import('./components/models/channel-charts').then((m) => ({
+    default: m.ChannelCharts,
+  }))
+)
+
 const LazyPerformanceOverview = lazy(() =>
   import('./components/models/performance-overview').then((m) => ({
     default: m.PerformanceOverview,
@@ -420,6 +426,16 @@ export function Dashboard() {
                   />
                 </Suspense>
               </FadeIn>
+              {isAdmin && (
+                <FadeIn delay={0.25}>
+                  <Suspense fallback={<ModelChartsFallback />}>
+                    <LazyChannelCharts
+                      filters={modelFilters}
+                      metric={chartPreferences.chartMetric}
+                    />
+                  </Suspense>
+                </FadeIn>
+              )}
             </>
           )}
           {activeSection === 'users' && (

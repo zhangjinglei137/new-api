@@ -232,3 +232,36 @@ func GetTokenQuotaDataByUserId(userId int, startTime int64, endTime int64) ([]*F
 	}
 	return rows, fillFlowTokenNames(rows)
 }
+
+// GetAllChannelQuotaData 按渠道分组统计全站使用量。
+// 统计口径与 /api/data 一致，不做 flow 接口的 use_group 过滤。
+func GetAllChannelQuotaData(startTime int64, endTime int64) ([]*FlowQuotaData, error) {
+	rows := make([]*FlowQuotaData, 0)
+	err := DB.Table("quota_data").
+		Select("channel_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
+		Where("created_at >= ? and created_at <= ?", startTime, endTime).
+		Where("channel_id > 0").
+		Group("channel_id").
+		Order("quota DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, fillFlowChannelNames(rows)
+}
+
+// GetChannelQuotaTrendData 按渠道 + created_at 分组统计使用量，供渠道调用趋势图使用。
+func GetChannelQuotaTrendData(startTime int64, endTime int64) ([]*FlowQuotaData, error) {
+	rows := make([]*FlowQuotaData, 0)
+	err := DB.Table("quota_data").
+		Select("channel_id, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").
+		Where("created_at >= ? and created_at <= ?", startTime, endTime).
+		Where("channel_id > 0").
+		Group("channel_id, created_at").
+		Order("created_at ASC, quota DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, fillFlowChannelNames(rows)
+}

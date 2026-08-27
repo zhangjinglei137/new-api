@@ -244,3 +244,51 @@ func GetTokenQuotaTrendDates(c *gin.Context) {
 	})
 	return
 }
+
+func GetAllChannelQuotaDates(c *gin.Context) {
+	startTimestamp, err := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid params")
+		return
+	}
+	endTimestamp, err := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid params")
+		return
+	}
+	dates, err := model.GetAllChannelQuotaData(startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    dates,
+	})
+	return
+}
+
+func GetAllChannelQuotaTrendDates(c *gin.Context) {
+	startTimestamp, err := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid params")
+		return
+	}
+	endTimestamp, err := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if err != nil {
+		common.ApiErrorMsg(c, "invalid params")
+		return
+	}
+	dates, err := model.GetChannelQuotaTrendData(startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    dates,
+	})
+	return
+}

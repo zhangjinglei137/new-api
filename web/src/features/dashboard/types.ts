@@ -50,6 +50,23 @@ export interface TokenQuotaTrendItem {
   token_used?: number
 }
 
+export interface ChannelQuotaDataItem {
+  channel_id?: number
+  channel_name?: string
+  count?: number
+  quota?: number
+  token_used?: number
+}
+
+export interface ChannelQuotaTrendItem {
+  channel_id?: number
+  channel_name?: string
+  created_at: number
+  count?: number
+  quota?: number
+  token_used?: number
+}
+
 export type ChartMetric = 'quota' | 'tokens' | 'count'
 
 export interface FlowQuotaDataItem {
