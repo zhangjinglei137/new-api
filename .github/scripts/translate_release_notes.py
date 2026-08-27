@@ -70,7 +70,8 @@ def prev_release_tag():
     try:
         out = subprocess.run(
             ["git", "tag", "--list", "--sort=-creatordate"],
-            capture_output=True, text=True, timeout=30, check=True,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30, check=True,
         ).stdout
     except Exception as exc:  # noqa: BLE001
         print(f"warn: git tag failed: {exc}", file=sys.stderr)
@@ -92,13 +93,15 @@ def fetch_local_commits():
             out = subprocess.run(
                 ["git", "log", "--no-merges", "--oneline",
                  f"{prev}..HEAD", "--not", "upstream/main"],
-                capture_output=True, text=True, timeout=60, check=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=60, check=True,
             ).stdout
             print(f"info: fork commits since {prev}")
         else:
             out = subprocess.run(
                 ["git", "log", "--no-merges", "--oneline", "upstream/main..HEAD"],
-                capture_output=True, text=True, timeout=60, check=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=60, check=True,
             ).stdout
             print("info: no previous release tag, listing all fork-only commits")
     except Exception as exc:  # noqa: BLE001
