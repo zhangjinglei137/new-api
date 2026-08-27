@@ -168,21 +168,15 @@ def translate(text, system_prompt):
 
 
 def summarize_local(commits):
-    """Feature-level Chinese bullets; fallback: noise-filtered translated titles."""
+    """Feature-level Chinese bullets; fallback: full translated commit list."""
     text = "\n".join(f"- {c}" for c in commits)
     t = translate_llm(text, SYSTEM_LOCAL)
     if t:
         return t.strip()
 
-    # fallback: drop engineering-noise commits, translate titles via Google
-    def is_noise(c):
-        subj = c.split(" ", 1)[1] if " " in c else c
-        kind = subj.split(":", 1)[0].split("(", 1)[0].lower()
-        return kind in {"ci", "chore", "revert", "docs", "deps", "test"}
-
-    kept = [f"- {c}" for c in commits if not is_noise(c)]
-    if not kept:
-        return "- （无）"
+    # fallback: keep every fork-only commit so the release notes list all of
+    # this version's changes; translate titles via Google when reachable.
+    kept = [f"- {c}" for c in commits]
     t = translate_google("\n".join(kept))
     return (t.strip() if t else "\n".join(kept))
 
