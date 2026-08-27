@@ -55,11 +55,15 @@ def http_post_json(url, data, headers=None):
 
 def fetch_upstream_body(tag):
     url = f"https://api.github.com/repos/{UPSTREAM_REPO}/releases/tags/{urllib.parse.quote(tag)}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "release-notes-sync",
+    }
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
-        return http_get_json(url, headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "release-notes-sync",
-        }).get("body") or ""
+        return http_get_json(url, headers=headers).get("body") or ""
     except Exception as exc:  # noqa: BLE001 - fallback by design
         print(f"warn: fetch upstream body failed: {exc}", file=sys.stderr)
         return ""
