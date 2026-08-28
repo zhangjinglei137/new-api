@@ -391,7 +391,10 @@ export function SubscriptionBillingEditorDialog({
             ...current,
             model_tiers: [
               ...current.model_tiers,
-              { model: '', monthly_usd: 0 },
+              {
+                model: '',
+                monthly_usd: current.monthly_total_usd,
+              },
             ],
           }
         : current
@@ -433,7 +436,10 @@ export function SubscriptionBillingEditorDialog({
             ...current,
             model_tiers: [
               ...current.model_tiers,
-              ...missing.map((model) => ({ model, monthly_usd: 0 })),
+              ...missing.map((model) => ({
+                model,
+                monthly_usd: current.monthly_total_usd,
+              })),
             ],
           }
         : current
@@ -647,7 +653,13 @@ export function SubscriptionBillingEditorDialog({
                 }
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {t(
+                      SUBSCRIPTION_BILLING_MODE_OPTIONS.find(
+                        (option) => option.value === config.billing_mode
+                      )?.label ?? 'Pay as you go'
+                    )}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent alignItemWithTrigger={false}>
                   <SelectGroup>
@@ -761,46 +773,59 @@ export function SubscriptionBillingEditorDialog({
             </Empty>
           ) : (
             <div className='flex flex-col gap-2'>
+              <div className='grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 text-sm font-medium'>
+                <div>{t('Model')}</div>
+                <div>{t('Monthly Quota (USD)')}</div>
+                <div className='w-10' />
+              </div>
               {tiers.map((tier, index) => (
                 <div
                   key={tierKeys[index] || `subscription-tier-${index}`}
-                  className='grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'
+                  className='grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2'
                 >
-                  <FieldBlock label={t('Model')}>
-                    <ComboboxInput
-                      options={modelOptions}
-                      value={tier.model}
-                      onValueChange={(value) =>
-                        updateTier(index, { model: value })
-                      }
-                      placeholder='*'
-                      allowCustomValue
-                      emptyText={t('No matching model')}
-                    />
-                  </FieldBlock>
-                  <FieldBlock label={t('Monthly Quota (USD)')}>
-                    <NumberField
-                      value={tier.monthly_usd}
-                      onChange={(value) =>
-                        updateTier(index, { monthly_usd: value })
-                      }
-                      min={0}
-                      step={1}
-                    />
-                  </FieldBlock>
+                  <ComboboxInput
+                    options={modelOptions}
+                    value={tier.model}
+                    onValueChange={(value) =>
+                      updateTier(index, { model: value })
+                    }
+                    placeholder='*'
+                    allowCustomValue
+                    emptyText={t('No matching model')}
+                  />
+                  <NumberField
+                    value={tier.monthly_usd}
+                    onChange={(value) =>
+                      updateTier(index, { monthly_usd: value })
+                    }
+                    min={0}
+                    step={1}
+                    placeholder={String(config?.monthly_total_usd ?? '')}
+                  />
                   <Button
                     type='button'
                     variant='ghost'
-                    size='sm'
+                    size='icon'
                     onClick={() => removeTier(index)}
+                    className='h-10 w-10'
+                    aria-label={t('Delete model quota')}
                   >
-                    <Trash2 data-icon='inline-start' />
-                    {t('Delete')}
+                    <Trash2 className='h-4 w-4' aria-hidden='true' />
                   </Button>
                 </div>
               ))}
             </div>
           )}
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            onClick={addTier}
+            className='w-full'
+          >
+            <Plus className='mr-2 h-4 w-4' />
+            {t('Add model quota')}
+          </Button>
         </TabsContent>
 
         <TabsContent value='preview' className='flex flex-col gap-4 p-4'>
