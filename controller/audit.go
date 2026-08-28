@@ -46,6 +46,7 @@ var auditContentTemplates = map[string]string{
 	"channel.upstream_apply":              "Applied upstream model changes to channel (ID: ${id})",
 	"channel.upstream_apply_all":          "Applied upstream model changes to ${count} channels",
 	"channel.subscription_billing_update": "Updated subscription billing (mode ${billing_mode}) for channel ${name} (ID: ${id})",
+	"channel.subscription_baseline_set":   "Set subscription usage baseline (${baseline_at}, ${baseline_bps} bps) for channel ${name} (ID: ${id})",
 
 	"redemption.create": "Created ${count} redemption codes named ${name} (${quota} each)",
 

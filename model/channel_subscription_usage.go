@@ -14,13 +14,18 @@ type ChannelSubscriptionUsage struct {
 	LastRefreshAt    int64  `json:"last_refresh_at"`
 	LastError        string `json:"last_error"`
 	Partial          bool   `json:"partial"` // 日志保留期<31天，月窗口不完整
-	BucketStart5h    int64  `json:"bucket_start_5h"`
-	UsedQuota5h      int64  `json:"used_quota_5h"`
-	BucketStart7d    int64  `json:"bucket_start_7d"`
-	UsedQuota7d      int64  `json:"used_quota_7d"`
-	BucketStart31d   int64  `json:"bucket_start_31d"`
-	UsedQuota31d     int64  `json:"used_quota_31d"`
-	UpdatedAt        int64  `json:"updated_at"`
+	// 手动基线：用户在"已使用额度"tab 设置的当前月已用百分比（bps，2000=20%）。
+	// 允许 >10000 表示超限；仅存月维度，5h/周由配置比例实时派生。
+	BaselineBps31d    int   `json:"baseline_bps_31d"`
+	BaselineSetAt     int64 `json:"baseline_set_at"`    // 基线设置时刻（unix 秒），即统计起点
+	ManualInitialized bool  `json:"manual_initialized"` // 是否已手动设置基线
+	BucketStart5h     int64 `json:"bucket_start_5h"`
+	UsedQuota5h       int64 `json:"used_quota_5h"`
+	BucketStart7d     int64 `json:"bucket_start_7d"`
+	UsedQuota7d       int64 `json:"used_quota_7d"`
+	BucketStart31d    int64 `json:"bucket_start_31d"`
+	UsedQuota31d      int64 `json:"used_quota_31d"`
+	UpdatedAt         int64 `json:"updated_at"`
 }
 
 func (ChannelSubscriptionUsage) TableName() string {
@@ -39,6 +44,9 @@ func UpsertChannelSubscriptionUsage(usage *ChannelSubscriptionUsage) error {
 			"last_refresh_at",
 			"last_error",
 			"partial",
+			"baseline_bps31d",
+			"baseline_set_at",
+			"manual_initialized",
 			"bucket_start5h",
 			"used_quota5h",
 			"bucket_start7d",
@@ -84,4 +92,12 @@ func GetChannelSubscriptionUsagesByIds(channelIds []int64) (map[int64]*ChannelSu
 // DeleteChannelSubscriptionUsage 渠道删除时清理统计状态。
 func DeleteChannelSubscriptionUsage(channelId int64) error {
 	return DB.Where("channel_id = ?", channelId).Delete(&ChannelSubscriptionUsage{}).Error
+}
+
+// DeleteChannelSubscriptionUsages 批量清理统计状态（按状态/条件批量删渠道时使用）。
+func DeleteChannelSubscriptionUsages(channelIds []int64) error {
+	if len(channelIds) == 0 {
+		return nil
+	}
+	return DB.Where("channel_id IN ?", channelIds).Delete(&ChannelSubscriptionUsage{}).Error
 }

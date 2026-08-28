@@ -263,17 +263,20 @@ func TestRefreshChannelSubscriptionUsageIncrementalAndIdempotent(t *testing.T) {
 	assert.Equal(t, int64(300), usage4.UsedQuota31d)
 }
 
-func TestRefreshChannelSubscriptionUsageFirstInit(t *testing.T) {
+func TestRefreshChannelSubscriptionUsageFirstInitWithNoLogs(t *testing.T) {
 	setupSubscriptionUsageTest(t)
 	channelId := 43
 	before := common.GetTimestamp()
 	require.NoError(t, RefreshChannelSubscriptionUsage(channelId))
+	after := common.GetTimestamp()
 	usage, err := model.GetChannelSubscriptionUsage(int64(channelId))
 	require.NoError(t, err)
-	assert.True(t, usage.BucketStart5h >= before)
-	assert.True(t, usage.BucketStart31d >= before)
+	// 首次初始化回填：桶起点 = now - 窗口（无日志时用量为 0）
+	assert.GreaterOrEqual(t, usage.BucketStart5h, before-SubscriptionWindow5hSeconds)
+	assert.LessOrEqual(t, usage.BucketStart5h, after-SubscriptionWindow5hSeconds)
+	assert.Zero(t, usage.UsedQuota5h)
 	assert.Zero(t, usage.UsedQuota31d)
-	assert.True(t, usage.LastCheckpointAt >= before)
+	assert.GreaterOrEqual(t, usage.LastCheckpointAt, before)
 }
 
 func TestRefreshChannelSubscriptionUsageRolloverSkipsOldBucket(t *testing.T) {
@@ -308,33 +311,6 @@ func TestRefreshChannelSubscriptionUsageRolloverSkipsOldBucket(t *testing.T) {
 	assert.Equal(t, oldStart, usage2.BucketStart7d) // 7d 未翻转
 	assert.Equal(t, int64(1750), usage2.UsedQuota7d)
 	assert.Equal(t, int64(1750), usage2.UsedQuota31d)
-}
-
-func TestResetChannelSubscriptionUsage(t *testing.T) {
-	setupSubscriptionUsageTest(t)
-	channelId := 5
-	now := common.GetTimestamp()
-	oldBucket := now - 10000
-	usage := &model.ChannelSubscriptionUsage{
-		ChannelId:        int64(channelId),
-		LastCheckpointAt: now - 5000,
-		LastRefreshAt:    now - 5000,
-		BucketStart5h:    oldBucket, UsedQuota5h: 500,
-		BucketStart7d: oldBucket, UsedQuota7d: 500,
-		BucketStart31d: oldBucket, UsedQuota31d: 500,
-		UpdatedAt: now - 5000,
-	}
-	require.NoError(t, model.UpsertChannelSubscriptionUsage(usage))
-
-	require.NoError(t, ResetChannelSubscriptionUsage(channelId))
-	usage2, err := model.GetChannelSubscriptionUsage(int64(channelId))
-	require.NoError(t, err)
-	assert.Zero(t, usage2.UsedQuota5h)
-	assert.Zero(t, usage2.UsedQuota7d)
-	assert.Zero(t, usage2.UsedQuota31d)
-	// 桶未跨周期时保持原起点；LastCheckpointAt 前移到当前时间
-	assert.Equal(t, oldBucket, usage2.BucketStart5h)
-	assert.True(t, usage2.LastCheckpointAt >= now)
 }
 
 func TestFullRecalibrateChannelSubscriptionUsage(t *testing.T) {
@@ -511,4 +487,354 @@ func TestBuildChannelSubscriptionListSnapshots(t *testing.T) {
 	assert.Equal(t, int64(10000), snapshot.MonthlyLimit)
 	assert.True(t, snapshot.ModelOverLimit) // model-a 5000 > 4000
 	assert.True(t, snapshot.UpdatedAt > 0)
+}
+
+// ---------------------------------------------------------------------------
+// 手动基线（百分比）相关测试
+// ---------------------------------------------------------------------------
+
+// createSubscriptionChannel 创建已启用订阅计费的渠道（供 SetChannelSubscriptionBaseline 等使用）。
+func createSubscriptionChannel(t *testing.T, channelId int) *model.Channel {
+	t.Helper()
+	channel := &model.Channel{
+		Id:    channelId,
+		Type:  1,
+		Name:  "sub-channel",
+		Key:   "sk-subscription-billing-test",
+		Group: "default",
+	}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{SubscriptionBilling: &dto.SubscriptionBillingConfig{
+		BillingMode:       dto.SubscriptionBillingModeSubscribe,
+		MonthlyTotalQuota: 30000000, // 60 USD
+		FiveHourRatioBps:  2000,     // 20%
+		WeeklyRatioBps:    5000,     // 50%
+	}})
+	require.NoError(t, model.DB.Create(channel).Error)
+	return channel
+}
+
+func TestSubscriptionBaselineBpsFromPercent(t *testing.T) {
+	bps, err := SubscriptionBaselineBpsFromPercent(30)
+	require.NoError(t, err)
+	assert.Equal(t, 3000, bps)
+
+	// 允许 >100（超限基线）
+	bps, err = SubscriptionBaselineBpsFromPercent(200)
+	require.NoError(t, err)
+	assert.Equal(t, 20000, bps)
+
+	_, err = SubscriptionBaselineBpsFromPercent(-10)
+	require.Error(t, err)
+	_, err = SubscriptionBaselineBpsFromPercent(math.NaN())
+	require.Error(t, err)
+	_, err = SubscriptionBaselineBpsFromPercent(math.Inf(1))
+	require.Error(t, err)
+}
+
+func TestRefreshFirstInitBackfillsHistory(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 44
+	now := common.GetTimestamp()
+	// 5h 内 1 条、7d 内 5h 外 1 条、31d 内 7d 外 1 条
+	insertConsumeLogs(t, channelId, []consumeLogSeed{
+		{CreatedAt: now - 60, ModelName: "a", Quota: 100},
+		{CreatedAt: now - SubscriptionWindow5hSeconds - 60, ModelName: "b", Quota: 200},
+		{CreatedAt: now - SubscriptionWindow7dSeconds - 60, ModelName: "c", Quota: 400},
+	})
+	require.NoError(t, RefreshChannelSubscriptionUsage(channelId))
+	usage, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	require.NoError(t, err)
+	assert.Equal(t, int64(100), usage.UsedQuota5h)
+	assert.Equal(t, int64(300), usage.UsedQuota7d)
+	assert.Equal(t, int64(700), usage.UsedQuota31d)
+	assert.GreaterOrEqual(t, usage.LastCheckpointAt, now)
+}
+
+func TestSetBaselineThenRefreshIncremental(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 45
+	channel := createSubscriptionChannel(t, channelId)
+	defer func() { _ = channel.Delete() }()
+
+	now := common.GetTimestamp()
+	baselineAt := now - 100
+	require.NoError(t, SetChannelSubscriptionBaseline(channelId, 3000, baselineAt))
+
+	// 基线时刻之后的日志才会被增量累加
+	insertConsumeLogs(t, channelId, []consumeLogSeed{
+		{CreatedAt: baselineAt + 10, ModelName: "a", Quota: 50},
+		{CreatedAt: now - 20, ModelName: "b", Quota: 60},
+	})
+	require.NoError(t, RefreshChannelSubscriptionUsage(channelId))
+
+	usage, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	require.NoError(t, err)
+	assert.True(t, usage.ManualInitialized)
+	assert.Equal(t, 3000, usage.BaselineBps31d)
+	assert.Equal(t, baselineAt, usage.BaselineSetAt)
+	assert.Equal(t, baselineAt, usage.BucketStart31d)
+	// UsedQuota 为纯增量，不含基线
+	assert.Equal(t, int64(110), usage.UsedQuota31d)
+	assert.Equal(t, int64(110), usage.UsedQuota5h)
+	// 增量起点 = baselineAt
+	assert.LessOrEqual(t, usage.LastCheckpointAt, now)
+}
+
+func TestRefreshIdempotentAfterBaseline(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 46
+	channel := createSubscriptionChannel(t, channelId)
+	defer func() { _ = channel.Delete() }()
+
+	now := common.GetTimestamp()
+	baselineAt := now - 100
+	require.NoError(t, SetChannelSubscriptionBaseline(channelId, 3000, baselineAt))
+	insertConsumeLogs(t, channelId, []consumeLogSeed{
+		{CreatedAt: baselineAt + 10, ModelName: "a", Quota: 50},
+	})
+	require.NoError(t, RefreshChannelSubscriptionUsage(channelId))
+	usage, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	require.NoError(t, err)
+	assert.Equal(t, int64(50), usage.UsedQuota31d)
+
+	// 无新日志时重复刷新不重复累加
+	cp := usage.LastCheckpointAt
+	require.NoError(t, RefreshChannelSubscriptionUsage(channelId))
+	usage2, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	require.NoError(t, err)
+	assert.Equal(t, int64(50), usage2.UsedQuota31d)
+	assert.GreaterOrEqual(t, usage2.LastCheckpointAt, cp)
+}
+
+func TestMonthlyRolloverClearsBaseline(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 47
+	now := common.GetTimestamp()
+	old31d := now - SubscriptionWindow31dSeconds - 3600 // 已过月度翻转点
+	usage := &model.ChannelSubscriptionUsage{
+		ChannelId:         int64(channelId),
+		LastCheckpointAt:  now,
+		LastRefreshAt:     now,
+		ManualInitialized: true,
+		BaselineBps31d:    3000,
+		BaselineSetAt:     now - SubscriptionWindow31dSeconds - 7200,
+		BucketStart5h:     now - 100, UsedQuota5h: 111,
+		BucketStart7d: now - 100, UsedQuota7d: 222,
+		BucketStart31d: old31d, UsedQuota31d: 333,
+		UpdatedAt: now,
+	}
+	require.NoError(t, model.UpsertChannelSubscriptionUsage(usage))
+
+	require.NoError(t, RefreshChannelSubscriptionUsage(channelId))
+	usage2, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	require.NoError(t, err)
+	// 月度翻转：增量清零 + 基线失效
+	assert.Equal(t, int64(0), usage2.UsedQuota31d)
+	assert.Equal(t, 0, usage2.BaselineBps31d)
+	assert.Greater(t, usage2.BucketStart31d, old31d)
+	// 5h/7d 未跨周期不受影响
+	assert.Equal(t, int64(111), usage2.UsedQuota5h)
+	assert.Equal(t, int64(222), usage2.UsedQuota7d)
+	// 手动基线标志保留（仍走增量分支）
+	assert.True(t, usage2.ManualInitialized)
+}
+
+func Test5hRolloverKeepsBaseline(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 48
+	now := common.GetTimestamp()
+	usage := &model.ChannelSubscriptionUsage{
+		ChannelId:         int64(channelId),
+		LastCheckpointAt:  now,
+		LastRefreshAt:     now,
+		ManualInitialized: true,
+		BaselineBps31d:    3000,
+		BaselineSetAt:     now - 100,
+		BucketStart5h:     now - SubscriptionWindow5hSeconds - 3600, // 已过 5h 翻转点
+		UsedQuota5h:       111,
+		BucketStart7d:     now - 100, UsedQuota7d: 222,
+		BucketStart31d: now - 100, UsedQuota31d: 333,
+		UpdatedAt: now,
+	}
+	require.NoError(t, model.UpsertChannelSubscriptionUsage(usage))
+
+	require.NoError(t, RefreshChannelSubscriptionUsage(channelId))
+	usage2, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	require.NoError(t, err)
+	// 5h 翻转只清增量，不清基线
+	assert.Equal(t, int64(0), usage2.UsedQuota5h)
+	assert.Equal(t, 3000, usage2.BaselineBps31d)
+
+	// Build 时 5h 窗口展示 = 派生基线 quota（BaselineBps31d × FiveHourRatioBps/10000）
+	cfg := &dto.SubscriptionBillingConfig{
+		BillingMode:       dto.SubscriptionBillingModeSubscribe,
+		MonthlyTotalQuota: 30000000, // 60 USD
+		FiveHourRatioBps:  2000,     // 20%
+		WeeklyRatioBps:    5000,     // 50%
+	}
+	data, err := BuildSubscriptionUsageData(channelId, cfg, now)
+	require.NoError(t, err)
+	// limit5h = 30000000×2000/10000 = 6000000；
+	// baselineBps5h = 3000×2000/10000 = 600 bps；
+	// baselineQuota5h = 6000000×600/10000 = 360000；增量 0
+	assert.Equal(t, int64(360000), data.Windows["5h"].UsedQuota)
+	// 31d 窗口 = 基线 9000000 + 增量 333
+	assert.Equal(t, int64(9000333), data.Windows["31d"].UsedQuota)
+}
+
+func TestFullRecalibratePreservesBaseline(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 49
+	now := common.GetTimestamp()
+	bucketStart := now - 3600
+	usage := &model.ChannelSubscriptionUsage{
+		ChannelId:         int64(channelId),
+		LastCheckpointAt:  now,
+		LastRefreshAt:     now,
+		ManualInitialized: true,
+		BaselineBps31d:    3000,
+		BaselineSetAt:     now - 7200,
+		BucketStart5h:     bucketStart, UsedQuota5h: 1,
+		BucketStart7d: bucketStart, UsedQuota7d: 1,
+		BucketStart31d: bucketStart, UsedQuota31d: 1,
+		UpdatedAt: now,
+	}
+	require.NoError(t, model.UpsertChannelSubscriptionUsage(usage))
+	insertConsumeLogs(t, channelId, []consumeLogSeed{
+		{CreatedAt: bucketStart + 10, ModelName: "a", Quota: 100},
+		{CreatedAt: bucketStart + 20, ModelName: "b", Quota: 50},
+	})
+	require.NoError(t, FullRecalibrateChannelSubscriptionUsage(channelId))
+	usage2, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	require.NoError(t, err)
+	// 全量校正只重算增量；基线字段原样保留
+	assert.Equal(t, 3000, usage2.BaselineBps31d)
+	assert.Equal(t, now-7200, usage2.BaselineSetAt)
+	assert.True(t, usage2.ManualInitialized)
+	assert.Equal(t, int64(150), usage2.UsedQuota31d)
+	assert.Equal(t, int64(150), usage2.UsedQuota5h)
+}
+
+func TestBuildBaselinePercentToQuota(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 50
+	now := common.GetTimestamp()
+	cfg := &dto.SubscriptionBillingConfig{
+		BillingMode:       dto.SubscriptionBillingModeSubscribe,
+		MonthlyTotalQuota: 30000000, // 60 USD
+		FiveHourRatioBps:  2000,
+		WeeklyRatioBps:    5000,
+	}
+	cases := []struct {
+		name      string
+		percent   int
+		wantQuota int64 // 月窗口 used（无增量）
+		wantPct   float64
+		wantOver  bool
+	}{
+		{name: "zero baseline", percent: 0, wantQuota: 0, wantPct: 0},
+		{name: "30 percent", percent: 30, wantQuota: 9000000, wantPct: 30}, // 60×30%
+		{name: "100 percent", percent: 100, wantQuota: 30000000, wantPct: 100},
+		{name: "150 percent over limit", percent: 150, wantQuota: 45000000, wantPct: 150, wantOver: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, model.UpsertChannelSubscriptionUsage(&model.ChannelSubscriptionUsage{
+				ChannelId:         int64(channelId),
+				LastCheckpointAt:  now,
+				LastRefreshAt:     now,
+				ManualInitialized: true,
+				BaselineBps31d:    tc.percent * 100,
+				BaselineSetAt:     now,
+				BucketStart5h:     now, UsedQuota5h: 0,
+				BucketStart7d: now, UsedQuota7d: 0,
+				BucketStart31d: now, UsedQuota31d: 0,
+				UpdatedAt: now,
+			}))
+			data, err := BuildSubscriptionUsageData(channelId, cfg, now)
+			require.NoError(t, err)
+			w := data.Windows["31d"]
+			assert.Equal(t, tc.wantQuota, w.UsedQuota)
+			assert.InDelta(t, tc.wantPct, w.UsedPercent, 1e-6)
+			assert.Equal(t, tc.wantOver, w.OverLimit)
+		})
+	}
+}
+
+func TestConfigChangeRecomputesBaselineQuota(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 51
+	now := common.GetTimestamp()
+	// 基线 30% + 增量 1000（请求：改月额度后基线 quota 跟随配置，增量不清零）
+	require.NoError(t, model.UpsertChannelSubscriptionUsage(&model.ChannelSubscriptionUsage{
+		ChannelId:         int64(channelId),
+		LastCheckpointAt:  now,
+		LastRefreshAt:     now,
+		ManualInitialized: true,
+		BaselineBps31d:    3000,
+		BaselineSetAt:     now,
+		BucketStart5h:     now, UsedQuota5h: 1000,
+		BucketStart7d: now, UsedQuota7d: 1000,
+		BucketStart31d: now, UsedQuota31d: 1000,
+		UpdatedAt: now,
+	}))
+
+	// 60 USD 配置：基线 quota = 60×30% = 18 USD
+	cfg60 := &dto.SubscriptionBillingConfig{
+		BillingMode:       dto.SubscriptionBillingModeSubscribe,
+		MonthlyTotalQuota: 30000000,
+		FiveHourRatioBps:  2000,
+		WeeklyRatioBps:    5000,
+	}
+	data60, err := BuildSubscriptionUsageData(channelId, cfg60, now)
+	require.NoError(t, err)
+	assert.Equal(t, int64(9000000+1000), data60.Windows["31d"].UsedQuota)
+
+	// 100 USD 配置：基线 quota 跟随 = 100×30% = 30 USD；增量 1000 保留
+	cfg100 := &dto.SubscriptionBillingConfig{
+		BillingMode:       dto.SubscriptionBillingModeSubscribe,
+		MonthlyTotalQuota: 50000000, // 100 USD
+		FiveHourRatioBps:  2000,
+		WeeklyRatioBps:    5000,
+	}
+	data100, err := BuildSubscriptionUsageData(channelId, cfg100, now)
+	require.NoError(t, err)
+	assert.Equal(t, int64(15000000+1000), data100.Windows["31d"].UsedQuota)
+	assert.InDelta(t, 30.002, data100.Windows["31d"].UsedPercent, 1e-3)
+}
+
+func TestSetBaselineValidation(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 52
+	now := common.GetTimestamp()
+	channel := createSubscriptionChannel(t, channelId)
+	defer func() { _ = channel.Delete() }()
+
+	// 未来时间拒绝
+	err := SetChannelSubscriptionBaseline(channelId, 3000, now+100)
+	require.Error(t, err)
+	// 负数百分比拒绝
+	err = SetChannelSubscriptionBaseline(channelId, -1, now)
+	require.Error(t, err)
+	// 超限百分比（150%）接受
+	require.NoError(t, SetChannelSubscriptionBaseline(channelId, 15000, now))
+	usage, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	require.NoError(t, err)
+	assert.Equal(t, 15000, usage.BaselineBps31d)
+}
+
+func TestSetBaselineRequiresSubscribeMode(t *testing.T) {
+	setupSubscriptionUsageTest(t)
+	channelId := 53
+	// 按量计费渠道不允许设置基线
+	channel := &model.Channel{Id: channelId, Type: 1, Name: "payg", Key: "sk-payg", Group: "default"}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{SubscriptionBilling: &dto.SubscriptionBillingConfig{
+		BillingMode:       dto.SubscriptionBillingModePayAsYouGo,
+		MonthlyTotalQuota: 30000000,
+	}})
+	require.NoError(t, model.DB.Create(channel).Error)
+	defer func() { _ = channel.Delete() }()
+
+	err := SetChannelSubscriptionBaseline(channelId, 3000, common.GetTimestamp())
+	require.Error(t, err)
 }

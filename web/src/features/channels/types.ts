@@ -446,3 +446,14 @@ export interface SubscriptionUsageResponse {
   message?: string
   data?: SubscriptionUsageData
 }
+
+/**
+ * Manual usage baseline for a subscription channel: the current monthly used
+ * percentage and the billing-cycle start time (unix seconds) from which new
+ * usage increments are accumulated. Stored on channel_subscription_usages.
+ */
+export interface SubscriptionBaseline {
+  used_percent?: number
+  baseline_set_at?: number
+  manual_initialized?: boolean
+}

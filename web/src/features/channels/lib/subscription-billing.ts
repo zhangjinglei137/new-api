@@ -324,6 +324,74 @@ export function toSubscriptionBillingPutPayload(
 }
 
 // ============================================================================
+// Subscription Usage Baseline
+// ============================================================================
+
+/**
+ * Manual usage baseline form for a subscription channel: the current monthly
+ * used percentage (may exceed 100% to indicate over-limit) and the billing
+ * cycle start time (unix seconds) from which new usage increments accumulate.
+ */
+export interface SubscriptionBaselineForm {
+  used_percent: number
+  baseline_at: number
+}
+
+/**
+ * Validate the baseline form before saving. Returns an i18n message key on
+ * failure or null when valid. The percentage may exceed 100 (over-limit);
+ * only negatives / non-finite values and future start times are rejected.
+ */
+export function validateBaselineForm(
+  form: SubscriptionBaselineForm
+): string | null {
+  if (!Number.isFinite(form.used_percent) || form.used_percent < 0) {
+    return 'Monthly used percentage must be a non-negative number'
+  }
+  if (!Number.isFinite(form.baseline_at) || form.baseline_at < 0) {
+    return 'Billing cycle start must be a valid time'
+  }
+  if (form.baseline_at > Math.floor(Date.now() / 1000)) {
+    return 'Billing cycle start must not be in the future'
+  }
+  return null
+}
+
+/**
+ * Monthly used percentage → equivalent USD of the configured monthly total.
+ * Used as an inline hint under the percentage input.
+ */
+export function deriveBaselineUsd(
+  percent: number,
+  monthlyTotalUsd: number
+): number {
+  const value = Number(percent)
+  if (!Number.isFinite(value) || value <= 0) return 0
+  const total = Number(monthlyTotalUsd)
+  if (!Number.isFinite(total) || total <= 0) return 0
+  return (total * value) / 100
+}
+
+/**
+ * Normalize a backend baseline payload into a form value, tolerating missing
+ * fields: used_percent defaults to 0, baseline_at defaults to now.
+ */
+export function toBaselineForm(
+  value: { used_percent?: number; baseline_set_at?: number } | null | undefined
+): SubscriptionBaselineForm {
+  const now = Math.floor(Date.now() / 1000)
+  if (!value || typeof value !== 'object') {
+    return { used_percent: 0, baseline_at: now }
+  }
+  const usedPercent = Number(value.used_percent)
+  const baselineAt = Number(value.baseline_set_at)
+  return {
+    used_percent: Number.isFinite(usedPercent) && usedPercent >= 0 ? usedPercent : 0,
+    baseline_at: Number.isFinite(baselineAt) && baselineAt > 0 ? baselineAt : now,
+  }
+}
+
+// ============================================================================
 // Validation
 // ============================================================================
 

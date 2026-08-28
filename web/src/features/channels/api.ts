@@ -37,6 +37,7 @@ import type {
   MultiKeyStatusResponse,
   SearchChannelsParams,
   SearchChannelsResponse,
+  SubscriptionBaseline,
   SubscriptionBillingConfig,
   SubscriptionBillingResponse,
   SubscriptionUsageResponse,
@@ -406,6 +407,34 @@ export async function getSubscriptionUsage(
   const res = await api.get(
     `/api/channel/${channelId}/subscription-billing/usage`,
     channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+export async function getSubscriptionBaseline(
+  channelId: number
+): Promise<{ success: boolean; message?: string; data?: SubscriptionBaseline }> {
+  const res = await api.get(
+    `/api/channel/${channelId}/subscription-billing/baseline`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+export async function setSubscriptionBaseline(
+  channelId: number,
+  data: { used_percent: number; baseline_at?: number }
+): Promise<{
+  success: boolean
+  message?: string
+  data?: { baseline_set_at: number; baseline_bps: number }
+}> {
+  const res = await api.post(
+    `/api/channel/${channelId}/subscription-billing/baseline`,
+    data,
+    // No skipBusinessError: keep standard error handling so invalid baseline
+    // percentages or future timestamps surface as toasts.
+    channelActionConfig({ skipErrorHandler: true })
   )
   return res.data
 }

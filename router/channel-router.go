@@ -68,6 +68,8 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/:id/subscription-billing", permission: authz.ChannelRead, handler: controller.GetChannelSubscriptionBilling},
 	{method: http.MethodPut, path: "/:id/subscription-billing", permission: authz.ChannelWrite, handler: controller.UpdateChannelSubscriptionBilling},
 	{method: http.MethodGet, path: "/:id/subscription-billing/usage", permission: authz.ChannelRead, handler: controller.GetChannelSubscriptionUsage},
+	{method: http.MethodGet, path: "/:id/subscription-billing/baseline", permission: authz.ChannelRead, handler: controller.GetChannelSubscriptionBaseline},
+	{method: http.MethodPost, path: "/:id/subscription-billing/baseline", permission: authz.ChannelWrite, handler: controller.SetChannelSubscriptionBaseline},
 	{method: http.MethodPost, path: "/ollama/pull", permission: authz.ChannelSensitiveWrite, handler: controller.OllamaPullModel},
 	{method: http.MethodPost, path: "/ollama/pull/stream", permission: authz.ChannelSensitiveWrite, handler: controller.OllamaPullModelStream},
 	{method: http.MethodDelete, path: "/ollama/delete", permission: authz.ChannelSensitiveWrite, handler: controller.OllamaDeleteModel},

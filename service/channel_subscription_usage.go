@@ -93,6 +93,16 @@ func SubscriptionRatioBpsFromPercent(percent float64) (int, error) {
 	return int(math.Round(percent * 100)), nil
 }
 
+// SubscriptionBaselineBpsFromPercent 将基线百分比换算为 basis points。
+// 与 SubscriptionRatioBpsFromPercent 不同，基线允许 >100（表示渠道已超限），
+// 因此不设上界，仅拒绝 NaN/±Inf/负数。
+func SubscriptionBaselineBpsFromPercent(percent float64) (int, error) {
+	if math.IsNaN(percent) || math.IsInf(percent, 0) || percent < 0 {
+		return 0, fmt.Errorf("invalid baseline percent: %v", percent)
+	}
+	return int(math.Round(percent * 100)), nil
+}
+
 // ValidateSubscriptionBillingConfig 校验订阅计费配置：
 // 月额度>0、0≤占比≤100（bps 0-10000）、"*" 至多一个。
 func ValidateSubscriptionBillingConfig(cfg *dto.SubscriptionBillingConfig) error {
@@ -166,6 +176,37 @@ func walletRoundRatio(total int64, bps int) int64 {
 	return int64(q)
 }
 
+// walletRoundRatioBps 按钱包域（int53）计算 percentBps×ratioBps/10000，四舍五入到整数。
+// 用于从月基线百分比实时派生 5h/周基线百分比。
+func walletRoundRatioBps(percentBps int64, ratioBps int) int64 {
+	q, err := common.WalletQuotaFromDecimalStrict(
+		decimal.NewFromInt(percentBps).Mul(decimal.NewFromInt(int64(ratioBps))).Div(decimal.NewFromInt(10000)),
+	)
+	if err != nil {
+		// 溢出时回退到 percentBps（即按 100% 派生），保证展示不因饱和失真。
+		common.SysError(fmt.Sprintf("baseline bps overflow: percent=%d ratio=%d err=%v", percentBps, ratioBps, err))
+		return percentBps
+	}
+	return int64(q)
+}
+
+// bpsToQuota 将基线百分比（bps）换算为该窗口的 quota：limit×bps/10000。
+// 走钱包域（int53）严格换算，避免裸 int(float64*ratio) 转换导致溢出失真。
+func bpsToQuota(bps int, limit int64) int64 {
+	if bps <= 0 || limit <= 0 {
+		return 0
+	}
+	q, err := common.WalletQuotaFromDecimalStrict(
+		decimal.NewFromInt(limit).Mul(decimal.NewFromInt(int64(bps))).Div(decimal.NewFromInt(10000)),
+	)
+	if err != nil {
+		// 溢出时回退到 limit（即按 100% 处理），保证展示不因饱和失真。
+		common.SysError(fmt.Sprintf("baseline quota overflow: bps=%d limit=%d err=%v", bps, limit, err))
+		return limit
+	}
+	return int64(q)
+}
+
 // bucketStartFor 返回 now 所在桶的起点（保留相位）。
 // bucketStart <= 0 时按首次初始化处理，返回 now。
 func bucketStartFor(bucketStart int64, now int64, period int64) int64 {
@@ -179,7 +220,10 @@ func bucketStartFor(bucketStart int64, now int64, period int64) int64 {
 	return bucketStart + elapsed/period*period
 }
 
-// applyBucketRollover 对三个窗口执行桶翻转：窗口进入新周期则清零对应 Sum。
+// applyBucketRollover 对三个窗口执行桶翻转：窗口进入新周期则清零对应增量。
+// 基线是月维度概念：5h/7d 翻转只清增量；31d（月度）翻转同时清基线（额度重置，
+// 基线失效，需用户在 baseline tab 重新设置）。ManualInitialized 保留 true 不影响
+// 增量分支，仅随显式重置/删除清空。
 func applyBucketRollover(usage *model.ChannelSubscriptionUsage, now int64) {
 	if newStart := bucketStartFor(usage.BucketStart5h, now, SubscriptionWindow5hSeconds); newStart != usage.BucketStart5h {
 		usage.BucketStart5h = newStart
@@ -192,6 +236,7 @@ func applyBucketRollover(usage *model.ChannelSubscriptionUsage, now int64) {
 	if newStart := bucketStartFor(usage.BucketStart31d, now, SubscriptionWindow31dSeconds); newStart != usage.BucketStart31d {
 		usage.BucketStart31d = newStart
 		usage.UsedQuota31d = 0
+		usage.BaselineBps31d = 0 // 月度重置：基线失效
 	}
 }
 
@@ -231,14 +276,33 @@ func RefreshChannelSubscriptionUsage(channelId int) error {
 		usage = &model.ChannelSubscriptionUsage{ChannelId: int64(channelId)}
 	}
 
-	// 首次初始化：三窗口 bucketStart=now、Sum=0、LastCheckpointAt=now。
-	if usage.LastCheckpointAt == 0 {
-		usage.BucketStart5h = now
-		usage.BucketStart7d = now
-		usage.BucketStart31d = now
+	// 首次初始化且未手动设置基线：回填历史日志到三窗口（修复预览首次显示为 0 的问题）。
+	if usage.LastCheckpointAt == 0 && !usage.ManualInitialized {
+		usage.BucketStart5h = now - SubscriptionWindow5hSeconds
+		usage.BucketStart7d = now - SubscriptionWindow7dSeconds
+		usage.BucketStart31d = now - SubscriptionWindow31dSeconds
+		if usage.UsedQuota5h, err = sumChannelConsumeQuota(channelId, usage.BucketStart5h, now); err != nil {
+			usage.LastError = err.Error()
+			usage.UpdatedAt = now
+			_ = model.UpsertChannelSubscriptionUsage(usage)
+			return err
+		}
+		if usage.UsedQuota7d, err = sumChannelConsumeQuota(channelId, usage.BucketStart7d, now); err != nil {
+			usage.LastError = err.Error()
+			usage.UpdatedAt = now
+			_ = model.UpsertChannelSubscriptionUsage(usage)
+			return err
+		}
+		if usage.UsedQuota31d, err = sumChannelConsumeQuota(channelId, usage.BucketStart31d, now); err != nil {
+			usage.LastError = err.Error()
+			usage.UpdatedAt = now
+			_ = model.UpsertChannelSubscriptionUsage(usage)
+			return err
+		}
 		usage.LastCheckpointAt = now
 		usage.LastRefreshAt = now
 		usage.LastError = ""
+		usage.Partial = probeSubscriptionLogPartial(channelId, now)
 		usage.UpdatedAt = now
 		return model.UpsertChannelSubscriptionUsage(usage)
 	}
@@ -348,33 +412,53 @@ func FullRecalibrateChannelSubscriptionUsage(channelId int) error {
 	return model.UpsertChannelSubscriptionUsage(usage)
 }
 
-// ResetChannelSubscriptionUsage 配置变更（PUT 保存）时重置统计：
-// 三窗口 Sum=0、bucketStart=当前桶起点、LastCheckpointAt=now。
-// 无既有记录时按首次初始化处理。
-func ResetChannelSubscriptionUsage(channelId int) error {
+// SetChannelSubscriptionBaseline 手动设置渠道订阅用量基线（用户在 baseline tab 配置
+// "当前已使用百分比 + 计费周期起始时间"）。保存时记录 baselineAt 为统计起点：
+// LastCheckpointAt=baselineAt（之后增量只从该时刻起算，不再重读更早的历史日志）、
+// 三窗口桶起点=baselineAt、增量 UsedQuota*=0。
+// 基线只存月维度百分比（BaselineBps31d），5h/周在 Build 时按配置比例实时派生。
+func SetChannelSubscriptionBaseline(channelId int, baselineMonthlyBps int, baselineAt int64) error {
+	if baselineMonthlyBps < 0 {
+		return fmt.Errorf("baseline percent must not be negative: %d", baselineMonthlyBps)
+	}
+	now := common.GetTimestamp()
+	if baselineAt < 0 || baselineAt > now {
+		return fmt.Errorf("invalid baseline_at: %d", baselineAt)
+	}
+
 	lock := model.GetChannelPollingLock(channelId)
 	lock.Lock()
 	defer lock.Unlock()
 
-	now := common.GetTimestamp()
+	channel, err := model.GetChannelById(channelId, true)
+	if err != nil {
+		return err
+	}
+	cfg := channel.GetOtherSettings().SubscriptionBilling
+	if cfg == nil || cfg.BillingMode != dto.SubscriptionBillingModeSubscribe {
+		return errors.New("渠道未启用订阅计费")
+	}
+
 	usage, err := model.GetChannelSubscriptionUsage(int64(channelId))
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 	if usage == nil {
 		usage = &model.ChannelSubscriptionUsage{ChannelId: int64(channelId)}
-		usage.BucketStart5h = now
-		usage.BucketStart7d = now
-		usage.BucketStart31d = now
-	} else {
-		usage.BucketStart5h = bucketStartFor(usage.BucketStart5h, now, SubscriptionWindow5hSeconds)
-		usage.BucketStart7d = bucketStartFor(usage.BucketStart7d, now, SubscriptionWindow7dSeconds)
-		usage.BucketStart31d = bucketStartFor(usage.BucketStart31d, now, SubscriptionWindow31dSeconds)
 	}
+
+	usage.BaselineBps31d = baselineMonthlyBps
+	usage.BaselineSetAt = baselineAt
+	usage.ManualInitialized = true
+	// 桶起点与增量起点均对齐到基线时刻；之后 Refresh 只拉 (baselineAt, now] 的日志。
+	usage.BucketStart5h = baselineAt
+	usage.BucketStart7d = baselineAt
+	usage.BucketStart31d = baselineAt
+	usage.LastCheckpointAt = baselineAt
+	// 增量清零；基线百分比不叠加进 UsedQuota*（Build 时实时换算）。
 	usage.UsedQuota5h = 0
 	usage.UsedQuota7d = 0
 	usage.UsedQuota31d = 0
-	usage.LastCheckpointAt = now
 	usage.LastRefreshAt = now
 	usage.LastError = ""
 	usage.Partial = false
@@ -496,7 +580,16 @@ func BuildSubscriptionUsageData(channelId int, cfg *dto.SubscriptionBillingConfi
 	}
 
 	limit5h, limit7d, limit31d := subscriptionWindowLimits(cfg)
-	buildWindow := func(windowSize int64, used int64, limit int64, bucketStart int64) SubscriptionUsageWindow {
+
+	// 手动基线百分比（仅存月维度）→ 5h/周按配置比例实时派生 → 换算为该窗口 quota。
+	// 这样配置（月额度/比例）变更后基线 quota 自动跟随，语义始终是"已用 N%"。
+	baselineQuota5h := bpsToQuota(int(walletRoundRatioBps(int64(usage.BaselineBps31d), cfg.FiveHourRatioBps)), limit5h)
+	baselineQuota7d := bpsToQuota(int(walletRoundRatioBps(int64(usage.BaselineBps31d), cfg.WeeklyRatioBps)), limit7d)
+	baselineQuota31d := bpsToQuota(usage.BaselineBps31d, limit31d)
+
+	// 展示值 = 基线 quota（实时换算）+ 增量 quota（UsedQuota* 为纯增量）。
+	buildWindow := func(windowSize int64, increment int64, baseline int64, limit int64, bucketStart int64) SubscriptionUsageWindow {
+		used := baseline + increment
 		usedPercent := subscriptionPercent(used, limit)
 		resetAt := bucketStart + windowSize
 		resetAfter := resetAt - now
@@ -516,9 +609,9 @@ func BuildSubscriptionUsageData(channelId int, cfg *dto.SubscriptionBillingConfi
 	}
 
 	windows := map[string]SubscriptionUsageWindow{
-		SubscriptionWindowName5h:  buildWindow(SubscriptionWindow5hSeconds, usage.UsedQuota5h, limit5h, usage.BucketStart5h),
-		SubscriptionWindowName7d:  buildWindow(SubscriptionWindow7dSeconds, usage.UsedQuota7d, limit7d, usage.BucketStart7d),
-		SubscriptionWindowName31d: buildWindow(SubscriptionWindow31dSeconds, usage.UsedQuota31d, limit31d, usage.BucketStart31d),
+		SubscriptionWindowName5h:  buildWindow(SubscriptionWindow5hSeconds, usage.UsedQuota5h, baselineQuota5h, limit5h, usage.BucketStart5h),
+		SubscriptionWindowName7d:  buildWindow(SubscriptionWindow7dSeconds, usage.UsedQuota7d, baselineQuota7d, limit7d, usage.BucketStart7d),
+		SubscriptionWindowName31d: buildWindow(SubscriptionWindow31dSeconds, usage.UsedQuota31d, baselineQuota31d, limit31d, usage.BucketStart31d),
 	}
 
 	perModelUsage, err := fetchSubscriptionPerModelUsage([]int64{int64(channelId)})

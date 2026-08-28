@@ -494,6 +494,11 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 	if err := tx.Commit().Error; err != nil {
 		return 0, err
 	}
+	// 清理订阅统计（含手动基线）；失败不阻断主删除。
+	usageIds := lo.Map(ids, func(id int, _ int) int64 { return int64(id) })
+	if err := DeleteChannelSubscriptionUsages(usageIds); err != nil {
+		common.SysLog(fmt.Sprintf("failed to delete channel subscription usages: ids=%v, error=%v", ids, err))
+	}
 	return deletedCount, nil
 }
 
@@ -636,7 +641,14 @@ func (channel *Channel) Delete() error {
 		return err
 	}
 	err = channel.DeleteAbilities()
-	return err
+	if err != nil {
+		return err
+	}
+	// 清理订阅统计（含手动基线）；失败不阻断主删除。
+	if err := DeleteChannelSubscriptionUsage(int64(channel.Id)); err != nil {
+		common.SysLog(fmt.Sprintf("failed to delete channel subscription usage: channel_id=%d, error=%v", channel.Id, err))
+	}
+	return nil
 }
 
 var channelStatusLock sync.Mutex
@@ -906,13 +918,35 @@ func updateChannelUsedQuota(id int, quota int) {
 }
 
 func DeleteChannelByStatus(status int64) (int64, error) {
+	var ids []int64
+	if err := DB.Model(&Channel{}).Where("status = ?", status).Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
 	result := DB.Where("status = ?", status).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	if err := result.Error; err != nil {
+		return 0, err
+	}
+	if len(ids) > 0 {
+		_ = DeleteChannelSubscriptionUsages(ids)
+	}
+	return result.RowsAffected, nil
 }
 
 func DeleteDisabledChannel() (int64, error) {
+	var ids []int64
+	if err := DB.Model(&Channel{}).
+		Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).
+		Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
 	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	if err := result.Error; err != nil {
+		return 0, err
+	}
+	if len(ids) > 0 {
+		_ = DeleteChannelSubscriptionUsages(ids)
+	}
+	return result.RowsAffected, nil
 }
 
 func GetPaginatedTags(offset int, limit int) ([]*string, error) {

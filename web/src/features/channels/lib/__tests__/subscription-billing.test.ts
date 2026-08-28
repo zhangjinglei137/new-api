@@ -27,6 +27,7 @@ import {
   SUBSCRIPTION_WARNING_PERCENT,
   bpsToPercent,
   createSubscriptionBillingConfig,
+  deriveBaselineUsd,
   deriveFiveHourUsd,
   deriveWeeklyUsd,
   formatSubscriptionUsageUpdatedAt,
@@ -38,8 +39,10 @@ import {
   percentToBps,
   quotaToUsd,
   stringifySubscriptionBillingConfig,
+  toBaselineForm,
   toSubscriptionBillingPutPayload,
   usdToQuota,
+  validateBaselineForm,
   validateSubscriptionBillingConfig,
   type SubscriptionBillingRawConfig,
 } from '../subscription-billing'
@@ -344,5 +347,56 @@ describe('subscription billing PUT payload', () => {
       billing_mode: 'metered',
     })
     expect(payload.billing_mode).toBe(0)
+  })
+})
+
+describe('subscription usage baseline form', () => {
+  const now = Math.floor(Date.now() / 1000)
+
+  test('accepts a valid baseline, including over-limit percentages', () => {
+    expect(
+      validateBaselineForm({ used_percent: 30, baseline_at: now })
+    ).toBeNull()
+    expect(
+      validateBaselineForm({ used_percent: 200, baseline_at: now })
+    ).toBeNull()
+    expect(
+      validateBaselineForm({ used_percent: 0, baseline_at: now })
+    ).toBeNull()
+  })
+
+  test('rejects negative, non-finite and future-start baselines', () => {
+    expect(
+      validateBaselineForm({ used_percent: -1, baseline_at: now })
+    ).toBe('Monthly used percentage must be a non-negative number')
+    expect(
+      validateBaselineForm({ used_percent: Number.NaN, baseline_at: now })
+    ).toBe('Monthly used percentage must be a non-negative number')
+    expect(
+      validateBaselineForm({ used_percent: 30, baseline_at: now + 3600 })
+    ).toBe('Billing cycle start must not be in the future')
+    expect(
+      validateBaselineForm({ used_percent: 30, baseline_at: -1 })
+    ).toBe('Billing cycle start must be a valid time')
+  })
+
+  test('derives the equivalent USD of a monthly percentage', () => {
+    expect(deriveBaselineUsd(30, 60)).toBe(18)
+    expect(deriveBaselineUsd(0, 60)).toBe(0)
+    expect(deriveBaselineUsd(150, 60)).toBe(90)
+    expect(deriveBaselineUsd(Number.NaN, 60)).toBe(0)
+    expect(deriveBaselineUsd(30, 0)).toBe(0)
+  })
+
+  test('normalizes a backend baseline into a form, tolerating missing fields', () => {
+    const form = toBaselineForm({ used_percent: 30, baseline_set_at: now - 100 })
+    expect(form).toStrictEqual({ used_percent: 30, baseline_at: now - 100 })
+
+    const defaults = toBaselineForm(undefined)
+    expect(defaults.used_percent).toBe(0)
+    expect(defaults.baseline_at).toBeGreaterThan(0)
+
+    const missingPercent = toBaselineForm({ baseline_set_at: now })
+    expect(missingPercent.used_percent).toBe(0)
   })
 })

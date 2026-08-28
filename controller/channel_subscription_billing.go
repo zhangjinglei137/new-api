@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // subscriptionBillingConfigResponse 渠道订阅计费配置的展示结构
@@ -212,12 +213,8 @@ func UpdateChannelSubscriptionBilling(c *gin.Context) {
 	}
 	model.InitChannelCache()
 
-	// 配置变更重置统计；订阅模式下初始化/重置三窗口。
-	if cfg.BillingMode == dto.SubscriptionBillingModeSubscribe {
-		if err := service.ResetChannelSubscriptionUsage(channelId); err != nil {
-			common.SysError(fmt.Sprintf("failed to reset subscription usage: channel_id=%d, error=%v", channelId, err))
-		}
-	}
+	// 注意：保存配置不再重置订阅统计。用量统计与配置解耦——
+	// 若需重置/设置初始用量，请通过 baseline 接口显式操作。
 
 	recordManageAudit(c, "channel.subscription_billing_update", map[string]interface{}{
 		"id":           channelId,
@@ -260,4 +257,92 @@ func GetChannelSubscriptionUsage(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, data)
+}
+
+type subscriptionBaselineRequest struct {
+	UsedPercent float64 `json:"used_percent"` // 月已用百分比（允许 >100 表示超限）
+	BaselineAt  *int64  `json:"baseline_at"`  // 计费周期起始时间（unix 秒），可选，缺省=now
+}
+
+type subscriptionBaselineResponse struct {
+	UsedPercent       float64 `json:"used_percent"`
+	BaselineSetAt     int64   `json:"baseline_set_at"`
+	ManualInitialized bool    `json:"manual_initialized"`
+}
+
+// GetChannelSubscriptionBaseline 返回渠道订阅用量基线（当月已用百分比 + 统计起点）。
+func GetChannelSubscriptionBaseline(c *gin.Context) {
+	channelId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, fmt.Errorf("invalid channel id: %w", err))
+		return
+	}
+	usage, err := model.GetChannelSubscriptionUsage(int64(channelId))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 从未初始化：返回全零基线。
+			common.ApiSuccess(c, subscriptionBaselineResponse{})
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, subscriptionBaselineResponse{
+		UsedPercent:       float64(usage.BaselineBps31d) / 100,
+		BaselineSetAt:     usage.BaselineSetAt,
+		ManualInitialized: usage.ManualInitialized,
+	})
+}
+
+// SetChannelSubscriptionBaseline 手动设置渠道订阅用量基线：
+// 记录 baselineAt 为新统计起点，之后增量只从该时刻累计，不再重读更早历史日志。
+func SetChannelSubscriptionBaseline(c *gin.Context) {
+	channelId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, fmt.Errorf("invalid channel id: %w", err))
+		return
+	}
+	channel, err := model.GetChannelById(channelId, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	cfg := channel.GetOtherSettings().SubscriptionBilling
+	if cfg == nil || cfg.BillingMode != dto.SubscriptionBillingModeSubscribe {
+		common.ApiError(c, errors.New("渠道未启用订阅计费"))
+		return
+	}
+
+	var req subscriptionBaselineRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	bps, err := service.SubscriptionBaselineBpsFromPercent(req.UsedPercent)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	now := common.GetTimestamp()
+	baselineAt := now
+	if req.BaselineAt != nil {
+		baselineAt = *req.BaselineAt
+	}
+	if baselineAt < 0 || baselineAt > now {
+		common.ApiError(c, fmt.Errorf("invalid baseline_at: %d", baselineAt))
+		return
+	}
+
+	if err := service.SetChannelSubscriptionBaseline(channelId, bps, baselineAt); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	recordManageAudit(c, "channel.subscription_baseline_set", map[string]interface{}{
+		"id":           channelId,
+		"name":         channel.Name,
+		"baseline_at":  baselineAt,
+		"baseline_bps": bps,
+	})
+	common.ApiSuccess(c, gin.H{"baseline_set_at": baselineAt, "baseline_bps": bps})
 }

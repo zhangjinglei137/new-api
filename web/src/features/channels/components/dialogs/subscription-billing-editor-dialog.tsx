@@ -59,11 +59,14 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
+import { formatTimestampForInput, parseTimestampFromInput } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import {
+  getSubscriptionBaseline,
   getSubscriptionBilling,
   getSubscriptionUsage,
+  setSubscriptionBaseline,
   updateSubscriptionBilling,
 } from '../../api'
 import type {
@@ -76,13 +79,17 @@ import {
   SUBSCRIPTION_BILLING_MODE_OPTIONS,
   SUBSCRIPTION_MONTHLY_RATIO_PERCENT,
   createSubscriptionBillingConfig,
+  deriveBaselineUsd,
   deriveFiveHourUsd,
   deriveWeeklyUsd,
   formatSubscriptionUsageUpdatedAt,
   normalizeSubscriptionBillingConfig,
   parseSubscriptionBillingConfig,
   stringifySubscriptionBillingConfig,
+  toBaselineForm,
+  validateBaselineForm,
   validateSubscriptionBillingConfig,
+  type SubscriptionBaselineForm,
 } from '../../lib/subscription-billing'
 import { SubscriptionWindowCards } from './subscription-usage-dialog'
 
@@ -99,12 +106,14 @@ type SubscriptionBillingEditorDialogProps = {
 type SubscriptionBillingEditorTab =
   | 'overview'
   | 'model_quotas'
+  | 'baseline'
   | 'preview'
   | 'json'
 
 const subscriptionBillingTabs = new Set<SubscriptionBillingEditorTab>([
   'overview',
   'model_quotas',
+  'baseline',
   'preview',
   'json',
 ])
@@ -244,6 +253,13 @@ export function SubscriptionBillingEditorDialog({
   const [usage, setUsage] = useState<SubscriptionUsageResponse | null>(null)
   const [isUsageLoading, setIsUsageLoading] = useState(false)
   const [usageError, setUsageError] = useState('')
+  const [baselineForm, setBaselineForm] = useState<SubscriptionBaselineForm>({
+    used_percent: 0,
+    baseline_at: Math.floor(Date.now() / 1000),
+  })
+  const [isBaselineLoading, setIsBaselineLoading] = useState(false)
+  const [isBaselineSaving, setIsBaselineSaving] = useState(false)
+  const [baselineError, setBaselineError] = useState('')
 
   // 当前渠道配置的模型（逗号分隔），作为模型额度下拉与一键添加的来源。
   const channelModelNames = useMemo(() => {
@@ -283,6 +299,8 @@ export function SubscriptionBillingEditorDialog({
     setUsage(null)
     setUsageError('')
     setIsUsageLoading(false)
+    setBaselineForm(toBaselineForm(undefined))
+    setBaselineError('')
     if (!channelId) {
       setLoadError(t('Channel ID is required'))
       applyConfig(createSubscriptionBillingConfig())
@@ -329,14 +347,15 @@ export function SubscriptionBillingEditorDialog({
   }, [open, channelId])
 
   // Fetch usage when the preview tab becomes active for the first time.
+  // NOTE: usageError is intentionally NOT a dependency — a failed first fetch
+  // must not permanently disable the effect; the "Refresh now" button retries.
   useEffect(() => {
     if (
       !open ||
       !channelId ||
       activeTab !== 'preview' ||
       usage ||
-      isUsageLoading ||
-      usageError
+      isUsageLoading
     ) {
       return
     }
@@ -365,7 +384,7 @@ export function SubscriptionBillingEditorDialog({
     return () => {
       cancelled = true
     }
-  }, [open, channelId, activeTab, usage, isUsageLoading, usageError, t])
+  }, [open, channelId, activeTab, usage, isUsageLoading, t])
 
   const updateConfig = (patch: Partial<SubscriptionBillingConfig>) => {
     setConfig((current) => (current ? { ...current, ...patch } : current))
@@ -512,6 +531,64 @@ export function SubscriptionBillingEditorDialog({
     void load()
   }
 
+  const loadBaseline = async () => {
+    if (!channelId || isBaselineLoading) {
+      return
+    }
+    setIsBaselineLoading(true)
+    setBaselineError('')
+    try {
+      const res = await getSubscriptionBaseline(channelId)
+      if (!res.success) {
+        setBaselineError(res.message?.trim() || t('Failed to load baseline'))
+        return
+      }
+      setBaselineForm(toBaselineForm(res.data))
+    } catch (error) {
+      setBaselineError(
+        error instanceof Error ? error.message : t('Failed to load baseline')
+      )
+    } finally {
+      setIsBaselineLoading(false)
+    }
+  }
+
+  const saveBaseline = async () => {
+    if (!channelId || isBaselineSaving) {
+      return
+    }
+    const validationError = validateBaselineForm(baselineForm)
+    if (validationError) {
+      setBaselineError(t(validationError))
+      return
+    }
+    setIsBaselineSaving(true)
+    setBaselineError('')
+    try {
+      const res = await setSubscriptionBaseline(channelId, {
+        used_percent: baselineForm.used_percent,
+        baseline_at: baselineForm.baseline_at,
+      })
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to save baseline'))
+      }
+      toast.success(t('Baseline saved'))
+      // 保存后立即刷新用量预览：清空已缓存用量并切换到 preview tab 重新拉取。
+      setUsage(null)
+      setUsageError('')
+      setActiveTab('preview')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t('Failed to save baseline')
+      setBaselineError(message)
+      toast.error(message)
+    } finally {
+      setIsBaselineSaving(false)
+    }
+  }
+
   const handleJsonChange = (nextValue: string) => {
     setJsonText(nextValue)
     if (jsonError) setJsonError('')
@@ -617,7 +694,7 @@ export function SubscriptionBillingEditorDialog({
         className='min-w-0 gap-0'
       >
         <div className='border-b px-4 py-3'>
-          <TabsList className='grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4'>
+          <TabsList className='grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5'>
             <TabsTrigger value='overview'>
               <CalendarClock className='size-4' aria-hidden='true' />
               {t('Overview')}
@@ -629,8 +706,12 @@ export function SubscriptionBillingEditorDialog({
                 {tiers.length}
               </span>
             </TabsTrigger>
-            <TabsTrigger value='preview'>
+            <TabsTrigger value='baseline'>
               <Check className='size-4' aria-hidden='true' />
+              {t('Baseline')}
+            </TabsTrigger>
+            <TabsTrigger value='preview'>
+              <RefreshCw className='size-4' aria-hidden='true' />
               {t('Preview')}
             </TabsTrigger>
             <TabsTrigger value='json'>
@@ -826,6 +907,97 @@ export function SubscriptionBillingEditorDialog({
             <Plus className='mr-2 h-4 w-4' />
             {t('Add model quota')}
           </Button>
+        </TabsContent>
+
+        <TabsContent value='baseline' className='flex flex-col gap-4 p-4'>
+          <SectionHeading
+            title={t('Usage Baseline')}
+            description={t(
+              'Set the current used quota as a percentage of the monthly total, and a billing cycle start time. After saving, usage counting resumes from this baseline; prior history is not re-read. The baseline expires when the monthly window rolls over.'
+            )}
+          >
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={() => void loadBaseline()}
+              disabled={isBaselineLoading}
+            >
+              <RefreshCw data-icon='inline-start' />
+              {t('Load current')}
+            </Button>
+          </SectionHeading>
+
+          <div className='grid gap-4 md:grid-cols-2'>
+            <FieldBlock label={t('Monthly used (%)')}>
+              <NumberField
+                value={baselineForm.used_percent}
+                onChange={(value) =>
+                  setBaselineForm((current) => ({
+                    ...current,
+                    used_percent: value,
+                  }))
+                }
+                min={0}
+                step={1}
+                placeholder='0'
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t('Values over 100% indicate the channel is already over limit.')}
+              </p>
+              <p className='text-muted-foreground text-xs'>
+                {t('Equivalent to {{usd}} USD', {
+                  usd: deriveBaselineUsd(
+                    baselineForm.used_percent,
+                    monthlyTotalUsd
+                  ).toFixed(2),
+                })}
+              </p>
+            </FieldBlock>
+
+            <FieldBlock label={t('Billing cycle start')}>
+              <Input
+                type='datetime-local'
+                value={formatTimestampForInput(baselineForm.baseline_at)}
+                onChange={(event) =>
+                  setBaselineForm((current) => ({
+                    ...current,
+                    baseline_at: parseTimestampFromInput(event.target.value),
+                  }))
+                }
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t('Defaults to now. Must not be in the future.')}
+              </p>
+            </FieldBlock>
+          </div>
+
+          <Alert>
+            <AlertDescription>
+              {t(
+                'Saving records the current timestamp as the new checkpoint. Subsequent usage fetches only accumulate logs after this point. The 5h/weekly windows derive their baseline from the monthly percentage and the configured ratios.'
+              )}
+            </AlertDescription>
+          </Alert>
+
+          {baselineError ? (
+            <div className='border-destructive/40 bg-destructive/10 text-destructive rounded-lg border px-3 py-2 text-sm'>
+              {baselineError}
+            </div>
+          ) : null}
+
+          <div className='flex justify-end gap-2'>
+            <Button
+              type='button'
+              onClick={() => void saveBaseline()}
+              disabled={isBaselineSaving}
+            >
+              {isBaselineSaving ? (
+                <span className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
+              ) : null}
+              {t('Save baseline')}
+            </Button>
+          </div>
         </TabsContent>
 
         <TabsContent value='preview' className='flex flex-col gap-4 p-4'>
