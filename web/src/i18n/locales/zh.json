@@ -29,6 +29,7 @@
     "Monthly total is too large": "每月总额度过大",
     "Monthly total must be greater than 0": "每月总额度必须大于 0",
     "No model quotas": "暂无模型额度",
+    "No matching model": "未找到匹配的模型",
     "No model usage yet": "暂无模型用量",
     "No per-model quotas are configured. All models share the monthly total limit.": "未配置按模型额度，所有模型共享每月总额度。",
     "No per-model usage details are available yet.": "暂无按模型的用量明细。",

@@ -1110,6 +1110,19 @@ func UpdateChannel(c *gin.Context) {
 			// 覆盖模式：直接使用新密钥（默认行为，不需要特殊处理）
 		}
 	}
+
+	// 保留订阅计费配置：它由独立的订阅计费接口管理，渠道编辑表单中并不展示。
+	// 若请求体未携带 subscription_billing（旧表单快照常见），则沿用库中的现有
+	// 配置，避免渠道保存时把已配置的订阅计费整体覆盖冲掉。
+	incomingSettings := channel.GetOtherSettings()
+	if incomingSettings.SubscriptionBilling == nil {
+		originSettings := originChannel.GetOtherSettings()
+		if originSettings.SubscriptionBilling != nil {
+			incomingSettings.SubscriptionBilling = originSettings.SubscriptionBilling
+			channel.SetOtherSettings(incomingSettings)
+		}
+	}
+
 	err = channel.Update()
 	if err != nil {
 		common.ApiError(c, err)

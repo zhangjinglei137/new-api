@@ -29,6 +29,7 @@
     "Monthly total is too large": "Monthly total is too large",
     "Monthly total must be greater than 0": "Monthly total must be greater than 0",
     "No model quotas": "No model quotas",
+    "No matching model": "No matching model",
     "No model usage yet": "No model usage yet",
     "No per-model quotas are configured. All models share the monthly total limit.": "No per-model quotas are configured. All models share the monthly total limit.",
     "No per-model usage details are available yet.": "No per-model usage details are available yet.",

@@ -39,6 +39,7 @@ import { Dialog } from '@/components/dialog'
 import { JsonCodeEditor } from '@/components/json-code-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { ComboboxInput, type ComboboxInputOption } from '@/components/ui/combobox-input'
 import {
   Empty,
   EmptyDescription,
@@ -60,6 +61,7 @@ import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
 import {
+  getAllModels,
   getSubscriptionBilling,
   getSubscriptionUsage,
   updateSubscriptionBilling,
@@ -193,6 +195,20 @@ function FieldBlock({
   )
 }
 
+// 从 /api/channel/models 返回的条目中提取模型名（支持字符串或 { id } 对象）。
+function modelNameFromRaw(item: unknown): string {
+  if (typeof item === 'string') {
+    return item.trim()
+  }
+  if (item && typeof item === 'object' && 'id' in item) {
+    const id = (item as { id?: unknown }).id
+    if (typeof id === 'string') {
+      return id.trim()
+    }
+  }
+  return ''
+}
+
 function SectionHeading(props: {
   title: string
   description?: string
@@ -239,6 +255,35 @@ export function SubscriptionBillingEditorDialog({
   const [usage, setUsage] = useState<SubscriptionUsageResponse | null>(null)
   const [isUsageLoading, setIsUsageLoading] = useState(false)
   const [usageError, setUsageError] = useState('')
+  const [modelOptions, setModelOptions] = useState<ComboboxInputOption[]>([])
+  const [modelOptionsLoaded, setModelOptionsLoaded] = useState(false)
+
+  // Load the known model list once when the dialog opens, so the model quota
+  // rows can offer existing models while still allowing free text (or "*").
+  useEffect(() => {
+    if (!open || modelOptionsLoaded) {
+      return
+    }
+    let cancelled = false
+    void getAllModels()
+      .then((res) => {
+        if (cancelled) return
+        const raw = res.data
+        const names = Array.isArray(raw) ? raw.map(modelNameFromRaw) : []
+        const unique = [...new Set(names)]
+        setModelOptions(
+          unique.map((name) => ({ value: name, label: name }))
+        )
+        setModelOptionsLoaded(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setModelOptionsLoaded(true) // 加载失败则不提供下拉，仅保留自由输入
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, modelOptionsLoaded])
 
   const createTierKey = () => {
     tierKeyCounterRef.current += 1
@@ -707,12 +752,15 @@ export function SubscriptionBillingEditorDialog({
                   className='grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end'
                 >
                   <FieldBlock label={t('Model')}>
-                    <Input
+                    <ComboboxInput
+                      options={modelOptions}
                       value={tier.model}
-                      onChange={(event) =>
-                        updateTier(index, { model: event.target.value })
+                      onValueChange={(value) =>
+                        updateTier(index, { model: value })
                       }
                       placeholder='*'
+                      allowCustomValue
+                      emptyText={t('No matching model')}
                     />
                   </FieldBlock>
                   <FieldBlock label={t('Monthly Quota (USD)')}>
