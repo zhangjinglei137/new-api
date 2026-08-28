@@ -494,11 +494,12 @@ export function SubscriptionBillingEditorDialog({
       onOpenChange(false)
       onSaved?.()
     } catch (error) {
-      setSaveError(
+      const message =
         error instanceof Error
           ? error.message
           : t('Failed to save subscription billing configuration')
-      )
+      setSaveError(message)
+      toast.error(message)
     } finally {
       setIsSaving(false)
     }

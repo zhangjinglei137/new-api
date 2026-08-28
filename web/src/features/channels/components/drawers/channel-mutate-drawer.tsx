@@ -313,8 +313,6 @@ const SENSITIVE_FORM_FIELDS = [
   'upstream_model_update_auto_sync_enabled',
   'upstream_model_update_ignored_models',
   'model_proxy_rules',
-  'opencode_workspace_id',
-  'opencode_auth_cookie',
 ] satisfies (keyof ChannelFormValues)[]
 
 function readAdvancedSettingsPreference(): boolean {
@@ -366,9 +364,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     (Array.isArray(values.model_proxy_rules) &&
       values.model_proxy_rules.some(
         (rule) => rule.models?.trim() || rule.proxy?.trim()
-      )) ||
-    values.opencode_workspace_id?.trim() ||
-    values.opencode_auth_cookie?.trim()
+      ))
   )
 }
 
@@ -2935,50 +2931,6 @@ export function ChannelMutateDrawer({
                                 )}
                               />
                             )}
-                            {currentType === CHANNEL_TYPE_OPENCODE_GO && (
-                              <>
-                                <FormField
-                                  control={form.control}
-                                  name='opencode_workspace_id'
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>{t('Workspace ID')}</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder={t('wrk_xxx')}
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        {t(
-                                          'OpenCode workspace ID (e.g. wrk_xxx)'
-                                        )}
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={form.control}
-                                  name='opencode_auth_cookie'
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>{t('Auth Cookie')}</FormLabel>
-                                      <FormControl>
-                                        <Input {...field} />
-                                      </FormControl>
-                                      <FormDescription>
-                                        {t(
-                                          'Auth cookie of the opencode.ai login session (valid for about 30 days, update manually after expiry)'
-                                        )}
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              </>
-                            )}
-
                             {isEditing && channelId && (
                               <div className='border-border/60 flex flex-col gap-3 border-y py-4'>
                                 <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>

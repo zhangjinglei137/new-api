@@ -115,8 +115,6 @@ export interface ChannelOtherSettings {
   upstream_model_update_last_check_time?: number
   upstream_model_update_last_detected_models?: string[]
   advanced_custom?: AdvancedCustomConfig
-  opencode_workspace_id?: string
-  opencode_auth_cookie?: string
   model_proxy_rules?: { models?: string[]; proxy?: string }[]
 }
 

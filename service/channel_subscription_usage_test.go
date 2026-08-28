@@ -68,12 +68,15 @@ func TestSubscriptionUSDToQuota(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("strict overflow beyond MaxQuota rejected", func(t *testing.T) {
-		// MaxQuota=2147483647, QuotaPerUnit=500000 → 4294 USD 安全、4295 USD 溢出
-		quota, err := SubscriptionUSDToQuota(4294)
+	t.Run("large usd accepted within wallet domain", func(t *testing.T) {
+		// 订阅额度属展示口径，使用钱包域（int53），不再受单次扣费的
+		// int32 MaxQuota 限制：60×500000=3e7、4295 USD 等大额均可换算。
+		quota, err := SubscriptionUSDToQuota(4295)
 		require.NoError(t, err)
-		assert.Equal(t, int64(2147000000), quota)
-		_, err = SubscriptionUSDToQuota(4295)
+		assert.Equal(t, int64(2147500000), quota)
+
+		// 仅当超过 int53 钱包上限时才严格报错。
+		_, err = SubscriptionUSDToQuota(float64((1<<53)/500000 + 1))
 		require.Error(t, err)
 	})
 }

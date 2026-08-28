@@ -291,9 +291,6 @@ export const channelFormSchema = z
       .refine(isOptionalJsonObject, ERROR_MESSAGES.INVALID_JSON),
     advanced_custom: z.string().optional(),
     other: z.string().optional(),
-    // OpenCode Go specific settings (stored in settings JSON)
-    opencode_workspace_id: z.string().optional(),
-    opencode_auth_cookie: z.string().optional(),
     // Multi-key options (not sent to backend directly)
     multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
     multi_key_type: z.enum(['random', 'polling']).optional(),
@@ -518,8 +515,6 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_ignored_models: '',
   advanced_custom: '',
   model_proxy_rules: [],
-  opencode_workspace_id: '',
-  opencode_auth_cookie: '',
 }
 
 // ============================================================================
@@ -585,8 +580,6 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
   let modelProxyRules: ModelProxyRuleFormValue[] = []
-  let opencodeWorkspaceId = ''
-  let opencodeAuthCookie = ''
 
   if (channel.settings) {
     try {
@@ -626,8 +619,6 @@ export function transformChannelToFormDefaults(
             proxy: String(rule.proxy || ''),
           }))
       }
-      opencodeWorkspaceId = parsed.opencode_workspace_id || ''
-      opencodeAuthCookie = parsed.opencode_auth_cookie || ''
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -680,8 +671,6 @@ export function transformChannelToFormDefaults(
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
     model_proxy_rules: modelProxyRules,
-    opencode_workspace_id: opencodeWorkspaceId,
-    opencode_auth_cookie: opencodeAuthCookie,
   }
 }
 
@@ -849,18 +838,6 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     }
   } else if ('advanced_custom' in settingsObj) {
     delete settingsObj.advanced_custom
-  }
-
-  if (formData.type === CHANNEL_TYPE_OPENCODE_GO) {
-    settingsObj.opencode_workspace_id = formData.opencode_workspace_id || ''
-    settingsObj.opencode_auth_cookie = formData.opencode_auth_cookie || ''
-  } else {
-    if ('opencode_workspace_id' in settingsObj) {
-      delete settingsObj.opencode_workspace_id
-    }
-    if ('opencode_auth_cookie' in settingsObj) {
-      delete settingsObj.opencode_auth_cookie
-    }
   }
 
   const modelProxyRules = parseModelProxyRules(formData.model_proxy_rules)

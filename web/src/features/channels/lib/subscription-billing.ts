@@ -199,6 +199,7 @@ function normalizeModelTiers(value: unknown): SubscriptionBillingModelTier[] {
  * quota values for the monthly total; each pair falls back to the other.
  */
 export type SubscriptionBillingRawConfig = Partial<SubscriptionBillingConfig> & {
+  billing_mode?: unknown
   monthly_total_quota?: number
   five_hour_ratio_bps?: number
   weekly_ratio_bps?: number

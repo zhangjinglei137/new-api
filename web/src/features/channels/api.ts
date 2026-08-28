@@ -392,7 +392,10 @@ export async function updateSubscriptionBilling(
   const res = await api.put(
     `/api/channel/${channelId}/subscription-billing`,
     toSubscriptionBillingPutPayload(data),
-    channelActionConfig()
+    // No skipBusinessError: keep the standard error handling so backend
+    // validation failures (e.g. quota overflow, invalid ratios) surface as
+    // toasts instead of being silently swallowed.
+    channelActionConfig({ skipErrorHandler: true })
   )
   return res.data
 }

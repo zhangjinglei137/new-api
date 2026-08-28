@@ -143,8 +143,6 @@ type ChannelOtherSettings struct {
 	// Exact model names take priority over regex rules; within the same kind,
 	// the first rule in array order wins.
 	ModelProxyRules     []ModelProxyRule `json:"model_proxy_rules,omitempty"`
-	OpenCodeWorkspaceId string           `json:"opencode_workspace_id,omitempty"`
-	OpenCodeAuthCookie  string           `json:"opencode_auth_cookie,omitempty"`
 	// SubscriptionBilling 渠道订阅计费配置（nil 表示未启用订阅计费）。
 	// 数据只做统计展示，不参与扣费链路。
 	SubscriptionBilling *SubscriptionBillingConfig `json:"subscription_billing,omitempty"`

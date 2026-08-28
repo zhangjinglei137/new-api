@@ -61,13 +61,14 @@ type SubscriptionUsageData struct {
 	PerModel  []SubscriptionPerModelUsage        `json:"per_model"`
 }
 
-// SubscriptionUSDToQuota 将 USD 金额换算为 quota，使用严格转换
-// （超出 common.MaxQuota 报错，不静默饱和）。
+// SubscriptionUSDToQuota 将 USD 金额换算为 quota。
+// 订阅额度属于展示/统计口径（不参与单次扣费），因此使用钱包域
+// （JavaScript 安全整数，int53）做严格换算，而非单次扣费的 int32 边界。
 func SubscriptionUSDToQuota(usd float64) (int64, error) {
 	if math.IsNaN(usd) || math.IsInf(usd, 0) || usd < 0 {
 		return 0, fmt.Errorf("invalid usd amount: %v", usd)
 	}
-	quota, err := common.QuotaFromDecimalStrict(
+	quota, err := common.WalletQuotaFromDecimalStrict(
 		decimal.NewFromFloat(usd).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
 	)
 	if err != nil {
@@ -111,6 +112,10 @@ func ValidateSubscriptionBillingConfig(cfg *dto.SubscriptionBillingConfig) error
 	if cfg.WeeklyRatioBps < 0 || cfg.WeeklyRatioBps > 10000 {
 		return fmt.Errorf("weekly_ratio must be between 0%% and 100%%, got %d bps", cfg.WeeklyRatioBps)
 	}
+	// 与前端校验对齐：5h 与每周是同一总额度的子窗口，相加不得超过 100%。
+	if cfg.FiveHourRatioBps+cfg.WeeklyRatioBps > 10000 {
+		return fmt.Errorf("five_hour_ratio + weekly_ratio must not exceed 100%%, got %d bps", cfg.FiveHourRatioBps+cfg.WeeklyRatioBps)
+	}
 	wildcard := 0
 	for _, tier := range cfg.ModelTiers {
 		if strings.TrimSpace(tier.Model) == "" {
@@ -130,7 +135,9 @@ func ValidateSubscriptionBillingConfig(cfg *dto.SubscriptionBillingConfig) error
 }
 
 // subscriptionWindowLimits 推导三窗口上限：
-// limit5h=QuotaRound(T×r5bps/10000)、limit7d=QuotaRound(T×rWbps/10000)、limit31d=T。
+// limit5h=WalletRound(T×r5bps/10000)、limit7d=WalletRound(T×rWbps/10000)、limit31d=T。
+// 订阅额度属展示/统计口径，使用钱包域（int53）保持一致，避免大额配置
+// 在单次扣费的 int32 边界饱和导致窗口百分比失真。
 func subscriptionWindowLimits(cfg *dto.SubscriptionBillingConfig) (limit5h, limit7d, limit31d int64) {
 	if cfg == nil {
 		return 0, 0, 0
@@ -139,10 +146,24 @@ func subscriptionWindowLimits(cfg *dto.SubscriptionBillingConfig) (limit5h, limi
 	if total <= 0 {
 		return 0, 0, 0
 	}
-	limit5h = int64(common.QuotaRound(float64(total) * float64(cfg.FiveHourRatioBps) / 10000.0))
-	limit7d = int64(common.QuotaRound(float64(total) * float64(cfg.WeeklyRatioBps) / 10000.0))
+	limit5h = walletRoundRatio(total, cfg.FiveHourRatioBps)
+	limit7d = walletRoundRatio(total, cfg.WeeklyRatioBps)
 	limit31d = total
 	return limit5h, limit7d, limit31d
+}
+
+// walletRoundRatio 按钱包域（int53）计算 total×bps/10000，四舍五入到整数。
+func walletRoundRatio(total int64, bps int) int64 {
+	q, err := common.WalletQuotaFromDecimalStrict(
+		decimal.NewFromInt(total).Mul(decimal.NewFromInt(int64(bps))).Div(decimal.NewFromInt(10000)),
+	)
+	if err != nil {
+		// 配置经校验后 total>0 且 0<=bps<=10000，理论上不会溢出；溢出时回退到
+		// total（即按 100% 计算），保证展示不因饱和失真。
+		common.SysError(fmt.Sprintf("subscription window limit overflow: total=%d bps=%d err=%v", total, bps, err))
+		return total
+	}
+	return int64(q)
 }
 
 // bucketStartFor 返回 now 所在桶的起点（保留相位）。
