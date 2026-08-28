@@ -20,6 +20,7 @@ import {
   CalendarClock,
   Check,
   Code2,
+  ListPlus,
   ListTree,
   Plus,
   RefreshCw,
@@ -61,7 +62,6 @@ import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
 import {
-  getAllModels,
   getSubscriptionBilling,
   getSubscriptionUsage,
   updateSubscriptionBilling,
@@ -91,6 +91,8 @@ type SubscriptionBillingEditorDialogProps = {
   onOpenChange: (open: boolean) => void
   channelId?: number
   channelName?: string
+  /** 当前渠道配置的模型（逗号分隔），用于模型额度下拉与一键添加。 */
+  channelModels?: string
   onSaved?: () => void
 }
 
@@ -195,20 +197,6 @@ function FieldBlock({
   )
 }
 
-// 从 /api/channel/models 返回的条目中提取模型名（支持字符串或 { id } 对象）。
-function modelNameFromRaw(item: unknown): string {
-  if (typeof item === 'string') {
-    return item.trim()
-  }
-  if (item && typeof item === 'object' && 'id' in item) {
-    const id = (item as { id?: unknown }).id
-    if (typeof id === 'string') {
-      return id.trim()
-    }
-  }
-  return ''
-}
-
 function SectionHeading(props: {
   title: string
   description?: string
@@ -238,6 +226,7 @@ export function SubscriptionBillingEditorDialog({
   onOpenChange,
   channelId,
   channelName,
+  channelModels,
   onSaved,
 }: SubscriptionBillingEditorDialogProps) {
   const { t } = useTranslation()
@@ -255,35 +244,20 @@ export function SubscriptionBillingEditorDialog({
   const [usage, setUsage] = useState<SubscriptionUsageResponse | null>(null)
   const [isUsageLoading, setIsUsageLoading] = useState(false)
   const [usageError, setUsageError] = useState('')
-  const [modelOptions, setModelOptions] = useState<ComboboxInputOption[]>([])
-  const [modelOptionsLoaded, setModelOptionsLoaded] = useState(false)
 
-  // Load the known model list once when the dialog opens, so the model quota
-  // rows can offer existing models while still allowing free text (or "*").
-  useEffect(() => {
-    if (!open || modelOptionsLoaded) {
-      return
-    }
-    let cancelled = false
-    void getAllModels()
-      .then((res) => {
-        if (cancelled) return
-        const raw = res.data
-        const names = Array.isArray(raw) ? raw.map(modelNameFromRaw) : []
-        const unique = [...new Set(names)]
-        setModelOptions(
-          unique.map((name) => ({ value: name, label: name }))
-        )
-        setModelOptionsLoaded(true)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setModelOptionsLoaded(true) // 加载失败则不提供下拉，仅保留自由输入
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [open, modelOptionsLoaded])
+  // 当前渠道配置的模型（逗号分隔），作为模型额度下拉与一键添加的来源。
+  const channelModelNames = useMemo(() => {
+    return channelModels
+      ? channelModels
+          .split(',')
+          .map((m) => m.trim())
+          .filter(Boolean)
+      : []
+  }, [channelModels])
+  const modelOptions = useMemo<ComboboxInputOption[]>(
+    () => channelModelNames.map((name) => ({ value: name, label: name })),
+    [channelModelNames]
+  )
 
   const createTierKey = () => {
     tierKeyCounterRef.current += 1
@@ -437,6 +411,37 @@ export function SubscriptionBillingEditorDialog({
         : current
     )
     setTierKeys((current) => current.filter((_, tierIndex) => tierIndex !== index))
+  }
+
+  // 一键添加：把当前渠道配置的全部模型批量加入额度档（跳过已存在的）。
+  const addAllChannelModels = () => {
+    if (!config || channelModelNames.length === 0) {
+      return
+    }
+    const existing = new Set(
+      config.model_tiers.map((tier) => tier.model.trim())
+    )
+    const missing = channelModelNames.filter(
+      (name) => name !== '' && !existing.has(name)
+    )
+    if (missing.length === 0) {
+      return
+    }
+    setConfig((current) =>
+      current
+        ? {
+            ...current,
+            model_tiers: [
+              ...current.model_tiers,
+              ...missing.map((model) => ({ model, monthly_usd: 0 })),
+            ],
+          }
+        : current
+    )
+    setTierKeys((current) => [
+      ...current,
+      ...missing.map(() => createTierKey()),
+    ])
   }
 
   const parseJsonEditorConfig = (): SubscriptionBillingConfig | null => {
@@ -727,6 +732,16 @@ export function SubscriptionBillingEditorDialog({
               'Set a monthly quota per model. Use "*" as the model name to apply a fallback to all other models.'
             )}
           >
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={addAllChannelModels}
+              disabled={channelModelNames.length === 0}
+            >
+              <ListPlus data-icon='inline-start' />
+              {t('Add all channel models')}
+            </Button>
             <Button type='button' variant='outline' size='sm' onClick={addTier}>
               <Plus data-icon='inline-start' />
               {t('Add model quota')}

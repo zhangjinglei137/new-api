@@ -4994,6 +4994,7 @@ export function ChannelMutateDrawer({
           onOpenChange={setSubscriptionBillingEditorOpen}
           channelId={channelId}
           channelName={currentRow?.name}
+          channelModels={currentRow?.models}
           onSaved={() => {
             queryClient.invalidateQueries({
               queryKey: channelsQueryKeys.lists(),
