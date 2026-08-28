@@ -42,6 +42,7 @@ import {
   Settings,
   SlidersHorizontal,
   Wand2,
+  CalendarClock,
 } from 'lucide-react'
 import {
   type ReactNode,
@@ -185,6 +186,7 @@ import type { Channel } from '../../types'
 import { useChannels } from '../channels-provider'
 import { AdvancedCustomEditorDialog } from '../dialogs/advanced-custom-editor-dialog'
 import { FetchModelsDialog } from '../dialogs/fetch-models-dialog'
+import { SubscriptionBillingEditorDialog } from '../dialogs/subscription-billing-editor-dialog'
 import {
   MissingModelsConfirmationDialog,
   type MissingModelsAction,
@@ -668,6 +670,8 @@ export function ChannelMutateDrawer({
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
   const [advancedCustomEditorOpen, setAdvancedCustomEditorOpen] =
+    useState(false)
+  const [subscriptionBillingEditorOpen, setSubscriptionBillingEditorOpen] =
     useState(false)
   const [clipboardConnectionInfo, setClipboardConnectionInfo] =
     useState<ChannelConnectionInfo | null>(null)
@@ -2975,6 +2979,35 @@ export function ChannelMutateDrawer({
                               </>
                             )}
 
+                            {isEditing && channelId && (
+                              <div className='border-border/60 flex flex-col gap-3 border-y py-4'>
+                                <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                                  <div className='space-y-1'>
+                                    <div className='text-sm font-medium'>
+                                      {t('Subscription Billing')}
+                                    </div>
+                                    <div className='text-muted-foreground text-xs'>
+                                      {t(
+                                        'Configure metered or subscription billing for this channel.'
+                                      )}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    size='sm'
+                                    onClick={() =>
+                                      setSubscriptionBillingEditorOpen(true)
+                                    }
+                                    disabled={sensitiveLocked}
+                                  >
+                                    <CalendarClock className='mr-2 h-4 w-4' />
+                                    {t('Configure subscription billing')}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
                             <ChannelAuthSection>
                               {!isEditing && (
                                 <FormField
@@ -4998,6 +5031,20 @@ export function ChannelMutateDrawer({
             form.setValue('advanced_custom', nextValue, {
               shouldDirty: true,
               shouldValidate: true,
+            })
+          }}
+        />
+      )}
+
+      {subscriptionBillingEditorOpen && !sensitiveLocked && channelId && (
+        <SubscriptionBillingEditorDialog
+          open={subscriptionBillingEditorOpen}
+          onOpenChange={setSubscriptionBillingEditorOpen}
+          channelId={channelId}
+          channelName={currentRow?.name}
+          onSaved={() => {
+            queryClient.invalidateQueries({
+              queryKey: channelsQueryKeys.lists(),
             })
           }}
         />

@@ -56,6 +56,12 @@ type Channel struct {
 
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
+	// 订阅计费快照（非持久化字段，仅由渠道列表/详情接口填充，客户端不可修改）
+	BillingMode                int     `json:"billing_mode,omitempty" gorm:"-"`
+	SubscriptionMonthlyPercent float64 `json:"subscription_monthly_percent,omitempty" gorm:"-"` // = Sum31d/limit31d，允许>100
+	SubscriptionUsageUpdatedAt int64   `json:"subscription_usage_updated_at,omitempty" gorm:"-"`
+	SubscriptionModelOverLimit bool    `json:"subscription_model_over_limit,omitempty" gorm:"-"` // 任一模型超出其月度档位
+
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
 }
@@ -614,8 +620,8 @@ func (channel *Channel) UpdateBalance(balance float64) {
 // 且不复用 UpdateBalance(0)（那会连带覆盖 balance_updated_time）。
 func (channel *Channel) ResetBalanceAndUsedQuota() error {
 	err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(map[string]interface{}{
-		"balance":     0,
-		"used_quota":  0,
+		"balance":    0,
+		"used_quota": 0,
 	}).Error
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to reset balance and used quota: channel_id=%d, error=%v", channel.Id, err))

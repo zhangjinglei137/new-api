@@ -71,6 +71,12 @@ export const channelSchema = z.object({
     multi_key_mode: 'random',
   }),
   settings: z.string().default('{}'), // other_settings JSON
+  // Non-persistent fields appended by the channel list endpoint for
+  // subscription billing mode. Not stored on the channel row itself.
+  billing_mode: z.union([z.number(), z.string()]).optional(),
+  subscription_monthly_percent: z.number().optional(),
+  subscription_usage_updated_at: z.number().optional(),
+  subscription_model_over_limit: z.boolean().optional(),
 })
 
 export type Channel = z.infer<typeof channelSchema>
@@ -380,4 +386,65 @@ export interface AddChannelRequest {
   multi_key_mode?: 'random' | 'polling'
   batch_add_set_key_prefix_2_name?: boolean
   channel: Partial<Channel>
+}
+
+// ============================================================================
+// Subscription Billing Types
+// ============================================================================
+
+export type SubscriptionBillingMode = 'metered' | 'subscription'
+
+export interface SubscriptionBillingModelTier {
+  model: string
+  monthly_usd: number
+}
+
+export interface SubscriptionBillingConfig {
+  billing_mode: SubscriptionBillingMode
+  monthly_total_usd: number
+  five_hour_ratio_percent: number
+  weekly_ratio_percent: number
+  model_tiers: SubscriptionBillingModelTier[]
+}
+
+export interface SubscriptionBillingWindow {
+  window_size_seconds?: number
+  used_quota?: number
+  limit_quota?: number
+  used_percent?: number
+  display_percent?: number
+  over_limit?: boolean
+  reset_at?: number
+  reset_after_seconds?: number
+}
+
+export interface SubscriptionUsagePerModel {
+  model?: string
+  used_quota?: number
+  limit_quota?: number
+  used_percent?: number
+  over_limit?: boolean
+}
+
+export interface SubscriptionUsageData {
+  updated_at?: number | string
+  partial?: boolean
+  windows?: {
+    '5h'?: SubscriptionBillingWindow
+    '7d'?: SubscriptionBillingWindow
+    '31d'?: SubscriptionBillingWindow
+  }
+  per_model?: SubscriptionUsagePerModel[]
+}
+
+export interface SubscriptionBillingResponse {
+  success: boolean
+  message?: string
+  data?: SubscriptionBillingConfig
+}
+
+export interface SubscriptionUsageResponse {
+  success: boolean
+  message?: string
+  data?: SubscriptionUsageData
 }

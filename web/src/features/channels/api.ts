@@ -37,8 +37,12 @@ import type {
   MultiKeyStatusResponse,
   SearchChannelsParams,
   SearchChannelsResponse,
+  SubscriptionBillingConfig,
+  SubscriptionBillingResponse,
+  SubscriptionUsageResponse,
   TagOperationParams,
 } from './types'
+import { toSubscriptionBillingPutPayload } from './lib/subscription-billing'
 
 const channelActionConfig = (
   config: ApiRequestConfig = {}
@@ -362,6 +366,42 @@ export async function resetCodexUsage(
   const res = await api.post(
     `/api/channel/${channelId}/codex/usage/reset`,
     {},
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+// ============================================================================
+// Subscription Billing Operations
+// ============================================================================
+
+export async function getSubscriptionBilling(
+  channelId: number
+): Promise<SubscriptionBillingResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/subscription-billing`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+export async function updateSubscriptionBilling(
+  channelId: number,
+  data: SubscriptionBillingConfig
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.put(
+    `/api/channel/${channelId}/subscription-billing`,
+    toSubscriptionBillingPutPayload(data),
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function getSubscriptionUsage(
+  channelId: number
+): Promise<SubscriptionUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/subscription-billing/usage`,
     channelActionConfig({ disableDuplicate: true })
   )
   return res.data

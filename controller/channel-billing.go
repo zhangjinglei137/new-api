@@ -369,15 +369,6 @@ func updateChannelMoonshotBalance(channel *model.Channel) (float64, error) {
 	return availableBalanceUsd, nil
 }
 
-func updateChannelOpenCodeGoBalance(channel *model.Channel) (float64, error) {
-	balance, err := service.UpdateOpenCodeGoBalance(channel)
-	if err != nil {
-		return 0, err
-	}
-	channel.UpdateBalance(balance)
-	return balance, nil
-}
-
 func fetchAdvancedCustomBalance(channel *model.Channel) (channelBalanceResult, error) {
 	key := strings.TrimSpace(channel.Key)
 	info := &relaycommon.RelayInfo{
@@ -502,7 +493,9 @@ func updateStandardChannelBalance(channel *model.Channel) (float64, error) {
 	case constant.ChannelTypeMoonshot:
 		return updateChannelMoonshotBalance(channel)
 	case constant.ChannelTypeOpenCodeGo:
-		return updateChannelOpenCodeGoBalance(channel)
+		// 订阅模式语义：不抓官网、不写 balance；open-code-go 渠道的用量
+		// 按 billing_mode 走订阅统计（见 /subscription-billing 相关接口）。
+		return 0, nil
 	default:
 		return 0, errors.New("尚未实现")
 	}

@@ -71,6 +71,31 @@ func clearChannelInfo(channel *model.Channel) {
 	}
 }
 
+// fillChannelSubscriptionSnapshots 为渠道列表批量补充订阅计费统计快照
+// （批量读 checkpoint，避免 N+1）。仅订阅计费渠道会写入非持久化字段。
+func fillChannelSubscriptionSnapshots(channels []*model.Channel) {
+	snapshots, err := service.BuildChannelSubscriptionListSnapshots(channels)
+	if err != nil {
+		common.SysError("failed to load channel subscription usage snapshots: " + err.Error())
+		return
+	}
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
+		snapshot, ok := snapshots[int64(ch.Id)]
+		if !ok {
+			continue
+		}
+		ch.BillingMode = dto.SubscriptionBillingModeSubscribe
+		ch.SubscriptionUsageUpdatedAt = snapshot.UpdatedAt
+		if snapshot.MonthlyLimit > 0 {
+			ch.SubscriptionMonthlyPercent = float64(snapshot.MonthlyUsed) * 100 / float64(snapshot.MonthlyLimit)
+		}
+		ch.SubscriptionModelOverLimit = snapshot.ModelOverLimit
+	}
+}
+
 func applyChannelStatusFilter(query *gorm.DB, statusFilter int) *gorm.DB {
 	if statusFilter == common.ChannelStatusEnabled {
 		return query.Where("status = ?", common.ChannelStatusEnabled)
@@ -168,6 +193,7 @@ func GetAllChannels(c *gin.Context) {
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
+	fillChannelSubscriptionSnapshots(channelData)
 
 	countQuery := buildChannelListQuery(groupFilter, statusFilter, -1)
 	var results []struct {
@@ -381,6 +407,7 @@ func SearchChannels(c *gin.Context) {
 	for _, datum := range pagedData {
 		clearChannelInfo(datum)
 	}
+	fillChannelSubscriptionSnapshots(pagedData)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
