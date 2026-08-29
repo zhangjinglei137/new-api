@@ -448,12 +448,16 @@ export interface SubscriptionUsageResponse {
 }
 
 /**
- * Manual usage baseline for a subscription channel: the current monthly used
- * percentage and the billing-cycle start time (unix seconds) from which new
- * usage increments are accumulated. Stored on channel_subscription_usages.
+ * Manual usage baseline for a subscription channel: 5h/7d/31d 三个窗口各自独立的
+ * 已用百分比（允许 >100 表示超限）与起始时间（unix 秒）。从各窗口起点之后
+ * 的新用量增量才被累计。Stored on channel_subscription_usages.
  */
 export interface SubscriptionBaseline {
-  used_percent?: number
-  baseline_set_at?: number
+  used_percent_5h?: number
+  used_percent_7d?: number
+  used_percent_31d?: number
+  baseline_set_at_5h?: number
+  baseline_set_at_7d?: number
+  baseline_set_at_31d?: number
   manual_initialized?: boolean
 }

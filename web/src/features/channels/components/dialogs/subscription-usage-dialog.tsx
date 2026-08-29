@@ -76,8 +76,14 @@ function formatUnixSeconds(unixSeconds: unknown): string {
   return Number.isFinite(v) && v > 0 ? formatTimestampToDate(v) : '-'
 }
 
+/**
+ * 格式化"将于以下时间重置"的剩余时长。窗口语义（对齐 opencode Go 官方）：
+ * - 5h 滚窗：xx小时 xx分钟（不会超过 5h）
+ * - 7d 自然周 / 31d 桶：>=1 天 → xx天 xx小时；<1 天 → xx小时 xx分钟
+ */
 function formatDurationSeconds(
   seconds: unknown,
+  windowKey: SubscriptionWindowKey,
   t: (key: string) => string
 ): string {
   const s = Number(seconds)
@@ -86,17 +92,20 @@ function formatDurationSeconds(
   }
 
   const total = Math.floor(s)
-  const hours = Math.floor(total / 3600)
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
   const minutes = Math.floor((total % 3600) / 60)
-  const secs = total % 60
 
-  if (hours > 0) {
+  // 5h 滚窗：xx小时 xx分钟（窗口长度固定 5h，不会出现天数）
+  if (windowKey === '5h') {
     return `${hours}${t('h')} ${minutes}${t('m')}`
   }
-  if (minutes > 0) {
-    return `${minutes}${t('m')} ${secs}${t('s')}`
+
+  // 7d/31d：>=1 天 → xx天 xx小时；否则 xx小时 xx分钟
+  if (days >= 1) {
+    return `${days}${t('d')} ${hours}${t('h')}`
   }
-  return `${secs}${t('s')}`
+  return `${hours}${t('h')} ${minutes}${t('m')}`
 }
 
 const WINDOW_DEFINITIONS: Array<{
@@ -177,7 +186,11 @@ export function SubscriptionWindowCards({
                   </div>
                   <div className='tabular-nums'>
                     {hasData
-                      ? formatDurationSeconds(window.reset_after_seconds, t)
+                      ? formatDurationSeconds(
+                          window.reset_after_seconds,
+                          definition.key,
+                          t
+                        )
                       : '-'}
                   </div>
                 </div>

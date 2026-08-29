@@ -44,6 +44,7 @@ import {
   usdToQuota,
   validateBaselineForm,
   validateSubscriptionBillingConfig,
+  type SubscriptionBaselineForm,
   type SubscriptionBillingRawConfig,
 } from '../subscription-billing'
 import type { SubscriptionBillingConfig } from '../../types'
@@ -352,51 +353,66 @@ describe('subscription billing PUT payload', () => {
 
 describe('subscription usage baseline form', () => {
   const now = Math.floor(Date.now() / 1000)
+  const validForm = (overrides: Partial<SubscriptionBaselineForm> = {}) => ({
+    used_percent_5h: 0,
+    used_percent_7d: 0,
+    used_percent_31d: 0,
+    baseline_at_5h: now,
+    baseline_at_7d: now,
+    baseline_at_31d: now,
+    ...overrides,
+  })
 
   test('accepts a valid baseline, including over-limit percentages', () => {
     expect(
-      validateBaselineForm({ used_percent: 30, baseline_at: now })
+      validateBaselineForm(validForm({ used_percent_5h: 30 }))
     ).toBeNull()
     expect(
-      validateBaselineForm({ used_percent: 200, baseline_at: now })
+      validateBaselineForm(validForm({ used_percent_31d: 200 }))
     ).toBeNull()
-    expect(
-      validateBaselineForm({ used_percent: 0, baseline_at: now })
-    ).toBeNull()
+    expect(validateBaselineForm(validForm())).toBeNull()
   })
 
   test('rejects negative, non-finite and future-start baselines', () => {
     expect(
-      validateBaselineForm({ used_percent: -1, baseline_at: now })
+      validateBaselineForm(validForm({ used_percent_7d: -1 }))
     ).toBe('Monthly used percentage must be a non-negative number')
     expect(
-      validateBaselineForm({ used_percent: Number.NaN, baseline_at: now })
+      validateBaselineForm(validForm({ used_percent_5h: Number.NaN }))
     ).toBe('Monthly used percentage must be a non-negative number')
     expect(
-      validateBaselineForm({ used_percent: 30, baseline_at: now + 3600 })
+      validateBaselineForm(validForm({ baseline_at_31d: now + 3600 }))
     ).toBe('Billing cycle start must not be in the future')
     expect(
-      validateBaselineForm({ used_percent: 30, baseline_at: -1 })
+      validateBaselineForm(validForm({ baseline_at_5h: -1 }))
     ).toBe('Billing cycle start must be a valid time')
   })
 
-  test('derives the equivalent USD of a monthly percentage', () => {
-    expect(deriveBaselineUsd(30, 60)).toBe(18)
-    expect(deriveBaselineUsd(0, 60)).toBe(0)
-    expect(deriveBaselineUsd(150, 60)).toBe(90)
-    expect(deriveBaselineUsd(Number.NaN, 60)).toBe(0)
-    expect(deriveBaselineUsd(30, 0)).toBe(0)
+  test('derives the equivalent USD of a window-specific percentage', () => {
+    // 60 USD 月总额；5h=20%（12 USD）、7d=50%（30 USD）、31d=100%（60 USD）
+    const config = validConfig()
+    expect(deriveBaselineUsd('5h', 30, config)).toBe(3.6) // 12×30%
+    expect(deriveBaselineUsd('7d', 30, config)).toBe(9) // 30×30%
+    expect(deriveBaselineUsd('31d', 30, config)).toBe(18) // 60×30%
+    expect(deriveBaselineUsd('5h', 0, config)).toBe(0)
+    expect(deriveBaselineUsd('31d', 150, config)).toBe(90)
+    expect(deriveBaselineUsd('5h', Number.NaN, config)).toBe(0)
   })
 
   test('normalizes a backend baseline into a form, tolerating missing fields', () => {
-    const form = toBaselineForm({ used_percent: 30, baseline_set_at: now - 100 })
-    expect(form).toStrictEqual({ used_percent: 30, baseline_at: now - 100 })
+    const form = toBaselineForm({
+      used_percent_5h: 30,
+      baseline_set_at_5h: now - 100,
+    })
+    expect(form.used_percent_5h).toBe(30)
+    expect(form.baseline_at_5h).toBe(now - 100)
+    // 未返回的窗口回退默认
+    expect(form.used_percent_7d).toBe(0)
+    expect(form.used_percent_31d).toBe(0)
+    expect(form.baseline_at_7d).toBeGreaterThan(0)
 
     const defaults = toBaselineForm(undefined)
-    expect(defaults.used_percent).toBe(0)
-    expect(defaults.baseline_at).toBeGreaterThan(0)
-
-    const missingPercent = toBaselineForm({ baseline_set_at: now })
-    expect(missingPercent.used_percent).toBe(0)
+    expect(defaults.used_percent_5h).toBe(0)
+    expect(defaults.baseline_at_5h).toBeGreaterThan(0)
   })
 })

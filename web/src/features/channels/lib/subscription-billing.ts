@@ -328,67 +328,124 @@ export function toSubscriptionBillingPutPayload(
 // ============================================================================
 
 /**
- * Manual usage baseline form for a subscription channel: the current monthly
- * used percentage (may exceed 100% to indicate over-limit) and the billing
- * cycle start time (unix seconds) from which new usage increments accumulate.
+ * Manual usage baseline form for a subscription channel: 5h/7d/31d 三个窗口各自
+ * 独立的已用百分比（允许 >100 表示超限）与起始时间（unix 秒）。保存后各窗口
+ * 增量只从各自起点累计，不再重读更早历史日志。
  */
 export interface SubscriptionBaselineForm {
-  used_percent: number
-  baseline_at: number
+  used_percent_5h: number
+  used_percent_7d: number
+  used_percent_31d: number
+  baseline_at_5h: number
+  baseline_at_7d: number
+  baseline_at_31d: number
 }
+
+/** 三窗口的通用 key（与后端窗口名一致）。 */
+export const SUBSCRIPTION_BASELINE_WINDOWS = ['5h', '7d', '31d'] as const
+export type SubscriptionBaselineWindowKey =
+  (typeof SUBSCRIPTION_BASELINE_WINDOWS)[number]
 
 /**
  * Validate the baseline form before saving. Returns an i18n message key on
- * failure or null when valid. The percentage may exceed 100 (over-limit);
- * only negatives / non-finite values and future start times are rejected.
+ * failure or null when valid. Percentages may exceed 100 (over-limit); only
+ * negatives / non-finite values and future start times are rejected.
  */
 export function validateBaselineForm(
   form: SubscriptionBaselineForm
 ): string | null {
-  if (!Number.isFinite(form.used_percent) || form.used_percent < 0) {
-    return 'Monthly used percentage must be a non-negative number'
-  }
-  if (!Number.isFinite(form.baseline_at) || form.baseline_at < 0) {
-    return 'Billing cycle start must be a valid time'
-  }
-  if (form.baseline_at > Math.floor(Date.now() / 1000)) {
-    return 'Billing cycle start must not be in the future'
+  const now = Math.floor(Date.now() / 1000)
+  for (const window of SUBSCRIPTION_BASELINE_WINDOWS) {
+    const percentKey = `used_percent_${window}` as const
+    const atKey = `baseline_at_${window}` as const
+    const percent = form[percentKey]
+    const at = form[atKey]
+    if (!Number.isFinite(percent) || percent < 0) {
+      return 'Monthly used percentage must be a non-negative number'
+    }
+    if (!Number.isFinite(at) || at < 0) {
+      return 'Billing cycle start must be a valid time'
+    }
+    if (at > now) {
+      return 'Billing cycle start must not be in the future'
+    }
   }
   return null
 }
 
 /**
- * Monthly used percentage → equivalent USD of the configured monthly total.
- * Used as an inline hint under the percentage input.
+ * Window-specific limit in USD for a given subscription config.
+ * 5h = monthly × five_hour_ratio%, 7d = monthly × weekly_ratio%, 31d = monthly.
+ */
+export function deriveWindowLimitUsd(
+  window: SubscriptionBaselineWindowKey,
+  config: SubscriptionBillingConfig
+): number {
+  if (window === '5h') return deriveFiveHourUsd(config)
+  if (window === '7d') return deriveWeeklyUsd(config)
+  return config.monthly_total_usd
+}
+
+/**
+ * Used percentage → equivalent USD for a specific window's limit.
+ * Used as an inline hint under each percentage input.
  */
 export function deriveBaselineUsd(
+  window: SubscriptionBaselineWindowKey,
   percent: number,
-  monthlyTotalUsd: number
+  config: SubscriptionBillingConfig
 ): number {
   const value = Number(percent)
   if (!Number.isFinite(value) || value <= 0) return 0
-  const total = Number(monthlyTotalUsd)
-  if (!Number.isFinite(total) || total <= 0) return 0
-  return (total * value) / 100
+  const limit = Number(deriveWindowLimitUsd(window, config))
+  if (!Number.isFinite(limit) || limit <= 0) return 0
+  return (limit * value) / 100
 }
 
 /**
  * Normalize a backend baseline payload into a form value, tolerating missing
- * fields: used_percent defaults to 0, baseline_at defaults to now.
+ * fields: each window's used_percent defaults to 0, baseline_at defaults to now.
  */
 export function toBaselineForm(
-  value: { used_percent?: number; baseline_set_at?: number } | null | undefined
+  value:
+    | {
+        used_percent_5h?: number
+        used_percent_7d?: number
+        used_percent_31d?: number
+        baseline_set_at_5h?: number
+        baseline_set_at_7d?: number
+        baseline_set_at_31d?: number
+      }
+    | null
+    | undefined
 ): SubscriptionBaselineForm {
   const now = Math.floor(Date.now() / 1000)
+  const normalized: SubscriptionBaselineForm = {
+    used_percent_5h: 0,
+    used_percent_7d: 0,
+    used_percent_31d: 0,
+    baseline_at_5h: now,
+    baseline_at_7d: now,
+    baseline_at_31d: now,
+  }
   if (!value || typeof value !== 'object') {
-    return { used_percent: 0, baseline_at: now }
+    return normalized
   }
-  const usedPercent = Number(value.used_percent)
-  const baselineAt = Number(value.baseline_set_at)
-  return {
-    used_percent: Number.isFinite(usedPercent) && usedPercent >= 0 ? usedPercent : 0,
-    baseline_at: Number.isFinite(baselineAt) && baselineAt > 0 ? baselineAt : now,
+  for (const window of SUBSCRIPTION_BASELINE_WINDOWS) {
+    const percentKey = `used_percent_${window}` as const
+    const atKey = `baseline_set_at_${window}` as const
+    const percent = Number(value[percentKey])
+    const at = Number(value[atKey])
+    const formPercentKey = `used_percent_${window}` as const
+    const formAtKey = `baseline_at_${window}` as const
+    if (Number.isFinite(percent) && percent >= 0) {
+      normalized[formPercentKey] = percent
+    }
+    if (Number.isFinite(at) && at > 0) {
+      normalized[formAtKey] = at
+    }
   }
+  return normalized
 }
 
 // ============================================================================

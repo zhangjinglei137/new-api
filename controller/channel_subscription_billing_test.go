@@ -32,11 +32,11 @@ func TestUpdateChannelSubscriptionBillingDoesNotResetUsage(t *testing.T) {
 
 	now := common.GetTimestamp()
 	require.NoError(t, model.UpsertChannelSubscriptionUsage(&model.ChannelSubscriptionUsage{
-		ChannelId:        int64(channel.Id),
-		LastCheckpointAt: now - 100,
-		LastRefreshAt:    now - 100,
-		BucketStart5h:    now - 100, UsedQuota5h: 111,
-		BucketStart7d: now - 100, UsedQuota7d: 222,
+		ChannelId:          int64(channel.Id),
+		LastCheckpointAt:   now - 100,
+		LastRefreshAt:      now - 100,
+		TimeRollingUpdated: now - 100, UsedQuota5h: 111,
+		TimeWeeklyUpdated: now - 100, UsedQuota7d: 222,
 		BucketStart31d: now - 100, UsedQuota31d: 333,
 		UpdatedAt: now - 100,
 	}))

@@ -259,18 +259,17 @@ func GetChannelSubscriptionUsage(c *gin.Context) {
 	common.ApiSuccess(c, data)
 }
 
-type subscriptionBaselineRequest struct {
-	UsedPercent float64 `json:"used_percent"` // 月已用百分比（允许 >100 表示超限）
-	BaselineAt  *int64  `json:"baseline_at"`  // 计费周期起始时间（unix 秒），可选，缺省=now
-}
-
 type subscriptionBaselineResponse struct {
-	UsedPercent       float64 `json:"used_percent"`
-	BaselineSetAt     int64   `json:"baseline_set_at"`
-	ManualInitialized bool    `json:"manual_initialized"`
+	UsedPercent5h     *float64 `json:"used_percent_5h,omitempty"`
+	UsedPercent7d     *float64 `json:"used_percent_7d,omitempty"`
+	UsedPercent31d    *float64 `json:"used_percent_31d,omitempty"`
+	BaselineSetAt5h   int64    `json:"baseline_set_at_5h"`
+	BaselineSetAt7d   int64    `json:"baseline_set_at_7d"`
+	BaselineSetAt31d  int64    `json:"baseline_set_at_31d"`
+	ManualInitialized bool     `json:"manual_initialized"`
 }
 
-// GetChannelSubscriptionBaseline 返回渠道订阅用量基线（当月已用百分比 + 统计起点）。
+// GetChannelSubscriptionBaseline 返回渠道订阅用量基线（三窗口各自的已用百分比 + 起始时间）。
 func GetChannelSubscriptionBaseline(c *gin.Context) {
 	channelId, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -280,22 +279,33 @@ func GetChannelSubscriptionBaseline(c *gin.Context) {
 	usage, err := model.GetChannelSubscriptionUsage(int64(channelId))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// 从未初始化：返回全零基线。
+			// 从未初始化：返回空基线（nil 表示该窗口未设置）。
 			common.ApiSuccess(c, subscriptionBaselineResponse{})
 			return
 		}
 		common.ApiError(c, err)
 		return
 	}
+	toPercent := func(bps int) *float64 {
+		if bps <= 0 {
+			return nil
+		}
+		p := float64(bps) / 100
+		return &p
+	}
 	common.ApiSuccess(c, subscriptionBaselineResponse{
-		UsedPercent:       float64(usage.BaselineBps31d) / 100,
-		BaselineSetAt:     usage.BaselineSetAt,
+		UsedPercent5h:     toPercent(usage.BaselineBps5h),
+		UsedPercent7d:     toPercent(usage.BaselineBps7d),
+		UsedPercent31d:    toPercent(usage.BaselineBps31d),
+		BaselineSetAt5h:   usage.BaselineSetAt5h,
+		BaselineSetAt7d:   usage.BaselineSetAt7d,
+		BaselineSetAt31d:  usage.BaselineSetAt31d,
 		ManualInitialized: usage.ManualInitialized,
 	})
 }
 
-// SetChannelSubscriptionBaseline 手动设置渠道订阅用量基线：
-// 记录 baselineAt 为新统计起点，之后增量只从该时刻累计，不再重读更早历史日志。
+// SetChannelSubscriptionBaseline 手动设置渠道订阅用量基线（三窗口各自独立）：
+// 每个窗口记录各自起始时间为统计起点，之后增量只从该时刻累计，不再重读更早历史日志。
 func SetChannelSubscriptionBaseline(c *gin.Context) {
 	channelId, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -313,36 +323,44 @@ func SetChannelSubscriptionBaseline(c *gin.Context) {
 		return
 	}
 
-	var req subscriptionBaselineRequest
+	var req service.SubscriptionBaselineInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	bps, err := service.SubscriptionBaselineBpsFromPercent(req.UsedPercent)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	now := common.GetTimestamp()
-	baselineAt := now
-	if req.BaselineAt != nil {
-		baselineAt = *req.BaselineAt
-	}
-	if baselineAt < 0 || baselineAt > now {
-		common.ApiError(c, fmt.Errorf("invalid baseline_at: %d", baselineAt))
-		return
-	}
 
-	if err := service.SetChannelSubscriptionBaseline(channelId, bps, baselineAt); err != nil {
+	if err := service.SetChannelSubscriptionBaseline(channelId, req); err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
 	recordManageAudit(c, "channel.subscription_baseline_set", map[string]interface{}{
-		"id":           channelId,
-		"name":         channel.Name,
-		"baseline_at":  baselineAt,
-		"baseline_bps": bps,
+		"id":               channelId,
+		"name":             channel.Name,
+		"baseline_5h_bps":  derefBps(req.UsedPercent5h),
+		"baseline_7d_bps":  derefBps(req.UsedPercent7d),
+		"baseline_31d_bps": derefBps(req.UsedPercent31d),
+		"baseline_5h_at":   derefAt(req.BaselineAt5h),
+		"baseline_7d_at":   derefAt(req.BaselineAt7d),
+		"baseline_31d_at":  derefAt(req.BaselineAt31d),
 	})
-	common.ApiSuccess(c, gin.H{"baseline_set_at": baselineAt, "baseline_bps": bps})
+	common.ApiSuccess(c, gin.H{"success": true})
+}
+
+func derefBps(p *float64) int {
+	if p == nil {
+		return 0
+	}
+	bps, err := service.SubscriptionBaselineBpsFromPercent(*p)
+	if err != nil {
+		return 0
+	}
+	return bps
+}
+
+func derefAt(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }

@@ -361,6 +361,10 @@ func migrateDB() error {
 			return err
 		}
 	}
+	// 旧版单值基线 → 三窗口独立基线迁移（幂等）。
+	if err := MigrateChannelSubscriptionUsageBaselines(); err != nil {
+		common.SysLog("failed to migrate channel subscription usage baselines: " + err.Error())
+	}
 	return nil
 }
 
@@ -442,6 +446,10 @@ func migrateDBFast() error {
 		if err := DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
 			return err
 		}
+	}
+	// 旧版单值基线 → 三窗口独立基线迁移（幂等）。
+	if err := MigrateChannelSubscriptionUsageBaselines(); err != nil {
+		common.SysLog("failed to migrate channel subscription usage baselines: " + err.Error())
 	}
 	common.SysLog("database migrated")
 	return nil

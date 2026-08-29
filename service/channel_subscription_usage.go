@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -176,20 +177,6 @@ func walletRoundRatio(total int64, bps int) int64 {
 	return int64(q)
 }
 
-// walletRoundRatioBps 按钱包域（int53）计算 percentBps×ratioBps/10000，四舍五入到整数。
-// 用于从月基线百分比实时派生 5h/周基线百分比。
-func walletRoundRatioBps(percentBps int64, ratioBps int) int64 {
-	q, err := common.WalletQuotaFromDecimalStrict(
-		decimal.NewFromInt(percentBps).Mul(decimal.NewFromInt(int64(ratioBps))).Div(decimal.NewFromInt(10000)),
-	)
-	if err != nil {
-		// 溢出时回退到 percentBps（即按 100% 派生），保证展示不因饱和失真。
-		common.SysError(fmt.Sprintf("baseline bps overflow: percent=%d ratio=%d err=%v", percentBps, ratioBps, err))
-		return percentBps
-	}
-	return int64(q)
-}
-
 // bpsToQuota 将基线百分比（bps）换算为该窗口的 quota：limit×bps/10000。
 // 走钱包域（int53）严格换算，避免裸 int(float64*ratio) 转换导致溢出失真。
 func bpsToQuota(bps int, limit int64) int64 {
@@ -220,23 +207,33 @@ func bucketStartFor(bucketStart int64, now int64, period int64) int64 {
 	return bucketStart + elapsed/period*period
 }
 
-// applyBucketRollover 对三个窗口执行桶翻转：窗口进入新周期则清零对应增量。
-// 基线是月维度概念：5h/7d 翻转只清增量；31d（月度）翻转同时清基线（额度重置，
-// 基线失效，需用户在 baseline tab 重新设置）。ManualInitialized 保留 true 不影响
-// 增量分支，仅随显式重置/删除清空。
-func applyBucketRollover(usage *model.ChannelSubscriptionUsage, now int64) {
-	if newStart := bucketStartFor(usage.BucketStart5h, now, SubscriptionWindow5hSeconds); newStart != usage.BucketStart5h {
-		usage.BucketStart5h = newStart
-		usage.UsedQuota5h = 0
-	}
-	if newStart := bucketStartFor(usage.BucketStart7d, now, SubscriptionWindow7dSeconds); newStart != usage.BucketStart7d {
-		usage.BucketStart7d = newStart
-		usage.UsedQuota7d = 0
+// currentUTCMondayStart 返回 now 所在 UTC 自然周的周一 0 点（unix 秒）。
+// 对齐 opencode Go 官方 getWeekBounds 语义：周一起点、UTC 0 点、严格 7×24h。
+func currentUTCMondayStart(now int64) int64 {
+	t := time.Unix(now, 0).UTC()
+	// time.Weekday: Sunday=0 ... Saturday=6；周一=1
+	daysSinceMonday := (int(t.Weekday()) + 6) % 7
+	weekStart := time.Date(t.Year(), t.Month(), t.Day()-daysSinceMonday, 0, 0, 0, 0, time.UTC)
+	return weekStart.Unix()
+}
+
+// applyWindowRollover 对三窗口执行周期判定：
+//   - 5h：真滑窗，过期判定在 Refresh 内按 windowStart 做（此处不做事）。
+//   - 7d：UTC 自然周，跨过本周一 0 点则清周增量（基线保留）。
+//   - 31d：固定 31d 桶，翻转时清月增量并清月基线（额度重置）。
+//
+// 5h/7d 基线是用户声明的"已用百分比"底数，不随窗口过期/跨周清空；
+// 只有 31d 月度翻转时基线失效（额度重置）。
+func applyWindowRollover(usage *model.ChannelSubscriptionUsage, now int64) {
+	weekStart := currentUTCMondayStart(now)
+	if usage.TimeWeeklyUpdated != 0 && usage.TimeWeeklyUpdated < weekStart {
+		usage.UsedQuota7d = 0 // 跨自然周：周增量归 0，基线保留
 	}
 	if newStart := bucketStartFor(usage.BucketStart31d, now, SubscriptionWindow31dSeconds); newStart != usage.BucketStart31d {
 		usage.BucketStart31d = newStart
 		usage.UsedQuota31d = 0
 		usage.BaselineBps31d = 0 // 月度重置：基线失效
+		usage.BaselineSetAt31d = 0
 	}
 }
 
@@ -262,6 +259,7 @@ func fetchChannelConsumeLogs(channelId int, lastCheckpointAt int64, now int64) (
 
 // RefreshChannelSubscriptionUsage 增量刷新单个渠道的订阅统计（手动与定时共用）。
 // 幂等：checkpoint 只前进，已处理的日志不会重复累加。
+// 窗口语义对齐 opencode Go 官方：5h 真滑窗、7d UTC 自然周、31d 固定桶。
 func RefreshChannelSubscriptionUsage(channelId int) error {
 	lock := model.GetChannelPollingLock(channelId)
 	lock.Lock()
@@ -277,23 +275,25 @@ func RefreshChannelSubscriptionUsage(channelId int) error {
 	}
 
 	// 首次初始化且未手动设置基线：回填历史日志到三窗口（修复预览首次显示为 0 的问题）。
+	// 时间戳锚点一律取 now：滑窗/周窗"最近更新时间"与 31d 桶起点都用 now，
+	// 避免第二次刷新因相位差恰好等于一个周期而被误判翻转清零。
 	if usage.LastCheckpointAt == 0 && !usage.ManualInitialized {
-		usage.BucketStart5h = now - SubscriptionWindow5hSeconds
-		usage.BucketStart7d = now - SubscriptionWindow7dSeconds
-		usage.BucketStart31d = now - SubscriptionWindow31dSeconds
-		if usage.UsedQuota5h, err = sumChannelConsumeQuota(channelId, usage.BucketStart5h, now); err != nil {
+		usage.TimeRollingUpdated = now
+		usage.TimeWeeklyUpdated = now
+		usage.BucketStart31d = now
+		if usage.UsedQuota5h, err = sumChannelConsumeQuota(channelId, now-SubscriptionWindow5hSeconds, now); err != nil {
 			usage.LastError = err.Error()
 			usage.UpdatedAt = now
 			_ = model.UpsertChannelSubscriptionUsage(usage)
 			return err
 		}
-		if usage.UsedQuota7d, err = sumChannelConsumeQuota(channelId, usage.BucketStart7d, now); err != nil {
+		if usage.UsedQuota7d, err = sumChannelConsumeQuota(channelId, currentUTCMondayStart(now), now); err != nil {
 			usage.LastError = err.Error()
 			usage.UpdatedAt = now
 			_ = model.UpsertChannelSubscriptionUsage(usage)
 			return err
 		}
-		if usage.UsedQuota31d, err = sumChannelConsumeQuota(channelId, usage.BucketStart31d, now); err != nil {
+		if usage.UsedQuota31d, err = sumChannelConsumeQuota(channelId, now-SubscriptionWindow31dSeconds, now); err != nil {
 			usage.LastError = err.Error()
 			usage.UpdatedAt = now
 			_ = model.UpsertChannelSubscriptionUsage(usage)
@@ -307,7 +307,14 @@ func RefreshChannelSubscriptionUsage(channelId int) error {
 		return model.UpsertChannelSubscriptionUsage(usage)
 	}
 
-	applyBucketRollover(usage, now)
+	applyWindowRollover(usage, now)
+
+	// 5h 滑窗过期判定：最近累计时刻落在滚窗外 → 增量归 0（基线保留）。
+	windowStart5h := now - SubscriptionWindow5hSeconds
+	if usage.TimeRollingUpdated == 0 || usage.TimeRollingUpdated < windowStart5h {
+		usage.UsedQuota5h = 0
+	}
+	weekStart := currentUTCMondayStart(now)
 
 	rows, err := fetchChannelConsumeLogs(channelId, usage.LastCheckpointAt, now)
 	if err != nil {
@@ -316,19 +323,26 @@ func RefreshChannelSubscriptionUsage(channelId int) error {
 		_ = model.UpsertChannelSubscriptionUsage(usage)
 		return err
 	}
+	accumulated := false
 	for _, row := range rows {
 		if row.Quota <= 0 {
 			continue // quota<=0 忽略
 		}
-		if row.CreatedAt >= usage.BucketStart5h {
+		accumulated = true
+		if row.CreatedAt >= windowStart5h {
 			usage.UsedQuota5h += int64(row.Quota)
 		}
-		if row.CreatedAt >= usage.BucketStart7d {
+		if row.CreatedAt >= weekStart {
 			usage.UsedQuota7d += int64(row.Quota)
 		}
 		if row.CreatedAt >= usage.BucketStart31d {
 			usage.UsedQuota31d += int64(row.Quota)
 		}
+	}
+	// 仅当本轮有新日志时推进"最近更新时间"，保证滚窗/周窗按真实活动过期重置。
+	if accumulated {
+		usage.TimeRollingUpdated = now
+		usage.TimeWeeklyUpdated = now
 	}
 	usage.LastCheckpointAt = now
 	usage.LastRefreshAt = now
@@ -363,7 +377,7 @@ func probeSubscriptionLogPartial(channelId int, now int64) bool {
 }
 
 // FullRecalibrateChannelSubscriptionUsage 每日全量校正：
-// 三窗口 Sum = SUM(quota)（窗口内），同时探测 partial。
+// 三窗口 Sum = SUM(quota)（窗口内），同时探测 partial。基线字段不重算。
 func FullRecalibrateChannelSubscriptionUsage(channelId int) error {
 	lock := model.GetChannelPollingLock(channelId)
 	lock.Lock()
@@ -377,21 +391,26 @@ func FullRecalibrateChannelSubscriptionUsage(channelId int) error {
 	if usage == nil {
 		usage = &model.ChannelSubscriptionUsage{ChannelId: int64(channelId)}
 	}
-	if usage.LastCheckpointAt == 0 {
-		// 未初始化则按首次初始化处理，再执行全量求和。
-		usage.BucketStart5h = now
-		usage.BucketStart7d = now
+	// 首次初始化：与增量首刷一致，锚点=now（保持相位），回填求和覆盖过去一个周期；
+	// 否则按当前窗口语义进行全量求和校正。
+	firstInit := usage.LastCheckpointAt == 0
+	if firstInit {
+		usage.TimeRollingUpdated = now
+		usage.TimeWeeklyUpdated = now
 		usage.BucketStart31d = now
 	}
-	applyBucketRollover(usage, now)
+	applyWindowRollover(usage, now)
 
-	if usage.UsedQuota5h, err = sumChannelConsumeQuota(channelId, usage.BucketStart5h, now); err != nil {
+	windowStart5h := now - SubscriptionWindow5hSeconds
+	weekStart := currentUTCMondayStart(now)
+
+	if usage.UsedQuota5h, err = sumChannelConsumeQuota(channelId, windowStart5h, now); err != nil {
 		usage.LastError = err.Error()
 		usage.UpdatedAt = now
 		_ = model.UpsertChannelSubscriptionUsage(usage)
 		return err
 	}
-	if usage.UsedQuota7d, err = sumChannelConsumeQuota(channelId, usage.BucketStart7d, now); err != nil {
+	if usage.UsedQuota7d, err = sumChannelConsumeQuota(channelId, weekStart, now); err != nil {
 		usage.LastError = err.Error()
 		usage.UpdatedAt = now
 		_ = model.UpsertChannelSubscriptionUsage(usage)
@@ -404,6 +423,8 @@ func FullRecalibrateChannelSubscriptionUsage(channelId int) error {
 		return err
 	}
 
+	usage.TimeRollingUpdated = now
+	usage.TimeWeeklyUpdated = now
 	usage.LastCheckpointAt = now
 	usage.LastRefreshAt = now
 	usage.LastError = ""
@@ -412,18 +433,68 @@ func FullRecalibrateChannelSubscriptionUsage(channelId int) error {
 	return model.UpsertChannelSubscriptionUsage(usage)
 }
 
+// SubscriptionBaselineInput 三窗口各自独立的手动基线输入。
+// 每个窗口的 percent（百分比，允许 >100 表示超限）与 at（起始时间 unix 秒）均可独立设置；
+// nil 表示该窗口基线保持不变（部分更新）。at 缺省 = 设置时刻 now。
+type SubscriptionBaselineInput struct {
+	UsedPercent5h  *float64 `json:"used_percent_5h"`
+	UsedPercent7d  *float64 `json:"used_percent_7d"`
+	UsedPercent31d *float64 `json:"used_percent_31d"`
+	BaselineAt5h   *int64   `json:"baseline_at_5h"`
+	BaselineAt7d   *int64   `json:"baseline_at_7d"`
+	BaselineAt31d  *int64   `json:"baseline_at_31d"`
+}
+
 // SetChannelSubscriptionBaseline 手动设置渠道订阅用量基线（用户在 baseline tab 配置
-// "当前已使用百分比 + 计费周期起始时间"）。保存时记录 baselineAt 为统计起点：
-// LastCheckpointAt=baselineAt（之后增量只从该时刻起算，不再重读更早的历史日志）、
-// 三窗口桶起点=baselineAt、增量 UsedQuota*=0。
-// 基线只存月维度百分比（BaselineBps31d），5h/周在 Build 时按配置比例实时派生。
-func SetChannelSubscriptionBaseline(channelId int, baselineMonthlyBps int, baselineAt int64) error {
-	if baselineMonthlyBps < 0 {
-		return fmt.Errorf("baseline percent must not be negative: %d", baselineMonthlyBps)
-	}
+// 三窗口各自独立的"已用百分比 + 起始时间"）。保存时记录各窗口起点：
+// LastCheckpointAt 只前进到所有已设置窗口起始时间中的最大值（避免回退 checkpoint
+// 导致重读历史日志），各窗口增量 UsedQuota*=0，从该窗口起始时间起重新累计。
+func SetChannelSubscriptionBaseline(channelId int, input SubscriptionBaselineInput) error {
+	var err error
 	now := common.GetTimestamp()
-	if baselineAt < 0 || baselineAt > now {
-		return fmt.Errorf("invalid baseline_at: %d", baselineAt)
+
+	if input.UsedPercent5h == nil && input.UsedPercent7d == nil && input.UsedPercent31d == nil {
+		return errors.New("至少设置一个窗口的基线")
+	}
+
+	// 校验各窗口：百分比合法、起始时间不晚于当前。
+	parse := func(percent *float64, at *int64, name string) (int, int64, error) {
+		bps, err := SubscriptionBaselineBpsFromPercent(*percent)
+		if err != nil {
+			return 0, 0, fmt.Errorf("invalid %s percent: %w", name, err)
+		}
+		baselineAt := now
+		if at != nil {
+			baselineAt = *at
+		}
+		if baselineAt < 0 || baselineAt > now {
+			return 0, 0, fmt.Errorf("invalid %s baseline_at: %d", name, baselineAt)
+		}
+		return bps, baselineAt, nil
+	}
+	bps5h := 0
+	at5h := int64(0)
+	if input.UsedPercent5h != nil {
+		bps5h, at5h, err = parse(input.UsedPercent5h, input.BaselineAt5h, "5h")
+		if err != nil {
+			return err
+		}
+	}
+	bps7d := 0
+	at7d := int64(0)
+	if input.UsedPercent7d != nil {
+		bps7d, at7d, err = parse(input.UsedPercent7d, input.BaselineAt7d, "7d")
+		if err != nil {
+			return err
+		}
+	}
+	bps31d := 0
+	at31d := int64(0)
+	if input.UsedPercent31d != nil {
+		bps31d, at31d, err = parse(input.UsedPercent31d, input.BaselineAt31d, "31d")
+		if err != nil {
+			return err
+		}
 	}
 
 	lock := model.GetChannelPollingLock(channelId)
@@ -447,18 +518,37 @@ func SetChannelSubscriptionBaseline(channelId int, baselineMonthlyBps int, basel
 		usage = &model.ChannelSubscriptionUsage{ChannelId: int64(channelId)}
 	}
 
-	usage.BaselineBps31d = baselineMonthlyBps
-	usage.BaselineSetAt = baselineAt
+	// 每个被设置的窗口：写入独立基线 + 起点，清该窗口增量，锚点对齐到起点。
+	newCheckpoint := usage.LastCheckpointAt
+	if bps5h != 0 {
+		usage.BaselineBps5h = bps5h
+		usage.BaselineSetAt5h = at5h
+		usage.UsedQuota5h = 0
+		usage.TimeRollingUpdated = at5h
+		if at5h > newCheckpoint {
+			newCheckpoint = at5h
+		}
+	}
+	if bps7d != 0 {
+		usage.BaselineBps7d = bps7d
+		usage.BaselineSetAt7d = at7d
+		usage.UsedQuota7d = 0
+		usage.TimeWeeklyUpdated = at7d
+		if at7d > newCheckpoint {
+			newCheckpoint = at7d
+		}
+	}
+	if bps31d != 0 {
+		usage.BaselineBps31d = bps31d
+		usage.BaselineSetAt31d = at31d
+		usage.UsedQuota31d = 0
+		usage.BucketStart31d = at31d
+		if at31d > newCheckpoint {
+			newCheckpoint = at31d
+		}
+	}
+	usage.LastCheckpointAt = newCheckpoint
 	usage.ManualInitialized = true
-	// 桶起点与增量起点均对齐到基线时刻；之后 Refresh 只拉 (baselineAt, now] 的日志。
-	usage.BucketStart5h = baselineAt
-	usage.BucketStart7d = baselineAt
-	usage.BucketStart31d = baselineAt
-	usage.LastCheckpointAt = baselineAt
-	// 增量清零；基线百分比不叠加进 UsedQuota*（Build 时实时换算）。
-	usage.UsedQuota5h = 0
-	usage.UsedQuota7d = 0
-	usage.UsedQuota31d = 0
 	usage.LastRefreshAt = now
 	usage.LastError = ""
 	usage.Partial = false
@@ -565,6 +655,8 @@ func subscriptionPercent(used int64, limit int64) float64 {
 }
 
 // BuildSubscriptionUsageData 组装用量接口响应体（增量刷新已由调用方执行）。
+// 展示值 = 各窗口独立基线 quota（实时换算）+ 增量 quota（UsedQuota* 为纯增量）。
+// 窗口语义对齐 opencode Go 官方：5h 真滑窗、7d UTC 自然周、31d 固定桶。
 func BuildSubscriptionUsageData(channelId int, cfg *dto.SubscriptionBillingConfig, now int64) (*SubscriptionUsageData, error) {
 	if cfg == nil {
 		return nil, errors.New("subscription billing is not configured")
@@ -580,18 +672,12 @@ func BuildSubscriptionUsageData(channelId int, cfg *dto.SubscriptionBillingConfi
 	}
 
 	limit5h, limit7d, limit31d := subscriptionWindowLimits(cfg)
-
-	// 手动基线百分比（仅存月维度）→ 5h/周按配置比例实时派生 → 换算为该窗口 quota。
-	// 这样配置（月额度/比例）变更后基线 quota 自动跟随，语义始终是"已用 N%"。
-	baselineQuota5h := bpsToQuota(int(walletRoundRatioBps(int64(usage.BaselineBps31d), cfg.FiveHourRatioBps)), limit5h)
-	baselineQuota7d := bpsToQuota(int(walletRoundRatioBps(int64(usage.BaselineBps31d), cfg.WeeklyRatioBps)), limit7d)
+	baselineQuota5h := bpsToQuota(usage.BaselineBps5h, limit5h)
+	baselineQuota7d := bpsToQuota(usage.BaselineBps7d, limit7d)
 	baselineQuota31d := bpsToQuota(usage.BaselineBps31d, limit31d)
 
-	// 展示值 = 基线 quota（实时换算）+ 增量 quota（UsedQuota* 为纯增量）。
-	buildWindow := func(windowSize int64, increment int64, baseline int64, limit int64, bucketStart int64) SubscriptionUsageWindow {
-		used := baseline + increment
+	buildWindow := func(windowSize int64, used int64, limit int64, resetAt int64) SubscriptionUsageWindow {
 		usedPercent := subscriptionPercent(used, limit)
-		resetAt := bucketStart + windowSize
 		resetAfter := resetAt - now
 		if resetAfter < 0 {
 			resetAfter = 0
@@ -608,10 +694,31 @@ func BuildSubscriptionUsageData(channelId int, cfg *dto.SubscriptionBillingConfi
 		}
 	}
 
+	// 5h 滑窗：最近累计时刻在滚窗外则增量归 0（基线保留）；reset 锚定 timeRollingUpdated+5h。
+	windowStart5h := now - SubscriptionWindow5hSeconds
+	used5h := baselineQuota5h
+	resetAt5h := now + SubscriptionWindow5hSeconds
+	if usage.TimeRollingUpdated != 0 && usage.TimeRollingUpdated >= windowStart5h {
+		used5h += usage.UsedQuota5h
+		resetAt5h = usage.TimeRollingUpdated + SubscriptionWindow5hSeconds
+	}
+
+	// 7d 自然周：跨过本周一 0 点则增量归 0（基线保留）；reset 锚定下周一 0 点。
+	weekStart := currentUTCMondayStart(now)
+	used7d := baselineQuota7d
+	if usage.TimeWeeklyUpdated != 0 && usage.TimeWeeklyUpdated >= weekStart {
+		used7d += usage.UsedQuota7d
+	}
+	resetAt7d := weekStart + SubscriptionWindow7dSeconds
+
+	// 31d 桶：用量=基线+桶内增量；reset 锚定桶结束。
+	used31d := baselineQuota31d + usage.UsedQuota31d
+	resetAt31d := usage.BucketStart31d + SubscriptionWindow31dSeconds
+
 	windows := map[string]SubscriptionUsageWindow{
-		SubscriptionWindowName5h:  buildWindow(SubscriptionWindow5hSeconds, usage.UsedQuota5h, baselineQuota5h, limit5h, usage.BucketStart5h),
-		SubscriptionWindowName7d:  buildWindow(SubscriptionWindow7dSeconds, usage.UsedQuota7d, baselineQuota7d, limit7d, usage.BucketStart7d),
-		SubscriptionWindowName31d: buildWindow(SubscriptionWindow31dSeconds, usage.UsedQuota31d, baselineQuota31d, limit31d, usage.BucketStart31d),
+		SubscriptionWindowName5h:  buildWindow(SubscriptionWindow5hSeconds, used5h, limit5h, resetAt5h),
+		SubscriptionWindowName7d:  buildWindow(SubscriptionWindow7dSeconds, used7d, limit7d, resetAt7d),
+		SubscriptionWindowName31d: buildWindow(SubscriptionWindow31dSeconds, used31d, limit31d, resetAt31d),
 	}
 
 	perModelUsage, err := fetchSubscriptionPerModelUsage([]int64{int64(channelId)})

@@ -43,7 +43,10 @@ import type {
   SubscriptionUsageResponse,
   TagOperationParams,
 } from './types'
-import { toSubscriptionBillingPutPayload } from './lib/subscription-billing'
+import {
+  toSubscriptionBillingPutPayload,
+  type SubscriptionBaselineForm,
+} from './lib/subscription-billing'
 
 const channelActionConfig = (
   config: ApiRequestConfig = {}
@@ -423,11 +426,11 @@ export async function getSubscriptionBaseline(
 
 export async function setSubscriptionBaseline(
   channelId: number,
-  data: { used_percent: number; baseline_at?: number }
+  data: SubscriptionBaselineForm
 ): Promise<{
   success: boolean
   message?: string
-  data?: { baseline_set_at: number; baseline_bps: number }
+  data?: { success: boolean }
 }> {
   const res = await api.post(
     `/api/channel/${channelId}/subscription-billing/baseline`,

@@ -253,10 +253,9 @@ export function SubscriptionBillingEditorDialog({
   const [usage, setUsage] = useState<SubscriptionUsageResponse | null>(null)
   const [isUsageLoading, setIsUsageLoading] = useState(false)
   const [usageError, setUsageError] = useState('')
-  const [baselineForm, setBaselineForm] = useState<SubscriptionBaselineForm>({
-    used_percent: 0,
-    baseline_at: Math.floor(Date.now() / 1000),
-  })
+  const [baselineForm, setBaselineForm] = useState<SubscriptionBaselineForm>(
+    () => toBaselineForm(undefined)
+  )
   const [isBaselineLoading, setIsBaselineLoading] = useState(false)
   const [isBaselineSaving, setIsBaselineSaving] = useState(false)
   const [baselineError, setBaselineError] = useState('')
@@ -565,10 +564,7 @@ export function SubscriptionBillingEditorDialog({
     setIsBaselineSaving(true)
     setBaselineError('')
     try {
-      const res = await setSubscriptionBaseline(channelId, {
-        used_percent: baselineForm.used_percent,
-        baseline_at: baselineForm.baseline_at,
-      })
+      const res = await setSubscriptionBaseline(channelId, baselineForm)
       if (!res.success) {
         throw new Error(res.message || t('Failed to save baseline'))
       }
@@ -913,7 +909,7 @@ export function SubscriptionBillingEditorDialog({
           <SectionHeading
             title={t('Usage Baseline')}
             description={t(
-              'Set the current used quota as a percentage of the monthly total, and a billing cycle start time. After saving, usage counting resumes from this baseline; prior history is not re-read. The baseline expires when the monthly window rolls over.'
+              'Set independent baseline usage for the 5-hour, weekly and monthly windows, and each window\u2019s cycle start time. After saving, each window only accumulates logs after its own baseline time; prior history is not re-read. The 5h/weekly windows follow the official sliding/natural-week semantics.'
             )}
           >
             <Button
@@ -928,54 +924,75 @@ export function SubscriptionBillingEditorDialog({
             </Button>
           </SectionHeading>
 
-          <div className='grid gap-4 md:grid-cols-2'>
-            <FieldBlock label={t('Monthly used (%)')}>
-              <NumberField
-                value={baselineForm.used_percent}
-                onChange={(value) =>
-                  setBaselineForm((current) => ({
-                    ...current,
-                    used_percent: value,
-                  }))
-                }
-                min={0}
-                step={1}
-                placeholder='0'
-              />
-              <p className='text-muted-foreground text-xs'>
-                {t('Values over 100% indicate the channel is already over limit.')}
-              </p>
-              <p className='text-muted-foreground text-xs'>
-                {t('Equivalent to {{usd}} USD', {
-                  usd: deriveBaselineUsd(
-                    baselineForm.used_percent,
-                    monthlyTotalUsd
-                  ).toFixed(2),
-                })}
-              </p>
-            </FieldBlock>
+          {(
+            [
+              { window: '5h', titleKey: '5-Hour Window' },
+              { window: '7d', titleKey: 'Weekly Window' },
+              { window: '31d', titleKey: 'Monthly Window' },
+            ] as const
+          ).map(({ window, titleKey }) => (
+            <div
+              key={window}
+              className='bg-muted/30 flex flex-col gap-3 rounded-lg border p-3'
+            >
+              <div className='text-sm font-semibold'>{t(titleKey)}</div>
+              <div className='grid gap-4 md:grid-cols-2'>
+                <FieldBlock label={t('Monthly used (%)')}>
+                  <NumberField
+                    value={baselineForm[`used_percent_${window}`]}
+                    onChange={(value) =>
+                      setBaselineForm((current) => ({
+                        ...current,
+                        [`used_percent_${window}`]: value,
+                      }))
+                    }
+                    min={0}
+                    step={1}
+                    placeholder='0'
+                  />
+                  <p className='text-muted-foreground text-xs'>
+                    {t(
+                      'Values over 100% indicate the channel is already over limit.'
+                    )}
+                  </p>
+                  <p className='text-muted-foreground text-xs'>
+                    {t('Equivalent to {{usd}} USD', {
+                      usd: deriveBaselineUsd(
+                        window,
+                        baselineForm[`used_percent_${window}`],
+                        config
+                      ).toFixed(2),
+                    })}
+                  </p>
+                </FieldBlock>
 
-            <FieldBlock label={t('Billing cycle start')}>
-              <Input
-                type='datetime-local'
-                value={formatTimestampForInput(baselineForm.baseline_at)}
-                onChange={(event) =>
-                  setBaselineForm((current) => ({
-                    ...current,
-                    baseline_at: parseTimestampFromInput(event.target.value),
-                  }))
-                }
-              />
-              <p className='text-muted-foreground text-xs'>
-                {t('Defaults to now. Must not be in the future.')}
-              </p>
-            </FieldBlock>
-          </div>
+                <FieldBlock label={t('Billing cycle start')}>
+                  <Input
+                    type='datetime-local'
+                    value={formatTimestampForInput(
+                      baselineForm[`baseline_at_${window}`]
+                    )}
+                    onChange={(event) =>
+                      setBaselineForm((current) => ({
+                        ...current,
+                        [`baseline_at_${window}`]: parseTimestampFromInput(
+                          event.target.value
+                        ),
+                      }))
+                    }
+                  />
+                  <p className='text-muted-foreground text-xs'>
+                    {t('Defaults to now. Must not be in the future.')}
+                  </p>
+                </FieldBlock>
+              </div>
+            </div>
+          ))}
 
           <Alert>
             <AlertDescription>
               {t(
-                'Saving records the current timestamp as the new checkpoint. Subsequent usage fetches only accumulate logs after this point. The 5h/weekly windows derive their baseline from the monthly percentage and the configured ratios.'
+                'Saving records each window\u2019s start time as its checkpoint, and only accumulates logs after that point. The 5h window is a rolling window; the weekly window resets on UTC Monday; the monthly window is a 31-day bucket. The monthly baseline expires when the monthly window rolls over.'
               )}
             </AlertDescription>
           </Alert>
