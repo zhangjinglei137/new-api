@@ -71,12 +71,6 @@ export const channelSchema = z.object({
     multi_key_mode: 'random',
   }),
   settings: z.string().default('{}'), // other_settings JSON
-  // Non-persistent fields appended by the channel list endpoint for
-  // subscription billing mode. Not stored on the channel row itself.
-  billing_mode: z.union([z.number(), z.string()]).optional(),
-  subscription_monthly_percent: z.number().optional(),
-  subscription_usage_updated_at: z.number().optional(),
-  subscription_model_over_limit: z.boolean().optional(),
 })
 
 export type Channel = z.infer<typeof channelSchema>
@@ -115,6 +109,8 @@ export interface ChannelOtherSettings {
   upstream_model_update_last_check_time?: number
   upstream_model_update_last_detected_models?: string[]
   advanced_custom?: AdvancedCustomConfig
+  opencode_workspace_id?: string
+  opencode_auth_cookie?: string
   model_proxy_rules?: { models?: string[]; proxy?: string }[]
 }
 
@@ -384,80 +380,4 @@ export interface AddChannelRequest {
   multi_key_mode?: 'random' | 'polling'
   batch_add_set_key_prefix_2_name?: boolean
   channel: Partial<Channel>
-}
-
-// ============================================================================
-// Subscription Billing Types
-// ============================================================================
-
-export type SubscriptionBillingMode = 'metered' | 'subscription'
-
-export interface SubscriptionBillingModelTier {
-  model: string
-  monthly_usd: number
-}
-
-export interface SubscriptionBillingConfig {
-  billing_mode: SubscriptionBillingMode
-  monthly_total_usd: number
-  five_hour_ratio_percent: number
-  weekly_ratio_percent: number
-  model_tiers: SubscriptionBillingModelTier[]
-}
-
-export interface SubscriptionBillingWindow {
-  window_size_seconds?: number
-  used_quota?: number
-  limit_quota?: number
-  used_percent?: number
-  display_percent?: number
-  over_limit?: boolean
-  reset_at?: number
-  reset_after_seconds?: number
-}
-
-export interface SubscriptionUsagePerModel {
-  model?: string
-  used_quota?: number
-  limit_quota?: number
-  used_percent?: number
-  over_limit?: boolean
-}
-
-export interface SubscriptionUsageData {
-  updated_at?: number | string
-  partial?: boolean
-  windows?: {
-    '5h'?: SubscriptionBillingWindow
-    '7d'?: SubscriptionBillingWindow
-    '31d'?: SubscriptionBillingWindow
-  }
-  per_model?: SubscriptionUsagePerModel[]
-}
-
-export interface SubscriptionBillingResponse {
-  success: boolean
-  message?: string
-  data?: SubscriptionBillingConfig
-}
-
-export interface SubscriptionUsageResponse {
-  success: boolean
-  message?: string
-  data?: SubscriptionUsageData
-}
-
-/**
- * Manual usage baseline for a subscription channel: 5h/7d/31d 三个窗口各自独立的
- * 已用百分比（允许 >100 表示超限）与起始时间（unix 秒）。从各窗口起点之后
- * 的新用量增量才被累计。Stored on channel_subscription_usages.
- */
-export interface SubscriptionBaseline {
-  used_percent_5h?: number
-  used_percent_7d?: number
-  used_percent_31d?: number
-  baseline_set_at_5h?: number
-  baseline_set_at_7d?: number
-  baseline_set_at_31d?: number
-  manual_initialized?: boolean
 }

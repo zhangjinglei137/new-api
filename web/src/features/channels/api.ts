@@ -37,16 +37,8 @@ import type {
   MultiKeyStatusResponse,
   SearchChannelsParams,
   SearchChannelsResponse,
-  SubscriptionBaseline,
-  SubscriptionBillingConfig,
-  SubscriptionBillingResponse,
-  SubscriptionUsageResponse,
   TagOperationParams,
 } from './types'
-import {
-  toSubscriptionBillingPutPayload,
-  type SubscriptionBaselineForm,
-} from './lib/subscription-billing'
 
 const channelActionConfig = (
   config: ApiRequestConfig = {}
@@ -371,73 +363,6 @@ export async function resetCodexUsage(
     `/api/channel/${channelId}/codex/usage/reset`,
     {},
     channelActionConfig({ disableDuplicate: true })
-  )
-  return res.data
-}
-
-// ============================================================================
-// Subscription Billing Operations
-// ============================================================================
-
-export async function getSubscriptionBilling(
-  channelId: number
-): Promise<SubscriptionBillingResponse> {
-  const res = await api.get(
-    `/api/channel/${channelId}/subscription-billing`,
-    channelActionConfig({ disableDuplicate: true })
-  )
-  return res.data
-}
-
-export async function updateSubscriptionBilling(
-  channelId: number,
-  data: SubscriptionBillingConfig
-): Promise<{ success: boolean; message?: string }> {
-  const res = await api.put(
-    `/api/channel/${channelId}/subscription-billing`,
-    toSubscriptionBillingPutPayload(data),
-    // No skipBusinessError: keep the standard error handling so backend
-    // validation failures (e.g. quota overflow, invalid ratios) surface as
-    // toasts instead of being silently swallowed.
-    channelActionConfig({ skipErrorHandler: true })
-  )
-  return res.data
-}
-
-export async function getSubscriptionUsage(
-  channelId: number
-): Promise<SubscriptionUsageResponse> {
-  const res = await api.get(
-    `/api/channel/${channelId}/subscription-billing/usage`,
-    channelActionConfig({ disableDuplicate: true })
-  )
-  return res.data
-}
-
-export async function getSubscriptionBaseline(
-  channelId: number
-): Promise<{ success: boolean; message?: string; data?: SubscriptionBaseline }> {
-  const res = await api.get(
-    `/api/channel/${channelId}/subscription-billing/baseline`,
-    channelActionConfig({ disableDuplicate: true })
-  )
-  return res.data
-}
-
-export async function setSubscriptionBaseline(
-  channelId: number,
-  data: SubscriptionBaselineForm
-): Promise<{
-  success: boolean
-  message?: string
-  data?: { success: boolean }
-}> {
-  const res = await api.post(
-    `/api/channel/${channelId}/subscription-billing/baseline`,
-    data,
-    // No skipBusinessError: keep standard error handling so invalid baseline
-    // percentages or future timestamps surface as toasts.
-    channelActionConfig({ skipErrorHandler: true })
   )
   return res.data
 }

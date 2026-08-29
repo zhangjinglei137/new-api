@@ -55,7 +55,7 @@ import {
 import { formatTimestampToDate } from '@/lib/format'
 import { truncateText } from '@/lib/utils'
 
-import { getCodexUsage, getSubscriptionUsage, updateChannelBalance } from '../api'
+import { getCodexUsage, updateChannelBalance } from '../api'
 import { CHANNEL_STATUS_CONFIG, MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   formatRelativeTime,
@@ -64,9 +64,7 @@ import {
   getChannelTypeIcon,
   getChannelTypeLabel,
   getResponseTimeConfig,
-  getSubscriptionPercentVariant,
   isMultiKeyChannel,
-  isSubscriptionBillingMode,
   parseModelsList,
   parseGroupsList,
   parseChannelSettings,
@@ -78,7 +76,7 @@ import {
   type TagRow,
 } from '../lib'
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
-import type { Channel, SubscriptionUsageResponse } from '../types'
+import type { Channel } from '../types'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
 import { useChannels } from './channels-provider'
 import { DataTableRowActions } from './data-table-row-actions'
@@ -88,7 +86,6 @@ import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './dialogs/codex-usage-dialog'
-import { SubscriptionUsageDialog } from './dialogs/subscription-usage-dialog'
 import { NumericSpinnerInput } from './numeric-spinner-input'
 
 function parseIonetMeta(otherInfo: string | null | undefined): null | {
@@ -344,9 +341,6 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const [codexUsageOpen, setCodexUsageOpen] = useState(false)
   const [codexUsageResponse, setCodexUsageResponse] =
     useState<CodexUsageDialogData | null>(null)
-  const [subscriptionUsageOpen, setSubscriptionUsageOpen] = useState(false)
-  const [subscriptionUsageResponse, setSubscriptionUsageResponse] =
-    useState<SubscriptionUsageResponse | null>(null)
   const currencyLabel = getCurrencyLabel()
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
@@ -421,105 +415,6 @@ export function BalanceCell({ channel }: { channel: Channel }) {
             <p>{sensitiveVisible ? usedLabel : maskedUsedLabel}</p>
           </TooltipContent>
         </Tooltip>
-      </TooltipProvider>
-    )
-  }
-
-  // Subscription billing mode: show a monthly usage summary instead of the
-  // metered used/remaining values. Clicking the badge opens the usage dialog.
-  if (isSubscriptionBillingMode(channel.billing_mode)) {
-    const monthlyPercent = Number(channel.subscription_monthly_percent)
-    const hasPercent = Number.isFinite(monthlyPercent)
-    const percentText = hasPercent ? `${Math.round(monthlyPercent)}%` : '-'
-    const percentVariant = getSubscriptionPercentVariant(
-      hasPercent ? monthlyPercent : 0
-    )
-    const summaryLabel = `${t('Monthly')} ${percentText}`
-    const updatedAtText = channel.subscription_usage_updated_at
-      ? formatTimestampToDate(channel.subscription_usage_updated_at)
-      : '-'
-
-    const handleClickSubscription = async () => {
-      if (isUpdating) {
-        return
-      }
-      setIsUpdating(true)
-      try {
-        const res = await getSubscriptionUsage(channel.id)
-        if (!res.success) {
-          throw new Error(res.message || t('Failed to fetch usage'))
-        }
-        setSubscriptionUsageResponse(res)
-        setSubscriptionUsageOpen(true)
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t('Failed to fetch usage')
-        )
-      } finally {
-        setIsUpdating(false)
-      }
-    }
-
-    const refreshSubscriptionUsage = async () => {
-      if (isUpdating) {
-        return
-      }
-      setIsUpdating(true)
-      try {
-        const res = await getSubscriptionUsage(channel.id)
-        if (!res.success) {
-          throw new Error(res.message || t('Failed to fetch usage'))
-        }
-        setSubscriptionUsageResponse(res)
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t('Failed to fetch usage')
-        )
-      } finally {
-        setIsUpdating(false)
-      }
-    }
-
-    return (
-      <TooltipProvider>
-        <div className='-ml-1.5 flex items-center gap-1'>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <StatusBadge
-                  label={isUpdating ? t('Loading...') : summaryLabel}
-                  variant={percentVariant}
-                  size='sm'
-                  copyable={false}
-                  showDot={false}
-                  className='cursor-pointer'
-                  onClick={handleClickSubscription}
-                />
-              }
-            />
-            <TooltipContent>
-              <p>
-                {t('Last updated:')} {updatedAtText}
-              </p>
-              {channel.subscription_model_over_limit ? (
-                <p className='text-destructive'>
-                  {t('Some models have reached their monthly limit.')}
-                </p>
-              ) : null}
-              <p>{t('Click to view subscription usage')}</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-
-        <SubscriptionUsageDialog
-          open={subscriptionUsageOpen}
-          onOpenChange={setSubscriptionUsageOpen}
-          channelName={channel.name}
-          channelId={channel.id}
-          usage={subscriptionUsageResponse}
-          onRefresh={refreshSubscriptionUsage}
-          isRefreshing={isUpdating}
-        />
       </TooltipProvider>
     )
   }

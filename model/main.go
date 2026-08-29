@@ -341,7 +341,6 @@ func migrateDB() error {
 		&SystemTaskLock{},
 		&CasbinRule{},
 		&AuthzRole{},
-		&ChannelSubscriptionUsage{},
 	)
 	if err != nil {
 		return err
@@ -360,10 +359,6 @@ func migrateDB() error {
 		if err := DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
 			return err
 		}
-	}
-	// 旧版单值基线 → 三窗口独立基线迁移（幂等）。
-	if err := MigrateChannelSubscriptionUsageBaselines(); err != nil {
-		common.SysLog("failed to migrate channel subscription usage baselines: " + err.Error())
 	}
 	return nil
 }
@@ -407,7 +402,6 @@ func migrateDBFast() error {
 		{&SystemInstance{}, "SystemInstance"},
 		{&SystemTask{}, "SystemTask"},
 		{&SystemTaskLock{}, "SystemTaskLock"},
-		{&ChannelSubscriptionUsage{}, "ChannelSubscriptionUsage"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
@@ -446,10 +440,6 @@ func migrateDBFast() error {
 		if err := DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
 			return err
 		}
-	}
-	// 旧版单值基线 → 三窗口独立基线迁移（幂等）。
-	if err := MigrateChannelSubscriptionUsageBaselines(); err != nil {
-		common.SysLog("failed to migrate channel subscription usage baselines: " + err.Error())
 	}
 	common.SysLog("database migrated")
 	return nil

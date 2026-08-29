@@ -56,12 +56,6 @@ type Channel struct {
 
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
-	// 订阅计费快照（非持久化字段，仅由渠道列表/详情接口填充，客户端不可修改）
-	BillingMode                int     `json:"billing_mode,omitempty" gorm:"-"`
-	SubscriptionMonthlyPercent float64 `json:"subscription_monthly_percent,omitempty" gorm:"-"` // = Sum31d/limit31d，允许>100
-	SubscriptionUsageUpdatedAt int64   `json:"subscription_usage_updated_at,omitempty" gorm:"-"`
-	SubscriptionModelOverLimit bool    `json:"subscription_model_over_limit,omitempty" gorm:"-"` // 任一模型超出其月度档位
-
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
 }
@@ -494,11 +488,6 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 	if err := tx.Commit().Error; err != nil {
 		return 0, err
 	}
-	// 清理订阅统计（含手动基线）；失败不阻断主删除。
-	usageIds := lo.Map(ids, func(id int, _ int) int64 { return int64(id) })
-	if err := DeleteChannelSubscriptionUsages(usageIds); err != nil {
-		common.SysLog(fmt.Sprintf("failed to delete channel subscription usages: ids=%v, error=%v", ids, err))
-	}
 	return deletedCount, nil
 }
 
@@ -625,8 +614,8 @@ func (channel *Channel) UpdateBalance(balance float64) {
 // 且不复用 UpdateBalance(0)（那会连带覆盖 balance_updated_time）。
 func (channel *Channel) ResetBalanceAndUsedQuota() error {
 	err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(map[string]interface{}{
-		"balance":    0,
-		"used_quota": 0,
+		"balance":     0,
+		"used_quota":  0,
 	}).Error
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to reset balance and used quota: channel_id=%d, error=%v", channel.Id, err))
@@ -641,14 +630,7 @@ func (channel *Channel) Delete() error {
 		return err
 	}
 	err = channel.DeleteAbilities()
-	if err != nil {
-		return err
-	}
-	// 清理订阅统计（含手动基线）；失败不阻断主删除。
-	if err := DeleteChannelSubscriptionUsage(int64(channel.Id)); err != nil {
-		common.SysLog(fmt.Sprintf("failed to delete channel subscription usage: channel_id=%d, error=%v", channel.Id, err))
-	}
-	return nil
+	return err
 }
 
 var channelStatusLock sync.Mutex
@@ -918,35 +900,13 @@ func updateChannelUsedQuota(id int, quota int) {
 }
 
 func DeleteChannelByStatus(status int64) (int64, error) {
-	var ids []int64
-	if err := DB.Model(&Channel{}).Where("status = ?", status).Pluck("id", &ids).Error; err != nil {
-		return 0, err
-	}
 	result := DB.Where("status = ?", status).Delete(&Channel{})
-	if err := result.Error; err != nil {
-		return 0, err
-	}
-	if len(ids) > 0 {
-		_ = DeleteChannelSubscriptionUsages(ids)
-	}
-	return result.RowsAffected, nil
+	return result.RowsAffected, result.Error
 }
 
 func DeleteDisabledChannel() (int64, error) {
-	var ids []int64
-	if err := DB.Model(&Channel{}).
-		Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).
-		Pluck("id", &ids).Error; err != nil {
-		return 0, err
-	}
 	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
-	if err := result.Error; err != nil {
-		return 0, err
-	}
-	if len(ids) > 0 {
-		_ = DeleteChannelSubscriptionUsages(ids)
-	}
-	return result.RowsAffected, nil
+	return result.RowsAffected, result.Error
 }
 
 func GetPaginatedTags(offset int, limit int) ([]*string, error) {

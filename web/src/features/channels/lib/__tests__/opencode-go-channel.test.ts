@@ -52,6 +52,8 @@ function opencodeForm(overrides: Record<string, unknown> = {}) {
     key: 'test-key',
     models: 'grok-4.5',
     advanced_custom: OPENCODE_GO_TEMPLATE_CONFIG,
+    opencode_workspace_id: 'wrk_test',
+    opencode_auth_cookie: 'session=abc123',
     ...overrides,
   }
 }
@@ -171,9 +173,11 @@ describe('OpenCode Go channel', () => {
     }
   })
 
-  test('round-trips advanced_custom through settings JSON', () => {
+  test('round-trips workspace ID, auth cookie, and advanced_custom through settings JSON', () => {
     const payload = transformFormDataToCreatePayload(opencodeForm())
     const settings = JSON.parse(payload.channel.settings as string)
+    expect(settings.opencode_workspace_id).toBe('wrk_test')
+    expect(settings.opencode_auth_cookie).toBe('session=abc123')
 
     // advanced_custom must survive serialization: the backend requires it for
     // type 61 (IsAdvancedCustomChannelType), otherwise channel creation fails.
@@ -201,15 +205,21 @@ describe('OpenCode Go channel', () => {
             { incoming_path: '/v1/chat/completions', converter: 'none' },
           ],
         },
+        opencode_workspace_id: 'wrk_test',
+        opencode_auth_cookie: 'session=abc123',
       }),
     })
     const defaults = transformChannelToFormDefaults(channel)
+    expect(defaults.opencode_workspace_id).toBe('wrk_test')
+    expect(defaults.opencode_auth_cookie).toBe('session=abc123')
     expect(defaults.advanced_custom?.trim()).toBeTruthy()
   })
 
-  test('removes OpenCode advanced settings when the channel type changes away', () => {
+  test('removes OpenCode settings when the channel type changes away', () => {
     const payload = transformFormDataToCreatePayload(opencodeForm({ type: 1 }))
     const settings = JSON.parse(payload.channel.settings as string)
+    expect('opencode_workspace_id' in settings).toBe(false)
+    expect('opencode_auth_cookie' in settings).toBe(false)
     expect('advanced_custom' in settings).toBe(false)
   })
 

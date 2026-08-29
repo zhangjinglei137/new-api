@@ -143,33 +143,8 @@ type ChannelOtherSettings struct {
 	// Exact model names take priority over regex rules; within the same kind,
 	// the first rule in array order wins.
 	ModelProxyRules     []ModelProxyRule `json:"model_proxy_rules,omitempty"`
-	// SubscriptionBilling 渠道订阅计费配置（nil 表示未启用订阅计费）。
-	// 数据只做统计展示，不参与扣费链路。
-	SubscriptionBilling *SubscriptionBillingConfig `json:"subscription_billing,omitempty"`
-}
-
-// 渠道计费模式
-const (
-	SubscriptionBillingModePayAsYouGo = 0 // 按量计费（默认）
-	SubscriptionBillingModeSubscribe  = 1 // 订阅计费
-)
-
-// SubscriptionBillingConfig 渠道订阅计费配置。quota 单位为本系统额度
-// （1 USD = QuotaPerUnit quota），bps 为 basis points（2000 = 20%）。
-type SubscriptionBillingConfig struct {
-	BillingMode       int                     `json:"billing_mode"`                  // 0=按量, 1=订阅
-	MonthlyTotalQuota int64                   `json:"monthly_total_quota,omitempty"` // 每月总额度(quota 单位)
-	FiveHourRatioBps  int                     `json:"five_hour_ratio_bps,omitempty"` // 5h占比 basis points (2000=20%)
-	WeeklyRatioBps    int                     `json:"weekly_ratio_bps,omitempty"`    // 周占比 bps (5000=50%)
-	ModelTiers        []SubscriptionModelTier `json:"model_tiers,omitempty"`         // per-model 月度额度档
-	UpdatedAt         int64                   `json:"updated_at,omitempty"`
-}
-
-// SubscriptionModelTier 单个模型的月度额度档。Model 为精确模型名；
-// "*" 为兜底档（至多一个）。
-type SubscriptionModelTier struct {
-	Model        string `json:"model"`         // 精确模型名；"*" 为兜底档（至多一个）
-	MonthlyQuota int64  `json:"monthly_quota"` // 该模型月度上限(quota)
+	OpenCodeWorkspaceId string           `json:"opencode_workspace_id,omitempty"`
+	OpenCodeAuthCookie  string           `json:"opencode_auth_cookie,omitempty"`
 }
 
 // ResolveProxy returns the proxy URL to use for the given model.

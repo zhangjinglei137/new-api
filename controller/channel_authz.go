@@ -82,16 +82,12 @@ var channelOperationalFields = map[string]struct{}{
 // channelReadOnlyFields lists server-managed/accounting fields that the general
 // channel edit endpoint must ignore even if a client sends them.
 var channelReadOnlyFields = map[string]struct{}{
-	"created_time":                  {},
-	"test_time":                     {},
-	"response_time":                 {},
-	"balance":                       {},
-	"balance_updated_time":          {},
-	"used_quota":                    {},
-	"billing_mode":                  {},
-	"subscription_monthly_percent":  {},
-	"subscription_usage_updated_at": {},
-	"subscription_model_over_limit": {},
+	"created_time":         {},
+	"test_time":            {},
+	"response_time":        {},
+	"balance":              {},
+	"balance_updated_time": {},
+	"used_quota":           {},
 }
 
 func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]any) {
@@ -112,18 +108,6 @@ func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]an
 	}
 	if _, ok := requestData["used_quota"]; ok {
 		channel.UsedQuota = 0
-	}
-	if _, ok := requestData["billing_mode"]; ok {
-		channel.BillingMode = 0
-	}
-	if _, ok := requestData["subscription_monthly_percent"]; ok {
-		channel.SubscriptionMonthlyPercent = 0
-	}
-	if _, ok := requestData["subscription_usage_updated_at"]; ok {
-		channel.SubscriptionUsageUpdatedAt = 0
-	}
-	if _, ok := requestData["subscription_model_over_limit"]; ok {
-		channel.SubscriptionModelOverLimit = false
 	}
 }
 
