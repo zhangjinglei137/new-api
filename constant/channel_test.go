@@ -123,3 +123,8 @@ func TestResolveSpecialPlan(t *testing.T) {
 		})
 	}
 }
+
+func TestGetChannelBaseURLIsBoundsSafe(t *testing.T) {
+	assert.Empty(t, GetChannelBaseURL(ChannelTypeTaskPlugin))
+	assert.Empty(t, GetChannelBaseURL(9999))
+}
