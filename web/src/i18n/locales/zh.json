@@ -5355,6 +5355,20 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Access Mode": "接入方式",
+    "Pay-as-you-go": "按量在线推理",
+    "Coding Plan": "Coding Plan 订阅",
+    "Coding Plan (International)": "Coding Plan 订阅（国际版）",
+    "Custom URL": "自定义 URL",
+    "Select the access mode for this VolcEngine channel": "选择该火山方舟渠道的接入方式",
+    "Select the access mode for this Zhipu V4 channel": "选择该智谱 V4 渠道的接入方式",
+    "Select the access mode for this Moonshot channel": "选择该月之暗面渠道的接入方式",
+    "Pay-as-you-go online inference with a selectable region": "按量在线推理，可选择区域",
+    "VolcEngine Coding Plan subscription (OpenAI / Anthropic compatible endpoints)": "火山方舟 Coding Plan 订阅（OpenAI / Anthropic 兼容端点）",
+    "Enter a custom API base URL": "输入自定义 API 基础地址",
+    "Endpoints: OpenAI compatible {{openaiEndpoint}} · Anthropic {{anthropicEndpoint}}": "端点：OpenAI 兼容 {{openaiEndpoint}} · Anthropic {{anthropicEndpoint}}",
+    "Enter the Coding Plan logical model name (deepseek-v3.2 / doubao-seed-code / kimi-k2.5 / ark-code-latest). Do not use online inference Model IDs with date suffixes.": "请填写 Coding Plan 逻辑模型名（deepseek-v3.2 / doubao-seed-code / kimi-k2.5 / ark-code-latest），不要填写带日期后缀的按量在线推理 Model ID。",
+    "Do not fill in the pay-as-you-go online inference Model ID (with date suffix)": "不要填写按量在线推理的 Model ID（带日期后缀）"
   }
 }

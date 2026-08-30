@@ -145,6 +145,8 @@ type ChannelOtherSettings struct {
 	ModelProxyRules     []ModelProxyRule `json:"model_proxy_rules,omitempty"`
 	OpenCodeWorkspaceId string           `json:"opencode_workspace_id,omitempty"`
 	OpenCodeAuthCookie  string           `json:"opencode_auth_cookie,omitempty"`
+	// EndpointProfile 标识渠道使用的特殊套餐端点（如 Coding Plan）。取值 "coding"/"coding-intl"/空。
+	EndpointProfile string `json:"endpoint_profile,omitempty"`
 }
 
 // ResolveProxy returns the proxy URL to use for the given model.

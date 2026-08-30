@@ -316,6 +316,9 @@ export const channelFormSchema = z
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
     aws_key_type: z.enum(['ak_sk', 'api_key']).optional(), // AWS specific
     azure_responses_version: z.string().optional(), // Azure specific
+    endpoint_profile: z
+      .enum(['coding', 'coding-intl', ''])
+      .optional(), // Coding Plan：VolcEngine(45) / ZhipuV4(26) / Moonshot(25)；coding-intl 仅 ZhipuV4 后端支持
     // Field passthrough controls (stored in settings JSON)
     allow_service_tier: z.boolean().optional(), // OpenAI/Anthropic
     disable_store: z.boolean().optional(), // OpenAI only
@@ -504,6 +507,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   vertex_key_type: 'json',
   aws_key_type: 'ak_sk',
   azure_responses_version: '',
+  endpoint_profile: '',
   // Field passthrough controls
   allow_service_tier: false,
   disable_store: false,
@@ -570,6 +574,7 @@ export function transformChannelToFormDefaults(
   // Parse type-specific settings from settings field
   let vertexKeyType: 'json' | 'api_key' = 'json'
   let azureResponsesVersion = ''
+  let endpointProfile: 'coding' | 'coding-intl' | '' = ''
   let isEnterpriseAccount = false
   let awsKeyType: 'ak_sk' | 'api_key' = 'ak_sk'
   let allowServiceTier = false
@@ -593,6 +598,11 @@ export function transformChannelToFormDefaults(
       const parsed = JSON.parse(channel.settings)
       vertexKeyType = parsed.vertex_key_type || 'json'
       azureResponsesVersion = parsed.azure_responses_version || ''
+      endpointProfile =
+        parsed.endpoint_profile === 'coding' ||
+        parsed.endpoint_profile === 'coding-intl'
+          ? parsed.endpoint_profile
+          : ''
       isEnterpriseAccount = parsed.openrouter_enterprise === true
       awsKeyType = parsed.aws_key_type || 'ak_sk'
       allowServiceTier = parsed.allow_service_tier === true
@@ -667,6 +677,7 @@ export function transformChannelToFormDefaults(
     vertex_key_type: vertexKeyType,
     azure_responses_version: azureResponsesVersion,
     aws_key_type: awsKeyType,
+    endpoint_profile: endpointProfile,
     allow_service_tier: allowServiceTier,
     disable_store: disableStore,
     allow_include_obfuscation: allowIncludeObfuscation,
@@ -756,6 +767,18 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.aws_key_type = formData.aws_key_type || 'ak_sk'
   } else if ('aws_key_type' in settingsObj) {
     delete settingsObj.aws_key_type
+  }
+
+  // Add endpoint_profile for Coding Plan capable channels
+  // (VolcEngine 45 / Zhipu V4 26 / Moonshot 25)
+  if ([45, 26, 25].includes(formData.type)) {
+    if (formData.endpoint_profile) {
+      settingsObj.endpoint_profile = formData.endpoint_profile
+    } else if ('endpoint_profile' in settingsObj) {
+      delete settingsObj.endpoint_profile
+    }
+  } else if ('endpoint_profile' in settingsObj) {
+    delete settingsObj.endpoint_profile
   }
 
   // Field passthrough controls:

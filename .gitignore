@@ -50,3 +50,6 @@ go.work.sum
 # Local tooling state (CodeGraph index, OpenCode config).
 .codegraph/
 .opencode/
+
+# Deepwork progress state
+.slim/deepwork/

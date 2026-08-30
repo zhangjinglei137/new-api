@@ -48,29 +48,38 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	baseURL := info.ChannelBaseUrl
-	if specialPlan, ok := channelconstant.ChannelSpecialBases[baseURL]; ok {
-		if info.RelayFormat == types.RelayFormatClaude {
+	specialPlan, _, hasSpecialPlan := channelconstant.ResolveSpecialPlan(info.ChannelType, baseURL, info.ChannelOtherSettings.EndpointProfile)
+	if hasSpecialPlan {
+		switch info.RelayFormat {
+		case types.RelayFormatClaude:
 			return fmt.Sprintf("%s/v1/messages", specialPlan.ClaudeBaseURL), nil
+		case types.RelayFormatOpenAI:
+			if info.RelayMode == constant.RelayModeChatCompletions {
+				return fmt.Sprintf("%s/chat/completions", specialPlan.OpenAIBaseURL), nil
+			}
 		}
-		if info.RelayFormat == types.RelayFormatOpenAI {
-			return fmt.Sprintf("%s/chat/completions", specialPlan.OpenAIBaseURL), nil
-		}
+		// 失败关闭：Coding Plan 套餐不支持该请求模式，绝不回退按量端点
+		return "", types.NewErrorWithStatusCode(
+			errors.New("moonshot coding plan 套餐不支持该请求模式"),
+			types.ErrorCodeBadRequestBody,
+			http.StatusBadRequest,
+		)
 	}
 
 	switch info.RelayFormat {
 	case types.RelayFormatClaude:
-		return fmt.Sprintf("%s/anthropic/v1/messages", info.ChannelBaseUrl), nil
+		return fmt.Sprintf("%s/anthropic/v1/messages", baseURL), nil
 	default:
 		if info.RelayMode == constant.RelayModeRerank {
-			return fmt.Sprintf("%s/v1/rerank", info.ChannelBaseUrl), nil
+			return fmt.Sprintf("%s/v1/rerank", baseURL), nil
 		} else if info.RelayMode == constant.RelayModeEmbeddings {
-			return fmt.Sprintf("%s/v1/embeddings", info.ChannelBaseUrl), nil
+			return fmt.Sprintf("%s/v1/embeddings", baseURL), nil
 		} else if info.RelayMode == constant.RelayModeChatCompletions {
-			return fmt.Sprintf("%s/v1/chat/completions", info.ChannelBaseUrl), nil
+			return fmt.Sprintf("%s/v1/chat/completions", baseURL), nil
 		} else if info.RelayMode == constant.RelayModeCompletions {
-			return fmt.Sprintf("%s/v1/completions", info.ChannelBaseUrl), nil
+			return fmt.Sprintf("%s/v1/completions", baseURL), nil
 		}
-		return fmt.Sprintf("%s/v1/chat/completions", info.ChannelBaseUrl), nil
+		return fmt.Sprintf("%s/v1/chat/completions", baseURL), nil
 	}
 }
 

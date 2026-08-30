@@ -671,6 +671,9 @@ export function ChannelMutateDrawer({
     useState(false)
   const [clipboardConnectionInfo, setClipboardConnectionInfo] =
     useState<ChannelConnectionInfo | null>(null)
+  const [doubaoAccessMode, setDoubaoAccessMode] = useState<
+    'standard' | 'coding' | 'custom'
+  >('standard')
 
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
@@ -1276,6 +1279,69 @@ export function ChannelMutateDrawer({
       setAdvancedSettingsOpen(
         readAdvancedSettingsPreference() || hasAdvancedSettingsValues(defaults)
       )
+      // Restore the VolcEngine access mode from the saved endpoint profile /
+      // base_url (magic key or /api/coding suffix both mean Coding Plan).
+      if (defaults.type === 45) {
+        const baseUrl = String(defaults.base_url || '').trim()
+        const isCoding =
+          defaults.endpoint_profile === 'coding' ||
+          baseUrl === 'doubao-coding-plan' ||
+          baseUrl.endsWith('/api/coding')
+        if (isCoding) {
+          setDoubaoAccessMode('coding')
+          // P1: 存量魔法键渠道（无 endpoint_profile）回显时写回 coding，
+          // 避免「打开→直接保存」后套餐路由丢失（回退按量端点）
+          if (defaults.endpoint_profile !== 'coding') {
+            form.setValue('endpoint_profile', 'coding', {
+              shouldDirty: false,
+              shouldValidate: true,
+            })
+          }
+          // P2-c: 存量魔法键渠道归一 —— 保存后 base_url 存标准区域地址，不再依赖魔法键
+          if (baseUrl === 'doubao-coding-plan') {
+            form.setValue(
+              'base_url',
+              'https://ark.cn-beijing.volces.com',
+              { shouldDirty: false, shouldValidate: true }
+            )
+          }
+        } else if (
+          baseUrl === 'https://ark.cn-beijing.volces.com' ||
+          baseUrl === 'https://ark.ap-southeast.bytepluses.com'
+        ) {
+          setDoubaoAccessMode('standard')
+        } else if (baseUrl) {
+          // 自定义/代理 URL：回显到 custom 分支，避免被标准区域下拉覆盖
+          setDoubaoAccessMode('custom')
+        } else {
+          setDoubaoAccessMode('standard')
+        }
+      }
+      // Restore the access mode for Zhipu V4 (26) / Moonshot (25):
+      // endpoint_profile already parsed by transformChannelToFormDefaults, the
+      // access mode Select binds to the endpoint_profile form field directly.
+      // 存量魔法键渠道（无 endpoint_profile）从 base_url 反推 profile，保证回显一致。
+      if (defaults.type === 26 || defaults.type === 25) {
+        const baseUrl = String(defaults.base_url || '').trim()
+        if (!defaults.endpoint_profile) {
+          if (baseUrl === 'glm-coding-plan') {
+            form.setValue('endpoint_profile', 'coding', {
+              shouldDirty: false,
+              shouldValidate: true,
+            })
+          } else if (baseUrl === 'glm-coding-plan-international') {
+            form.setValue('endpoint_profile', 'coding-intl', {
+              shouldDirty: false,
+              shouldValidate: true,
+            })
+          } else if (baseUrl === 'kimi-coding-plan') {
+            form.setValue('endpoint_profile', 'coding', {
+              shouldDirty: false,
+              shouldValidate: true,
+            })
+          }
+        }
+      }
       // Store initial values for comparison
       initialModelsRef.current = parseModelsString(
         channelData.data.models || ''
@@ -1285,6 +1351,7 @@ export function ChannelMutateDrawer({
         channelData.data.status_code_mapping || ''
     } else if (!isEditing) {
       form.reset(CHANNEL_FORM_DEFAULT_VALUES)
+      setDoubaoAccessMode('standard')
       setAdvancedSettingsOpen(false)
       initialModelsRef.current = []
       initialModelMappingRef.current = ''
@@ -1353,15 +1420,6 @@ export function ChannelMutateDrawer({
       }
     }
   }, [currentType, isEditing, form])
-
-  useEffect(() => {
-    if (currentType !== 45 || currentBaseUrl !== 'doubao-coding-plan') return
-
-    form.setValue('base_url', 'https://ark.cn-beijing.volces.com', {
-      shouldDirty: false,
-      shouldValidate: true,
-    })
-  }, [currentBaseUrl, currentType, form])
 
   useEffect(() => {
     if (isEditing || supportsMultiKeyAddMode) return
@@ -1913,6 +1971,7 @@ export function ChannelMutateDrawer({
       onOpenChange(v)
       if (!v) {
         form.reset(CHANNEL_FORM_DEFAULT_VALUES)
+        setDoubaoAccessMode('standard')
         advancedNavScrollPendingRef.current = false
         setActiveEditorSectionId(CHANNEL_EDITOR_SECTION_IDS.identity)
         setExpandedEditorNavItemId(undefined)
@@ -2718,71 +2777,238 @@ export function ChannelMutateDrawer({
 
                             {/* VolcEngine (type 45) */}
                             {currentType === 45 && !doubaoApiEditUnlocked && (
-                              <FormField
-                                control={form.control}
-                                name='base_url'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel
-                                      className='cursor-pointer select-none'
-                                      onClick={handleApiConfigSecretClick}
-                                    >
-                                      {t('API Base URL *')}
-                                    </FormLabel>
-                                    <Select
-                                      items={[
-                                        {
-                                          value:
-                                            'https://ark.cn-beijing.volces.com',
-                                          label: t(
-                                            'https://ark.cn-beijing.volces.com'
-                                          ),
-                                        },
-                                        {
-                                          value:
-                                            'https://ark.ap-southeast.bytepluses.com',
-                                          label: t(
-                                            'https://ark.ap-southeast.bytepluses.com'
-                                          ),
-                                        },
-                                      ]}
-                                      onValueChange={field.onChange}
-                                      value={
-                                        field.value === 'doubao-coding-plan'
-                                          ? 'https://ark.cn-beijing.volces.com'
-                                          : field.value ||
-                                            'https://ark.cn-beijing.volces.com'
-                                      }
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger>
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent
-                                        alignItemWithTrigger={false}
+                              <div className='flex flex-col gap-4'>
+                                <FormField
+                                  control={form.control}
+                                  name='base_url'
+                                  render={() => (
+                                    <FormItem>
+                                      <FormLabel
+                                        className='cursor-pointer select-none'
+                                        onClick={handleApiConfigSecretClick}
                                       >
-                                        <SelectGroup>
-                                          <SelectItem value='https://ark.cn-beijing.volces.com'>
-                                            {t(
-                                              'https://ark.cn-beijing.volces.com'
-                                            )}
-                                          </SelectItem>
-                                          <SelectItem value='https://ark.ap-southeast.bytepluses.com'>
-                                            {t(
-                                              'https://ark.ap-southeast.bytepluses.com'
-                                            )}
-                                          </SelectItem>
-                                        </SelectGroup>
-                                      </SelectContent>
-                                    </Select>
-                                    <FormDescription>
-                                      {t('Select the API endpoint region')}
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
+                                        {t('Access Mode')}
+                                      </FormLabel>
+                                      <Select
+                                        items={[
+                                          {
+                                            value: 'standard',
+                                            label: t('Pay-as-you-go'),
+                                          },
+                                          {
+                                            value: 'coding',
+                                            label: t('Coding Plan'),
+                                          },
+                                          {
+                                            value: 'custom',
+                                            label: t('Custom URL'),
+                                          },
+                                        ]}
+                                        onValueChange={(value) => {
+                                          const mode = value as
+                                            | 'standard'
+                                            | 'coding'
+                                            | 'custom'
+                                          setDoubaoAccessMode(mode)
+                                          if (mode === 'coding') {
+                                            form.setValue(
+                                              'base_url',
+                                              'https://ark.cn-beijing.volces.com',
+                                              {
+                                                shouldDirty: true,
+                                                shouldValidate: true,
+                                              }
+                                            )
+                                            form.setValue(
+                                              'endpoint_profile',
+                                              'coding',
+                                              {
+                                                shouldDirty: true,
+                                                shouldValidate: true,
+                                              }
+                                            )
+                                          } else {
+                                            if (mode === 'standard') {
+                                              form.setValue(
+                                                'base_url',
+                                                'https://ark.cn-beijing.volces.com',
+                                                {
+                                                  shouldDirty: true,
+                                                  shouldValidate: true,
+                                                }
+                                              )
+                                            }
+                                            form.setValue(
+                                              'endpoint_profile',
+                                              '',
+                                              {
+                                                shouldDirty: true,
+                                                shouldValidate: true,
+                                              }
+                                            )
+                                          }
+                                        }}
+                                        value={doubaoAccessMode}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent
+                                          alignItemWithTrigger={false}
+                                        >
+                                          <SelectGroup>
+                                            <SelectItem value='standard'>
+                                              {t('Pay-as-you-go')}
+                                            </SelectItem>
+                                            <SelectItem value='coding'>
+                                              {t('Coding Plan')}
+                                            </SelectItem>
+                                            <SelectItem value='custom'>
+                                              {t('Custom URL')}
+                                            </SelectItem>
+                                          </SelectGroup>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormDescription>
+                                        {t(
+                                          'Select the access mode for this VolcEngine channel'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {doubaoAccessMode === 'standard' && (
+                                  <FormField
+                                    control={form.control}
+                                    name='base_url'
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          {t('Deployment Region *')}
+                                        </FormLabel>
+                                        <Select
+                                          items={[
+                                            {
+                                              value:
+                                                'https://ark.cn-beijing.volces.com',
+                                              label: t(
+                                                'https://ark.cn-beijing.volces.com'
+                                              ),
+                                            },
+                                            {
+                                              value:
+                                                'https://ark.ap-southeast.bytepluses.com',
+                                              label: t(
+                                                'https://ark.ap-southeast.bytepluses.com'
+                                              ),
+                                            },
+                                          ]}
+                                          onValueChange={field.onChange}
+                                          value={
+                                            field.value ||
+                                            'https://ark.cn-beijing.volces.com'
+                                          }
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger>
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent
+                                            alignItemWithTrigger={false}
+                                          >
+                                            <SelectGroup>
+                                              <SelectItem value='https://ark.cn-beijing.volces.com'>
+                                                {t(
+                                                  'https://ark.cn-beijing.volces.com'
+                                                )}
+                                              </SelectItem>
+                                              <SelectItem value='https://ark.ap-southeast.bytepluses.com'>
+                                                {t(
+                                                  'https://ark.ap-southeast.bytepluses.com'
+                                                )}
+                                              </SelectItem>
+                                            </SelectGroup>
+                                          </SelectContent>
+                                        </Select>
+                                        <FormDescription>
+                                          {t(
+                                            'Pay-as-you-go online inference with a selectable region'
+                                          )}
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
                                 )}
-                              />
+
+                                {doubaoAccessMode === 'coding' && (
+                                  <>
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('Coding Plan Endpoints')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          readOnly
+                                          value={t(
+                                            'Endpoints: OpenAI compatible {{openaiEndpoint}} · Anthropic {{anthropicEndpoint}}',
+                                            {
+                                              openaiEndpoint:
+                                                'https://ark.cn-beijing.volces.com/api/coding/v3',
+                                              anthropicEndpoint:
+                                                'https://ark.cn-beijing.volces.com/api/coding',
+                                            }
+                                          )}
+                                          className='font-mono'
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'VolcEngine Coding Plan subscription (OpenAI / Anthropic compatible endpoints)'
+                                        )}
+                                      </FormDescription>
+                                    </FormItem>
+                                    <Alert>
+                                      <AlertDescription>
+                                        {t(
+                                          'Enter the Coding Plan logical model name (deepseek-v3.2 / doubao-seed-code / kimi-k2.5 / ark-code-latest). Do not use online inference Model IDs with date suffixes.'
+                                        )}
+                                      </AlertDescription>
+                                    </Alert>
+                                  </>
+                                )}
+
+                                {doubaoAccessMode === 'custom' && (
+                                  <FormField
+                                    control={form.control}
+                                    name='base_url'
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          {t('API Base URL *')}
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder={t(
+                                              'e.g., https://ark.cn-beijing.volces.com'
+                                            )}
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          {t('Enter a custom API base URL')}
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                )}
+                              </div>
                             )}
 
                             {/* VolcEngine (type 45) - Custom API URL (unlocked) */}
@@ -2826,6 +3052,118 @@ export function ChannelMutateDrawer({
                                     </FormControl>
                                     <FormDescription>
                                       {t('Enter the Coze agent ID')}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+
+                            {/* Access mode for Coding Plan capable channels (Zhipu V4 26 / Moonshot 25) */}
+                            {[26, 25].includes(currentType) && (
+                              <FormField
+                                control={form.control}
+                                name='endpoint_profile'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Access Mode')}
+                                    </FormLabel>
+                                    <Select
+                                      items={[
+                                        {
+                                          value: 'standard',
+                                          label: t('Pay-as-you-go'),
+                                        },
+                                        {
+                                          value: 'coding',
+                                          label: t('Coding Plan'),
+                                        },
+                                        ...(currentType === 26
+                                          ? [
+                                              {
+                                                value: 'coding-intl',
+                                                label: t(
+                                                  'Coding Plan (International)'
+                                                ),
+                                              },
+                                            ]
+                                          : []),
+                                      ]}
+                                      onValueChange={(value) => {
+                                        const mode =
+                                          value === 'coding-intl'
+                                            ? 'coding-intl'
+                                            : value === 'coding'
+                                              ? 'coding'
+                                              : 'standard'
+                                        if (mode === 'standard') {
+                                          field.onChange('')
+                                          if (currentType === 26) {
+                                            form.setValue(
+                                              'base_url',
+                                              'https://open.bigmodel.cn',
+                                              { shouldDirty: true }
+                                            )
+                                          } else {
+                                            form.setValue(
+                                              'base_url',
+                                              'https://api.moonshot.cn',
+                                              { shouldDirty: true }
+                                            )
+                                          }
+                                        } else {
+                                          field.onChange(mode)
+                                          if (currentType === 26) {
+                                            form.setValue(
+                                              'base_url',
+                                              mode === 'coding-intl'
+                                                ? 'https://api.z.ai'
+                                                : 'https://open.bigmodel.cn',
+                                              { shouldDirty: true }
+                                            )
+                                          } else {
+                                            form.setValue(
+                                              'base_url',
+                                              'https://api.moonshot.cn',
+                                              { shouldDirty: true }
+                                            )
+                                          }
+                                        }
+                                      }}
+                                      value={field.value || 'standard'}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent
+                                        alignItemWithTrigger={false}
+                                      >
+                                        <SelectGroup>
+                                          <SelectItem value='standard'>
+                                            {t('Pay-as-you-go')}
+                                          </SelectItem>
+                                          <SelectItem value='coding'>
+                                            {t('Coding Plan')}
+                                          </SelectItem>
+                                          {currentType === 26 && (
+                                            <SelectItem value='coding-intl'>
+                                              {t('Coding Plan (International)')}
+                                            </SelectItem>
+                                          )}
+                                        </SelectGroup>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormDescription>
+                                      {currentType === 26
+                                        ? t(
+                                            'Select the access mode for this Zhipu V4 channel'
+                                          )
+                                        : t(
+                                            'Select the access mode for this Moonshot channel'
+                                          )}
                                     </FormDescription>
                                     <FormMessage />
                                   </FormItem>

@@ -990,6 +990,15 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	if endpointProfile := channelOtherSettings.EndpointProfile; endpointProfile != "" {
+		profiles, supportedType := constant.ChannelSpecialPlanProfiles[channel.Type]
+		if !supportedType {
+			return fmt.Errorf("endpoint_profile is not supported for channel type %d", channel.Type)
+		}
+		if _, ok := profiles[endpointProfile]; !ok {
+			return fmt.Errorf("invalid endpoint_profile: %s", endpointProfile)
+		}
+	}
 	if constant.IsAdvancedCustomChannelType(channel.Type) {
 		if channelOtherSettings.AdvancedCustom == nil {
 			return fmt.Errorf("advanced_custom is required")

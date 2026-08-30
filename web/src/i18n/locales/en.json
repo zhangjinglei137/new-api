@@ -5355,6 +5355,20 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Access Mode": "Access Mode",
+    "Pay-as-you-go": "Pay-as-you-go",
+    "Coding Plan": "Coding Plan",
+    "Coding Plan (International)": "Coding Plan (International)",
+    "Custom URL": "Custom URL",
+    "Select the access mode for this VolcEngine channel": "Select the access mode for this VolcEngine channel",
+    "Select the access mode for this Zhipu V4 channel": "Select the access mode for this Zhipu V4 channel",
+    "Select the access mode for this Moonshot channel": "Select the access mode for this Moonshot channel",
+    "Pay-as-you-go online inference with a selectable region": "Pay-as-you-go online inference with a selectable region",
+    "VolcEngine Coding Plan subscription (OpenAI / Anthropic compatible endpoints)": "VolcEngine Coding Plan subscription (OpenAI / Anthropic compatible endpoints)",
+    "Enter a custom API base URL": "Enter a custom API base URL",
+    "Endpoints: OpenAI compatible {{openaiEndpoint}} · Anthropic {{anthropicEndpoint}}": "Endpoints: OpenAI compatible {{openaiEndpoint}} · Anthropic {{anthropicEndpoint}}",
+    "Enter the Coding Plan logical model name (deepseek-v3.2 / doubao-seed-code / kimi-k2.5 / ark-code-latest). Do not use online inference Model IDs with date suffixes.": "Enter the Coding Plan logical model name (deepseek-v3.2 / doubao-seed-code / kimi-k2.5 / ark-code-latest). Do not use online inference Model IDs with date suffixes.",
+    "Do not fill in the pay-as-you-go online inference Model ID (with date suffix)": "Do not fill in the pay-as-you-go online inference Model ID (with date suffix)"
   }
 }

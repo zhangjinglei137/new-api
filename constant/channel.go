@@ -260,6 +260,42 @@ var ChannelSpecialBases = map[string]ChannelSpecialBase{
 	},
 }
 
+// ChannelSpecialPlanProfiles 定义各渠道类型支持的套餐端点 profile 到魔法键的映射。
+var ChannelSpecialPlanProfiles = map[int]map[string]string{
+	ChannelTypeVolcEngine: {
+		"coding": "doubao-coding-plan",
+	},
+	ChannelTypeZhipu_v4: {
+		"coding":      "glm-coding-plan",
+		"coding-intl": "glm-coding-plan-international",
+	},
+	ChannelTypeMoonshot: {
+		"coding": "kimi-coding-plan",
+	},
+}
+
+// ResolveSpecialPlan 按 显式 profile > 存量 base_url 魔法键 顺序解析套餐端点。
+// 返回命中的端点信息、命中用的魔法键以及是否命中套餐。未命中套餐时返回空值与 false。
+func ResolveSpecialPlan(channelType int, baseURL, endpointProfile string) (ChannelSpecialBase, string, bool) {
+	if endpointProfile != "" {
+		if profiles, ok := ChannelSpecialPlanProfiles[channelType]; ok {
+			if magicKey, ok := profiles[endpointProfile]; ok {
+				if plan, ok := ChannelSpecialBases[magicKey]; ok {
+					return plan, magicKey, true
+				}
+			}
+		}
+	}
+	// 存量兼容：base_url 直接填魔法键（无显式 profile）时同样命中。
+	// 限定 channelType 支持特殊套餐，避免其它渠道类型误命中魔法键表。
+	if _, typeOk := ChannelSpecialPlanProfiles[channelType]; typeOk {
+		if plan, ok := ChannelSpecialBases[baseURL]; ok {
+			return plan, baseURL, true
+		}
+	}
+	return ChannelSpecialBase{}, "", false
+}
+
 func IsAdvancedCustomChannelType(t int) bool {
 	return t == ChannelTypeAdvancedCustom || t == ChannelTypeOpenCodeGo
 }

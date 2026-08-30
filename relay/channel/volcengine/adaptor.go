@@ -38,7 +38,7 @@ func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dt
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, req *dto.ClaudeRequest) (any, error) {
-	if _, ok := channelconstant.ChannelSpecialBases[info.ChannelBaseUrl]; ok {
+	if _, _, hasSpecialPlan := channelconstant.ResolveSpecialPlan(info.ChannelType, info.ChannelBaseUrl, info.ChannelOtherSettings.EndpointProfile); hasSpecialPlan {
 		adaptor := claude.Adaptor{}
 		return adaptor.ConvertClaudeRequest(c, info, req)
 	}
@@ -241,13 +241,27 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if baseUrl == "" {
 		baseUrl = channelconstant.ChannelBaseURLs[channelconstant.ChannelTypeVolcEngine]
 	}
-	specialPlan, hasSpecialPlan := channelconstant.ChannelSpecialBases[baseUrl]
+	specialPlan, _, hasSpecialPlan := channelconstant.ResolveSpecialPlan(info.ChannelType, baseUrl, info.ChannelOtherSettings.EndpointProfile)
+
+	if hasSpecialPlan {
+		switch info.RelayFormat {
+		case types.RelayFormatClaude:
+			return fmt.Sprintf("%s/v1/messages", specialPlan.ClaudeBaseURL), nil
+		case types.RelayFormatOpenAI:
+			if info.RelayMode == constant.RelayModeChatCompletions {
+				return fmt.Sprintf("%s/chat/completions", specialPlan.OpenAIBaseURL), nil
+			}
+		}
+		// 失败关闭：Coding Plan 套餐不支持该请求模式，绝不回退按量 /api/v3 端点
+		return "", types.NewErrorWithStatusCode(
+			errors.New("volcengine coding plan 套餐不支持该请求模式"),
+			types.ErrorCodeBadRequestBody,
+			http.StatusBadRequest,
+		)
+	}
 
 	switch info.RelayFormat {
 	case types.RelayFormatClaude:
-		if hasSpecialPlan && specialPlan.ClaudeBaseURL != "" {
-			return fmt.Sprintf("%s/v1/messages", specialPlan.ClaudeBaseURL), nil
-		}
 		if strings.HasPrefix(info.UpstreamModelName, "bot") {
 			return fmt.Sprintf("%s/api/v3/bots/chat/completions", baseUrl), nil
 		}
@@ -255,9 +269,6 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	default:
 		switch info.RelayMode {
 		case constant.RelayModeChatCompletions:
-			if hasSpecialPlan && specialPlan.OpenAIBaseURL != "" {
-				return fmt.Sprintf("%s/chat/completions", specialPlan.OpenAIBaseURL), nil
-			}
 			if strings.HasPrefix(info.UpstreamModelName, "bot") {
 				return fmt.Sprintf("%s/api/v3/bots/chat/completions", baseUrl), nil
 			}
@@ -347,7 +358,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
 	if info.RelayFormat == types.RelayFormatClaude {
-		if _, ok := channelconstant.ChannelSpecialBases[info.ChannelBaseUrl]; ok {
+		if _, _, hasSpecialPlan := channelconstant.ResolveSpecialPlan(info.ChannelType, info.ChannelBaseUrl, info.ChannelOtherSettings.EndpointProfile); hasSpecialPlan {
 			adaptor := claude.Adaptor{}
 			return adaptor.DoResponse(c, resp, info)
 		}

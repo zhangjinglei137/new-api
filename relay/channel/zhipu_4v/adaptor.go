@@ -48,30 +48,48 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if baseURL == "" {
 		baseURL = channelconstant.ChannelBaseURLs[channelconstant.ChannelTypeZhipu_v4]
 	}
-	specialPlan, hasSpecialPlan := channelconstant.ChannelSpecialBases[baseURL]
+	specialPlan, _, hasSpecialPlan := channelconstant.ResolveSpecialPlan(info.ChannelType, baseURL, info.ChannelOtherSettings.EndpointProfile)
 
 	switch info.RelayFormat {
 	case types.RelayFormatClaude:
-		if hasSpecialPlan && specialPlan.ClaudeBaseURL != "" {
+		if hasSpecialPlan {
 			return fmt.Sprintf("%s/v1/messages", specialPlan.ClaudeBaseURL), nil
 		}
 		return fmt.Sprintf("%s/api/anthropic/v1/messages", baseURL), nil
 	default:
 		switch info.RelayMode {
 		case relayconstant.RelayModeEmbeddings:
-			if hasSpecialPlan && specialPlan.OpenAIBaseURL != "" {
-				return fmt.Sprintf("%s/embeddings", specialPlan.OpenAIBaseURL), nil
+			if hasSpecialPlan {
+				// 失败关闭：Coding Plan 套餐不支持该请求模式，绝不回退按量 /api/paas/v4 端点
+				return "", types.NewErrorWithStatusCode(
+					errors.New("zhipu coding plan 套餐不支持 embeddings 请求"),
+					types.ErrorCodeBadRequestBody,
+					http.StatusBadRequest,
+				)
 			}
 			return fmt.Sprintf("%s/api/paas/v4/embeddings", baseURL), nil
 		case relayconstant.RelayModeImagesGenerations:
-			if hasSpecialPlan && specialPlan.OpenAIBaseURL != "" {
-				return fmt.Sprintf("%s/images/generations", specialPlan.OpenAIBaseURL), nil
+			if hasSpecialPlan {
+				// 失败关闭：Coding Plan 套餐不支持该请求模式，绝不回退按量 /api/paas/v4 端点
+				return "", types.NewErrorWithStatusCode(
+					errors.New("zhipu coding plan 套餐不支持图片生成请求"),
+					types.ErrorCodeBadRequestBody,
+					http.StatusBadRequest,
+				)
 			}
 			return fmt.Sprintf("%s/api/paas/v4/images/generations", baseURL), nil
 		case relayconstant.RelayModeResponses:
+			if hasSpecialPlan {
+				// 失败关闭：Coding Plan 套餐不支持该请求模式，绝不回退按量 /api/paas/v4 端点
+				return "", types.NewErrorWithStatusCode(
+					errors.New("zhipu coding plan 套餐不支持该请求模式"),
+					types.ErrorCodeBadRequestBody,
+					http.StatusBadRequest,
+				)
+			}
 			return fmt.Sprintf("%s/api/v1/responses", baseURL), nil
 		default:
-			if hasSpecialPlan && specialPlan.OpenAIBaseURL != "" {
+			if hasSpecialPlan {
 				return fmt.Sprintf("%s/chat/completions", specialPlan.OpenAIBaseURL), nil
 			}
 			return fmt.Sprintf("%s/api/paas/v4/chat/completions", baseURL), nil
