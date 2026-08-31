@@ -182,7 +182,9 @@ function normalizeCapabilityGroup(value: unknown): CapabilityGroup {
 /**
  * Parse a stored capabilities JSON string into editor groups.
  * - Empty string → one empty group.
- * - Legacy single-group shape is normalized to a "chat" group.
+ * - `{"groups":[...]}` (current backend contract) → each group mapped.
+ * - Bare-array shape written by earlier editor versions → mapped as groups.
+ * - Legacy single-group flat shape → normalized to a "chat" group.
  * - Invalid/unknown JSON → one empty group (kept for user inspection).
  */
 export function parseCapabilitiesToGroups(capabilities: string): CapabilityGroup[] {
@@ -195,6 +197,17 @@ export function parseCapabilitiesToGroups(capabilities: string): CapabilityGroup
     parsed = JSON.parse(capabilities)
   } catch {
     return [{ name: '' }]
+  }
+
+  // Current backend contract: `{"groups":[...]}`.
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const groups = (parsed as Record<string, unknown>).groups
+    if (Array.isArray(groups)) {
+      const mapped = groups
+        .map(normalizeCapabilityGroup)
+        .filter((group) => group.name.trim() !== '')
+      return mapped.length > 0 ? mapped : [{ name: '' }]
+    }
   }
 
   if (Array.isArray(parsed)) {
@@ -217,6 +230,9 @@ export function parseCapabilitiesToGroups(capabilities: string): CapabilityGroup
  * Serialize editor groups into the capabilities JSON string following the
  * backend contract: `{"groups":[{"name":"chat","modalities":{"input":[...],
  * "output":[...]},"limits":{...},"reasoning_options":[{"type":"low"}]}]}`.
+ * - The payload is wrapped under a `groups` key: the backend validator
+ *   (`controller/model_meta.go`) only accepts object shapes, so writing a
+ *   bare array would be rejected with "capabilities 不是合法的 JSON".
  * - Empty modality arrays are not written.
  * - Empty limits values are not written.
  * - A group that only has a name still produces `{"name": "..."}`.
@@ -252,7 +268,7 @@ export function serializeGroupsToCapabilities(groups: CapabilityGroup[]): string
       return entry
     })
   if (payload.length === 0) return ''
-  return JSON.stringify(payload)
+  return JSON.stringify({ groups: payload })
 }
 
 /**

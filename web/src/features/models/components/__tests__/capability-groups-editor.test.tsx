@@ -43,6 +43,18 @@ const GROUPS_SAMPLE = JSON.stringify([
   { name: 'image', modalities: { input: ['image'] } },
 ])
 
+// Current backend contract shape (as written by model sync and the editor).
+const WRAPPED_GROUPS_SAMPLE = JSON.stringify({
+  groups: [
+    {
+      name: 'chat',
+      modalities: { input: ['text'], output: ['text'] },
+      reasoning_options: [{ type: 'effort', values: ['high'] }],
+    },
+    { name: 'image', modalities: { input: ['image'] } },
+  ],
+})
+
 describe('parseCapabilitiesToGroups', () => {
   test('maps object-shaped reasoning_options to their type strings in the legacy format', () => {
     const groups = parseCapabilitiesToGroups(LEGACY_SAMPLE)
@@ -65,6 +77,23 @@ describe('parseCapabilitiesToGroups', () => {
     expect(groups[0].reasoning_options).toEqual(['effort'])
     expect(groups[1].name).toBe('image')
     expect(groups[1].input).toEqual(['image'])
+  })
+
+  test('reads the wrapped groups object written by the current backend contract', () => {
+    const groups = parseCapabilitiesToGroups(WRAPPED_GROUPS_SAMPLE)
+
+    expect(groups).toHaveLength(2)
+    expect(groups[0].name).toBe('chat')
+    expect(groups[0].input).toEqual(['text'])
+    expect(groups[0].reasoning_options).toEqual(['effort'])
+    expect(groups[1].name).toBe('image')
+    expect(groups[1].input).toEqual(['image'])
+  })
+
+  test('treats an empty groups array as an empty group', () => {
+    const groups = parseCapabilitiesToGroups(JSON.stringify({ groups: [] }))
+
+    expect(groups).toEqual([{ name: '' }])
   })
 
   test('keeps string entries and maps objects when both are mixed', () => {
@@ -95,13 +124,15 @@ describe('serializeGroupsToCapabilities', () => {
       { name: 'chat', input: ['text'], reasoning_options: ['low', 'effort'] },
     ])
 
-    const parsed = JSON.parse(serialized) as Array<Record<string, unknown>>
-    expect(parsed).toHaveLength(1)
-    expect(parsed[0].name).toBe('chat')
+    const parsed = JSON.parse(serialized) as {
+      groups: Array<Record<string, unknown>>
+    }
+    expect(parsed.groups).toHaveLength(1)
+    expect(parsed.groups[0].name).toBe('chat')
     // Backend contract: modalities is a nested object.
-    expect(parsed[0].modalities).toEqual({ input: ['text'] })
+    expect(parsed.groups[0].modalities).toEqual({ input: ['text'] })
     // Backend contract: reasoning_options is an object array.
-    expect(parsed[0].reasoning_options).toEqual([
+    expect(parsed.groups[0].reasoning_options).toEqual([
       { type: 'low' },
       { type: 'effort' },
     ])
@@ -113,23 +144,27 @@ describe('serializeGroupsToCapabilities', () => {
       { name: 'empty-ish' },
     ])
 
-    const parsed = JSON.parse(serialized) as Array<Record<string, unknown>>
-    expect(parsed[0]).toEqual({ name: 'chat' })
-    expect(parsed[1]).toEqual({ name: 'empty-ish' })
+    const parsed = JSON.parse(serialized) as {
+      groups: Array<Record<string, unknown>>
+    }
+    expect(parsed.groups[0]).toEqual({ name: 'chat' })
+    expect(parsed.groups[1]).toEqual({ name: 'empty-ish' })
   })
 
   test('round-trips a parsed legacy sample into valid JSON without objects', () => {
     const groups = parseCapabilitiesToGroups(LEGACY_SAMPLE)
     const serialized = serializeGroupsToCapabilities(groups)
-    const parsed = JSON.parse(serialized) as Array<Record<string, unknown>>
+    const parsed = JSON.parse(serialized) as {
+      groups: Array<Record<string, unknown>>
+    }
 
-    expect(parsed[0].name).toBe('chat')
-    expect(parsed[0].modalities).toEqual({
+    expect(parsed.groups[0].name).toBe('chat')
+    expect(parsed.groups[0].modalities).toEqual({
       input: ['text', 'image'],
       output: ['text'],
     })
-    expect(parsed[0].reasoning_options).toEqual([{ type: 'effort' }])
-    expect(parsed[0].limits).toEqual({ context: 128000, output: 8192 })
+    expect(parsed.groups[0].reasoning_options).toEqual([{ type: 'effort' }])
+    expect(parsed.groups[0].limits).toEqual({ context: 128000, output: 8192 })
   })
 })
 
