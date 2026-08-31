@@ -78,15 +78,106 @@ function isLegacyCapabilitiesShape(value: unknown): value is LegacyCapabilitiesS
   )
 }
 
-function isCapabilityGroupShape(value: unknown): value is CapabilityGroup {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const record = value as Record<string, unknown>
-  return typeof record.name === 'string' && record.name.trim() !== ''
-}
-
 // ============================================================================
 // Capabilities JSON <-> editor groups
 // ============================================================================
+
+/**
+ * Coerce an unknown value into a string array, dropping any non-string
+ * entries. Empty or all-invalid arrays become `undefined` so the key is
+ * omitted from the generated JSON.
+ */
+function toStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const strings = value.filter(
+    (item): item is string => typeof item === 'string' && item.trim() !== ''
+  )
+  return strings.length > 0 ? strings : undefined
+}
+
+/**
+ * Coerce stored `reasoning_options` (array of objects and/or strings) into
+ * the editor's string values. Upstream catalogs (e.g. opencode-go) store
+ * object entries like `[{"type":"effort","values":["high","max"]}]`; their
+ * `type` is kept so the option stays visible and editable. Rendering objects
+ * directly would crash chip rendering (React error #31).
+ */
+function reasoningOptionsToStrings(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const strings: string[] = []
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim() !== '') {
+      strings.push(item)
+    } else if (item && typeof item === 'object') {
+      const type = (item as Record<string, unknown>).type
+      if (typeof type === 'string' && type.trim() !== '') {
+        strings.push(type)
+      }
+    }
+  }
+  return strings.length > 0 ? strings : undefined
+}
+
+/**
+ * Serialize the editor's string reasoning options into the persisted object
+ * array shape `[{"type":"low"}]` required by the backend's rich model
+ * metadata output (`reasoning_options: []map[string]any`).
+ */
+function reasoningOptionsToObjects(
+  values: string[] | undefined
+): Array<{ type: string }> | undefined {
+  if (!values || values.length === 0) return undefined
+  const types = values
+    .map((value) => value.trim())
+    .filter((value) => value !== '')
+  return types.length > 0 ? types.map((type) => ({ type })) : undefined
+}
+
+/**
+ * Normalize a parsed group into the editor shape: string-array modalities and
+ * reasoning options, non-negative integer limits. Invalid entries are dropped.
+ * Accepts both the nested shape (`modalities: { input, output }`, backend
+ * contract) and the flat shape (`input`/`output` keys) written by earlier
+ * editor versions.
+ */
+function normalizeCapabilityGroup(value: unknown): CapabilityGroup {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { name: '' }
+  }
+  const record = value as Record<string, unknown>
+  const modalities =
+    record.modalities && typeof record.modalities === 'object'
+      ? (record.modalities as Record<string, unknown>)
+      : undefined
+  const normalized: CapabilityGroup = {
+    name: typeof record.name === 'string' ? record.name : '',
+  }
+  const input = toStringArray(record.input ?? modalities?.input)
+  const output = toStringArray(record.output ?? modalities?.output)
+  const reasoningOptions = reasoningOptionsToStrings(record.reasoning_options)
+  if (input) normalized.input = input
+  if (output) normalized.output = output
+  if (reasoningOptions) normalized.reasoning_options = reasoningOptions
+  const limits = record.limits
+  if (limits && typeof limits === 'object') {
+    const rawLimits = limits as Record<string, unknown>
+    const normalizedLimits: CapabilityLimits = {}
+    for (const key of ['context', 'output'] as const) {
+      const raw = rawLimits[key]
+      if (
+        typeof raw === 'number' &&
+        Number.isInteger(raw) &&
+        raw >= 0
+      ) {
+        normalizedLimits[key] = raw
+      }
+    }
+    if (Object.keys(normalizedLimits).length > 0) {
+      normalized.limits = normalizedLimits
+    }
+  }
+  return normalized
+}
 
 /**
  * Parse a stored capabilities JSON string into editor groups.
@@ -107,27 +198,15 @@ export function parseCapabilitiesToGroups(capabilities: string): CapabilityGroup
   }
 
   if (Array.isArray(parsed)) {
-    const groups = parsed.filter(isCapabilityGroupShape)
+    const groups = parsed
+      .map(normalizeCapabilityGroup)
+      .filter((group) => group.name.trim() !== '')
     return groups.length > 0 ? groups : [{ name: '' }]
   }
 
   if (isLegacyCapabilitiesShape(parsed)) {
-    const group: CapabilityGroup = { name: 'chat' }
-    if (parsed.modalities?.input?.length) {
-      group.input = parsed.modalities.input
-    }
-    if (parsed.modalities?.output?.length) {
-      group.output = parsed.modalities.output
-    }
-    if (parsed.reasoning_options?.length) {
-      group.reasoning_options = parsed.reasoning_options
-    }
-    if (parsed.limits?.context !== undefined) {
-      group.limits = { ...group.limits, context: parsed.limits.context }
-    }
-    if (parsed.limits?.output !== undefined) {
-      group.limits = { ...group.limits, output: parsed.limits.output }
-    }
+    const group = normalizeCapabilityGroup(parsed)
+    group.name = 'chat'
     return [group]
   }
 
@@ -135,25 +214,29 @@ export function parseCapabilitiesToGroups(capabilities: string): CapabilityGroup
 }
 
 /**
- * Serialize editor groups into the capabilities JSON string.
- * - Omitted (empty) modality arrays are not written.
+ * Serialize editor groups into the capabilities JSON string following the
+ * backend contract: `{"groups":[{"name":"chat","modalities":{"input":[...],
+ * "output":[...]},"limits":{...},"reasoning_options":[{"type":"low"}]}]}`.
+ * - Empty modality arrays are not written.
  * - Empty limits values are not written.
  * - A group that only has a name still produces `{"name": "..."}`.
+ * - Arrays are defensively coerced so objects can never leak into the JSON.
  */
 export function serializeGroupsToCapabilities(groups: CapabilityGroup[]): string {
   const payload = groups
     .filter((group) => group.name.trim() !== '')
     .map((group) => {
       const entry: Record<string, unknown> = { name: group.name.trim() }
-      if (group.input && group.input.length > 0) {
-        entry.input = group.input
+      const input = toStringArray(group.input)
+      const output = toStringArray(group.output)
+      if (input || output) {
+        const modalities: Record<string, string[]> = {}
+        if (input) modalities.input = input
+        if (output) modalities.output = output
+        entry.modalities = modalities
       }
-      if (group.output && group.output.length > 0) {
-        entry.output = group.output
-      }
-      if (group.reasoning_options && group.reasoning_options.length > 0) {
-        entry.reasoning_options = group.reasoning_options
-      }
+      const reasoningOptions = reasoningOptionsToObjects(group.reasoning_options)
+      if (reasoningOptions) entry.reasoning_options = reasoningOptions
       if (group.limits) {
         const limits: Record<string, number> = {}
         if (group.limits.context !== undefined && group.limits.context >= 0) {

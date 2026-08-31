@@ -175,4 +175,24 @@ describe('EndpointManagementDialog layout contract', () => {
     const npmHeader = screen.getByRole('columnheader', { name: 'NPM' })
     expect(npmHeader.className).toContain('w-[26%]')
   })
+
+  test('npm cells override the table overflow so the dropdown is not clipped', async () => {
+    renderDialog()
+
+    await screen.findByText('openai')
+
+    // StaticDataTable cells default to `overflow-hidden`, which would clip the
+    // ComboboxInput dropdown to the cell height (it would appear hidden
+    // behind the next row). The npm cell must opt out via `overflow-visible`.
+    const npmInput = getNpmComboboxForType('openai')
+    const cell = npmInput.closest('td')
+    expect(cell?.className).toContain('overflow-visible')
+    expect(cell?.className).not.toContain('overflow-hidden')
+
+    // Opening the dropdown must render the option list (not clipped away).
+    const user = userEvent.setup()
+    await user.click(npmInput)
+    const listbox = await screen.findByRole('listbox')
+    expect(listbox).toBeInTheDocument()
+  })
 })

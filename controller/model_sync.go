@@ -34,8 +34,9 @@ const (
 )
 
 // openCodeGoProviderVendors 将 api.json 的 provider.npm 值映射为供应商名
-// （主要手段）。仅收录明确一对一的主流 SDK 包；@ai-sdk/openai-compatible
-// 等泛化包不在此映射，交由模型 ID 正则/兜底处理，避免误判。
+// （次要手段，仅当模型 ID 正则未命中时使用）。仅收录明确一对一的主流 SDK
+// 包；@ai-sdk/openai-compatible 等泛化包不在此映射，交由模型 ID 正则/兜底
+// 处理，避免误判。
 // 命名与 DB 既有供应商保持一致（OpenAI、Z.AI、Hunyuan、Qwen、DeepSeek、
 // MiniMax、xAI、Nvidia、Moonshot、OpenRouter、OpenCode Go 等），避免同一
 // 厂商建出多个供应商；未收录的厂商按规范英文名新建。
@@ -83,10 +84,11 @@ func openCodeGoVendorForProvider(npm string) string {
 	return openCodeGoProviderVendors[npm]
 }
 
-// openCodeGoVendorRules 按模型 id 前缀正则归属供应商（次要手段）：本地已存在
-// 则复用（ensureVendorID 先查 DB），不存在则创建；匹配不到兜底 openCodeGoSyncVendor。
-// 规则按序匹配，命中最特异的放前面；Provider(npm) 映射优先于本规则（见
-// openCodeGoVendorForModelAndProvider）。
+// openCodeGoVendorRules 按模型 id 前缀正则归属供应商（主要手段）：本地已存在
+// 则复用（ensureVendorID 先查 DB），不存在则创建；匹配不到时回退 provider
+// 映射，再兜底 openCodeGoSyncVendor。规则按序匹配，命中最特异的放前面；
+// 本规则优先于 Provider(npm) 映射（见 openCodeGoVendorForModelAndProvider）。
+// 供应商名经上游 api.json 查证（name 字段/独立分组名），与 DB 既有命名一致。
 var openCodeGoVendorRules = []struct {
 	re     *regexp.Regexp
 	vendor string
@@ -116,6 +118,22 @@ var openCodeGoVendorRules = []struct {
 	{regexp.MustCompile(`^o1-`), "OpenAI"},
 	{regexp.MustCompile(`^o3-`), "OpenAI"},
 	{regexp.MustCompile(`^o4-`), "OpenAI"},
+	// opencode-go 分组前缀补全（供应商名经上游 api.json 查证）：
+	// longcat 有独立分组 name="LongCat"；ling/ring 为 InclusionAI 产品线
+	// （llmgateway 分组 name="InclusionAI Ling 3.0 Flash"）；north 为
+	// Cohere 产品（cohere 分组 north-mini-code-1-0）；trinity 为 Arcee
+	// 产品（arcee 分组 trinity-large-thinking）；muse-spark 在各聚合分组
+	// 均挂 meta/ 前缀（openrouter 分组 meta/muse-spark-*）；ox-alpha 仅
+	// 存在于 opencode-go/opencode 分组（OpenCode 生态自家模型）。
+	{regexp.MustCompile(`^longcat-`), "LongCat"},
+	{regexp.MustCompile(`^ling-`), "InclusionAI"},
+	{regexp.MustCompile(`^ring-`), "InclusionAI"},
+	{regexp.MustCompile(`^north-`), "Cohere"},
+	{regexp.MustCompile(`^trinity-`), "Arcee"},
+	{regexp.MustCompile(`^muse-`), "Meta"},
+	{regexp.MustCompile(`^ox-`), "OpenCode Go"},
+	{regexp.MustCompile(`^big-pickle`), "OpenCode Go"},
+	{regexp.MustCompile(`^x-preview`), "OpenCode Go"},
 }
 
 func openCodeGoVendorForModel(modelID string) string {
@@ -128,12 +146,20 @@ func openCodeGoVendorForModel(modelID string) string {
 }
 
 // openCodeGoVendorForModelAndProvider 按判定顺序归属供应商：
-// Provider(npm) 映射 > 模型 ID 正则 > 兜底 "OpenCode Go"。
+// 模型 ID 正则 > Provider(npm) 映射 > 兜底 "OpenCode Go"。
+// 理由：上游 api.json 的 provider 字段已被证实会错标（如 minimax-m3 的
+// provider 竟是 @ai-sdk/anthropic、grok-4.6 是 @ai-sdk/openai），而模型 ID
+// 前缀命名规律是稳定可离线维护的信号，故正则优先；provider 映射作为正则
+// 未命中时的兜底（如 muse- 无正则时 provider @ai-sdk/openai → OpenAI，
+// 至少比掉到 "OpenCode Go" 有意义）。
 func openCodeGoVendorForModelAndProvider(modelID, providerNpm string) string {
+	if v := openCodeGoVendorForModel(modelID); v != openCodeGoSyncVendor {
+		return v
+	}
 	if v := openCodeGoVendorForProvider(providerNpm); v != "" {
 		return v
 	}
-	return openCodeGoVendorForModel(modelID)
+	return openCodeGoSyncVendor
 }
 
 // openCodeGoEndpointForProvider 将 api.json 的 provider.npm 映射为端点类型：

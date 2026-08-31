@@ -120,6 +120,24 @@ func TestOpenCodeGoVendorForModel(t *testing.T) {
 		{"command-r", "Cohere"},
 		{"o1-mini", "OpenAI"},
 		{"o3-mini", "OpenAI"},
+		// opencode-go 分组前缀补全
+		{"longcat-2.0", "LongCat"},
+		{"ling-3.0-flash-fin-free", "InclusionAI"},
+		{"ring-2.6-1t-free", "InclusionAI"},
+		{"north-mini-code-free", "Cohere"},
+		{"trinity-large-preview-free", "Arcee"},
+		{"muse-spark-1.2-contributor-free", "Meta"},
+		{"ox-alpha-free", "OpenCode Go"},
+		{"big-pickle", "OpenCode Go"},
+		{"x-preview-f-free", "OpenCode Go"},
+		// 已有规则确认覆盖
+		{"minimax-m3", "MiniMax"},
+		{"minimax-m2.7", "MiniMax"},
+		{"qwen3.8-flash", "Qwen"},
+		{"grok-4.6", "xAI"},
+		{"laguna-s-2.1-free", "Poolside"},
+		{"hy3-free", "Hunyuan"},
+		{"hy4-preview", "Hunyuan"},
 		// 兜底
 		{"zz-some-unknown-model", "OpenCode Go"},
 	}
@@ -130,16 +148,25 @@ func TestOpenCodeGoVendorForModel(t *testing.T) {
 	}
 }
 
-// TestOpenCodeGoVendorForModelAndProvider 验证判定顺序：Provider(npm) 映射 >
-// 模型 ID 正则 > 兜底 "OpenCode Go"。
+// TestOpenCodeGoVendorForModelAndProvider 验证判定顺序：模型 ID 正则 >
+// Provider(npm) 映射 > 兜底 "OpenCode Go"。上游 provider 已被证实会错标
+// （minimax-m3 标 @ai-sdk/anthropic、grok-4.6 标 @ai-sdk/openai），
+// 正则优先可修正这些错标。
 func TestOpenCodeGoVendorForModelAndProvider(t *testing.T) {
-	// Provider 映射优先于正则（模型 ID 不匹配任何规则）
-	assert.Equal(t, "Anthropic", openCodeGoVendorForModelAndProvider("zz-anthropic-served", "@ai-sdk/anthropic"))
-	// 无 provider 时回退正则
-	assert.Equal(t, "OpenAI", openCodeGoVendorForModelAndProvider("gpt-4o", ""))
-	assert.Equal(t, "Anthropic", openCodeGoVendorForModelAndProvider("claude-3-5-sonnet", ""))
-	// 泛化包不映射 → 回退正则
+	// 正则优先于 provider：即使 provider 错标，正则命中的真实供应商胜出
+	assert.Equal(t, "MiniMax", openCodeGoVendorForModelAndProvider("minimax-m3", "@ai-sdk/anthropic"))
+	assert.Equal(t, "MiniMax", openCodeGoVendorForModelAndProvider("minimax-m2.7", "@ai-sdk/anthropic"))
+	assert.Equal(t, "Qwen", openCodeGoVendorForModelAndProvider("qwen3.8-flash", "@ai-sdk/anthropic"))
+	assert.Equal(t, "xAI", openCodeGoVendorForModelAndProvider("grok-4.6", "@ai-sdk/openai"))
 	assert.Equal(t, "Anthropic", openCodeGoVendorForModelAndProvider("claude-3-5-sonnet", "@ai-sdk/openai-compatible"))
+	// 无 provider 时正则命中
+	assert.Equal(t, "OpenAI", openCodeGoVendorForModelAndProvider("gpt-4o", ""))
+	assert.Equal(t, "LongCat", openCodeGoVendorForModelAndProvider("longcat-2.0", ""))
+	assert.Equal(t, "InclusionAI", openCodeGoVendorForModelAndProvider("ling-3.0-flash-fin-free", ""))
+	// 正则未命中 → provider 映射兜底（muse- 有正则则优先正则；无正则的
+	// 任意 id + 有映射的 npm → provider 供应商，至少比 OpenCode Go 有意义）
+	assert.Equal(t, "OpenAI", openCodeGoVendorForModelAndProvider("zz-unknown-served", "@ai-sdk/openai"))
+	assert.Equal(t, "Anthropic", openCodeGoVendorForModelAndProvider("zz-anthropic-served", "@ai-sdk/anthropic"))
 	// 均不命中 → 兜底
 	assert.Equal(t, "OpenCode Go", openCodeGoVendorForModelAndProvider("zz-unknown-xyz", ""))
 	assert.Equal(t, "OpenCode Go", openCodeGoVendorForModelAndProvider("zz-unknown-xyz", "@ai-sdk/openai-compatible"))

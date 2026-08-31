@@ -5640,6 +5640,12 @@
     "gpt-5.6-luna, regex:^gpt-": "gpt-5.6-luna, regex:^gpt-",
     "Coding Plan": "Coding Plan",
     "OpenCode Go": "OpenCode Go",
-    "wrk_xxx": "wrk_xxx"
+    "wrk_xxx": "wrk_xxx",
+    "{{count}} model with conflicts": "Моделей с конфликтами: {{count}}",
+    "{{count}} model with conflicts_plural": "{{count}} models with conflicts",
+    "{{count}} field showing • {{selected}} selected": "Показано полей: {{count}}, выбрано: {{selected}}",
+    "{{count}} field showing • {{selected}} selected_plural": "{{count}} fields showing • {{selected}} selected",
+    "Showing {{start}}-{{end}} of {{count}} fields": "Показано {{start}}-{{end}} из {{count}}",
+    "Showing {{start}}-{{end}} of {{count}} fields_plural": "Showing {{start}}-{{end}} of {{count}} fields"
   }
 }

@@ -5640,6 +5640,12 @@
     "gpt-5.6-luna, regex:^gpt-": "gpt-5.6-luna, regex:^gpt-",
     "Coding Plan": "Coding Plan",
     "OpenCode Go": "OpenCode Go",
-    "wrk_xxx": "wrk_xxx"
+    "wrk_xxx": "wrk_xxx",
+    "{{count}} model with conflicts": "{{count}} 件のモデルに競合があります",
+    "{{count}} model with conflicts_plural": "{{count}} models with conflicts",
+    "{{count}} field showing • {{selected}} selected": "{{count}} 件のフィールドを表示 • {{selected}} 件を選択",
+    "{{count}} field showing • {{selected}} selected_plural": "{{count}} fields showing • {{selected}} selected",
+    "Showing {{start}}-{{end}} of {{count}} fields": "{{start}}-{{end}} / {{count}} 件のフィールドを表示",
+    "Showing {{start}}-{{end}} of {{count}} fields_plural": "Showing {{start}}-{{end}} of {{count}} fields"
   }
 }

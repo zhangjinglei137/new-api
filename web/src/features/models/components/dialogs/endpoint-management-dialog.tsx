@@ -282,6 +282,12 @@ export function EndpointManagementDialog({
                   id: 'npm',
                   header: t('NPM'),
                   className: 'w-[26%] min-w-[240px]',
+                  // StaticDataTable cells default to `overflow-hidden`, which
+                  // would clip the ComboboxInput dropdown to the cell height
+                  // (making it look hidden behind the next row). Override it
+                  // so the dropdown renders fully; its own z-index keeps it
+                  // above the following rows.
+                  cellClassName: 'overflow-visible',
                   cell: ({ type, npm }) => (
                     <ComboboxInput
                       options={npmOptions}

@@ -487,13 +487,15 @@ export function UpstreamConflictDialog({
             <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
               <div className='space-y-1'>
                 <div className='text-sm font-medium'>
-                  {visibleModelCount} {t('model')}
-                  {visibleModelCount === 1 ? '' : 's'} {t('with conflicts')}
+                  {t('{{count}} model with conflicts', {
+                    count: visibleModelCount,
+                  })}
                 </div>
                 <div className='text-muted-foreground text-xs'>
-                  {visibleFieldCount} {t('field')}
-                  {visibleFieldCount === 1 ? '' : 's'} {t('showing •')}{' '}
-                  {totalSelectedFields} {t('selected')}
+                  {t('{{count}} field showing • {{selected}} selected', {
+                    count: visibleFieldCount,
+                    selected: totalSelectedFields,
+                  })}
                 </div>
               </div>
               <div className='flex w-full flex-col gap-2 sm:w-auto sm:flex-row'>
@@ -540,9 +542,11 @@ export function UpstreamConflictDialog({
 
                 <div className='bg-muted/40 flex flex-col gap-2 border-t px-2 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2'>
                   <div className='text-muted-foreground text-xs'>
-                    {t('Showing')} {displayStart}-{displayEnd} {t('of')}{' '}
-                    {visibleFieldCount} {t('field')}
-                    {visibleFieldCount === 1 ? '' : 's'}
+                    {t('Showing {{start}}-{{end}} of {{count}} fields', {
+                      start: displayStart,
+                      end: displayEnd,
+                      count: visibleFieldCount,
+                    })}
                   </div>
                   <div className='flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3'>
                     <div className='flex items-center gap-1.5 text-xs sm:gap-2'>

@@ -5640,6 +5640,12 @@
     "gpt-5.6-luna, regex:^gpt-": "gpt-5.6-luna, regex:^gpt-",
     "Coding Plan": "Coding Plan",
     "OpenCode Go": "OpenCode Go",
-    "wrk_xxx": "wrk_xxx"
+    "wrk_xxx": "wrk_xxx",
+    "{{count}} model with conflicts": "{{count}} modèle avec conflit",
+    "{{count}} model with conflicts_plural": "{{count}} modèles avec conflits",
+    "{{count}} field showing • {{selected}} selected": "{{count}} champ affiché • {{selected}} sélectionné",
+    "{{count}} field showing • {{selected}} selected_plural": "{{count}} champs affichés • {{selected}} sélectionnés",
+    "Showing {{start}}-{{end}} of {{count}} fields": "Affichage de {{start}}-{{end}} sur {{count}} champ",
+    "Showing {{start}}-{{end}} of {{count}} fields_plural": "Affichage de {{start}}-{{end}} sur {{count}} champs"
   }
 }
