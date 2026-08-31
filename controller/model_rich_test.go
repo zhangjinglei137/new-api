@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -421,4 +422,297 @@ func TestModelMetadataExtendedEnabledQuery(t *testing.T) {
 	req2, _ := http.NewRequest(http.MethodGet, "/v1/models", nil)
 	c2.Request = req2
 	assert.False(t, modelMetadataExtendedEnabled(c2))
+}
+
+// ---------- 分级价格（tiered cost）输出 ----------
+
+func assertPtrFloat(t *testing.T, name string, got, want *float64) {
+	t.Helper()
+	if want == nil {
+		assert.Nil(t, got, "%s should be nil", name)
+		return
+	}
+	require.NotNil(t, got, "%s should not be nil", name)
+	assert.InDelta(t, *want, *got, 0.001)
+}
+
+// assertPriceFour 断言四价（input/output/cache_read/cache_write）。
+func assertPriceFour(t *testing.T, in, out, cr, cw *float64, wantIn, wantOut, wantCr, wantCw *float64) {
+	t.Helper()
+	assertPtrFloat(t, "input", in, wantIn)
+	assertPtrFloat(t, "output", out, wantOut)
+	assertPtrFloat(t, "cache_read", cr, wantCr)
+	assertPtrFloat(t, "cache_write", cw, wantCw)
+}
+
+// assertCostNoTiers 断言 cost 的 JSON 不含 tiers / context_over_200k 键。
+func assertCostNoTiers(t *testing.T, cost *OpenAIModelCost) {
+	t.Helper()
+	require.NotNil(t, cost)
+	raw, err := common.Marshal(cost)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "tiers")
+	assert.NotContains(t, string(raw), "context_over_200k")
+}
+
+// ---------- 1) 逐字节回归组：单档路径与改造前逐字段一致、无分级键 ----------
+
+// TestTieredCostRegressionSingleFlat 单 tier、无 ?：exact，无分级键。
+func TestTieredCostRegressionSingleFlat(t *testing.T) {
+	cost, source := deriveCostFromExpr(`tier("base", p * 2.5 + c * 15)`)
+	require.NotNil(t, cost)
+	assert.Equal(t, CostSourceExact, source)
+	assertPriceFour(t, cost.Input, cost.Output, cost.CacheRead, cost.CacheWrite, floatPtr(2.5), floatPtr(15), floatPtr(2.5), nil)
+	assertCostNoTiers(t, cost)
+}
+
+// TestTieredCostRegressionMultiTierEstimated 多档表达式在单档路径下：
+// estimated + 1M-len 档价（today 行为），无分级键。
+func TestTieredCostRegressionMultiTierEstimated(t *testing.T) {
+	cost, source := deriveCostFromExpr(`len <= 200000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)`)
+	require.NotNil(t, cost)
+	assert.Equal(t, CostSourceEstimated, source)
+	assertPriceFour(t, cost.Input, cost.Output, cost.CacheRead, cost.CacheWrite, floatPtr(6), floatPtr(22.5), floatPtr(6), nil)
+	assertCostNoTiers(t, cost)
+}
+
+// TestTieredCostRegressionCompileFailure 编译失败 → unknown（today 行为）。
+func TestTieredCostRegressionCompileFailure(t *testing.T) {
+	cost, source := deriveCostFromExpr(`p * +`)
+	assert.Nil(t, cost)
+	assert.Equal(t, CostSourceUnknown, source)
+}
+
+// TestTieredCostRegressionUFunction u() 无 Usage 上下文 → unknown（today 行为）。
+func TestTieredCostRegressionUFunction(t *testing.T) {
+	cost, source := deriveCostFromExpr(`tier("base", u("seconds") * 0.4)`)
+	assert.Nil(t, cost)
+	assert.Equal(t, CostSourceUnknown, source)
+}
+
+// ---------- 2) 多档提取组 ----------
+
+// TestTieredCostExtractionTwoTier 两档：顶层 = base 档价，tiers 恰一项
+// size=200000；size=200000 不 >200000 → context_over_200k 省略。
+func TestTieredCostExtractionTwoTier(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	expr := `len <= 200000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)`
+	cost, source, ok := deriveTieredCostFromExpr(expr)
+	require.True(t, ok)
+	assert.Equal(t, CostSourceExact, source)
+	// 顶层从 1M-len 档价（6/22.5）变为 base 档价（3/15）
+	assertPriceFour(t, cost.Input, cost.Output, cost.CacheRead, cost.CacheWrite, floatPtr(3), floatPtr(15), floatPtr(3), nil)
+	require.Len(t, cost.Tiers, 1)
+	assert.Equal(t, "context", cost.Tiers[0].Tier.Type)
+	assert.Equal(t, 200000, cost.Tiers[0].Tier.Size)
+	assertPriceFour(t, cost.Tiers[0].Input, cost.Tiers[0].Output, cost.Tiers[0].CacheRead, cost.Tiers[0].CacheWrite, floatPtr(6), floatPtr(22.5), floatPtr(6), nil)
+	assert.Nil(t, cost.ContextOver200K)
+}
+
+// TestTieredCostExtractionThreeTierChain 三档链：size 升序无漏档。
+func TestTieredCostExtractionThreeTierChain(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	expr := `len <= 100000 ? tier("a", p * 1 + c * 10) : len <= 200000 ? tier("b", p * 2 + c * 20) : tier("c", p * 4 + c * 40)`
+	cost, source, ok := deriveTieredCostFromExpr(expr)
+	require.True(t, ok)
+	assert.Equal(t, CostSourceExact, source)
+	assertPriceFour(t, cost.Input, cost.Output, cost.CacheRead, cost.CacheWrite, floatPtr(1), floatPtr(10), floatPtr(1), nil)
+	require.Len(t, cost.Tiers, 2)
+	assert.Equal(t, 100000, cost.Tiers[0].Tier.Size)
+	assertPriceFour(t, cost.Tiers[0].Input, cost.Tiers[0].Output, cost.Tiers[0].CacheRead, cost.Tiers[0].CacheWrite, floatPtr(2), floatPtr(20), floatPtr(2), nil)
+	assert.Equal(t, 200000, cost.Tiers[1].Tier.Size)
+	assertPriceFour(t, cost.Tiers[1].Input, cost.Tiers[1].Output, cost.Tiers[1].CacheRead, cost.Tiers[1].CacheWrite, floatPtr(4), floatPtr(40), floatPtr(4), nil)
+	assert.Nil(t, cost.ContextOver200K)
+}
+
+// ---------- 3) 回退组 ----------
+
+// TestTieredCostExtractionFallbackPCondition p 条件档：探测（P 固定 1M）
+// 恒命中 b → 单档 → 回退；单档路径返回 estimated + 混合价（today 行为）。
+func TestTieredCostExtractionFallbackPCondition(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	expr := `p <= 1000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)`
+	cost, _, ok := deriveTieredCostFromExpr(expr)
+	assert.False(t, ok)
+	assert.Nil(t, cost)
+
+	single, source := deriveCostFromExpr(expr)
+	require.NotNil(t, single)
+	assert.Equal(t, CostSourceEstimated, source)
+	// input run P=1M → b(6)，output run P=0 → a(15)：today 的混合行为
+	assertPriceFour(t, single.Input, single.Output, single.CacheRead, single.CacheWrite, floatPtr(6), floatPtr(15), floatPtr(6), nil)
+}
+
+// TestTieredCostExtractionFallbackNegativeCoefficient 任一档负系数 → 整体
+// 回退；单档路径同样非法 → 整体省略。
+func TestTieredCostExtractionFallbackNegativeCoefficient(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	expr := `len <= 200000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * -5)`
+	cost, _, ok := deriveTieredCostFromExpr(expr)
+	assert.False(t, ok)
+	assert.Nil(t, cost)
+
+	single, source := deriveCostFromExpr(expr)
+	assert.Nil(t, single)
+	assert.Equal(t, CostSourceUnknown, source)
+}
+
+// TestTieredCostExtractionFallbackTooManyTiers 档数 17（>16 上限）→ 回退；
+// 单档路径返回 estimated + t18 档价。
+func TestTieredCostExtractionFallbackTooManyTiers(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	var sb strings.Builder
+	sb.WriteString(`len <= 1000 ? tier("t1", p * 1)`)
+	for i := 2; i <= 17; i++ {
+		fmt.Fprintf(&sb, " : len <= %d ? tier(\"t%d\", p * %d)", i*1000, i, i)
+	}
+	sb.WriteString(` : tier("t18", p * 18)`)
+	expr := sb.String()
+
+	cost, _, ok := deriveTieredCostFromExpr(expr)
+	assert.False(t, ok)
+	assert.Nil(t, cost)
+
+	single, source := deriveCostFromExpr(expr)
+	require.NotNil(t, single)
+	assert.Equal(t, CostSourceEstimated, source)
+	require.NotNil(t, single.Input)
+	assert.InDelta(t, 18, *single.Input, 0.001)
+}
+
+// TestTieredCostExtractionFallbackThresholdBeyondCap 阈值 >CAP → 探测不到 →
+// 单档回退；单档路径返回 estimated + a 档价。
+func TestTieredCostExtractionFallbackThresholdBeyondCap(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	expr := `len <= 20000000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)`
+	cost, _, ok := deriveTieredCostFromExpr(expr)
+	assert.False(t, ok)
+	assert.Nil(t, cost)
+
+	single, source := deriveCostFromExpr(expr)
+	require.NotNil(t, single)
+	assert.Equal(t, CostSourceEstimated, source)
+	assertPriceFour(t, single.Input, single.Output, single.CacheRead, single.CacheWrite, floatPtr(3), floatPtr(15), floatPtr(3), nil)
+}
+
+// ---------- 4) context_over_200k 组 ----------
+
+// TestTieredCostContextOver200K 只有 size=128000 → 省略；256000/272000 → 填。
+func TestTieredCostContextOver200K(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	cases := []struct {
+		name string
+		expr string
+		size int
+		want *float64 // context_over_200k 的 input 价；nil=省略
+	}{
+		{
+			name: "size 128000 omitted",
+			expr: `len <= 128000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)`,
+			size: 128000,
+			want: nil,
+		},
+		{
+			name: "size 256000 filled",
+			expr: `len <= 256000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)`,
+			size: 256000,
+			want: floatPtr(6),
+		},
+		{
+			name: "size 272000 filled",
+			expr: `len <= 272000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)`,
+			size: 272000,
+			want: floatPtr(6),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cost, _, ok := deriveTieredCostFromExpr(tc.expr)
+			require.True(t, ok)
+			require.Len(t, cost.Tiers, 1)
+			assert.Equal(t, tc.size, cost.Tiers[0].Tier.Size)
+			if tc.want == nil {
+				assert.Nil(t, cost.ContextOver200K)
+			} else {
+				require.NotNil(t, cost.ContextOver200K)
+				assert.InDelta(t, *tc.want, *cost.ContextOver200K.Input, 0.001)
+			}
+		})
+	}
+}
+
+// TestTieredCostContextOver200KFirstAbove 双高档 256000+400000 → 取 256000 档。
+func TestTieredCostContextOver200KFirstAbove(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	expr := `len <= 256000 ? tier("a", p * 1 + c * 10) : len <= 400000 ? tier("b", p * 2 + c * 20) : tier("c", p * 4 + c * 40)`
+	cost, _, ok := deriveTieredCostFromExpr(expr)
+	require.True(t, ok)
+	require.Len(t, cost.Tiers, 2)
+	assert.Equal(t, 256000, cost.Tiers[0].Tier.Size)
+	assert.Equal(t, 400000, cost.Tiers[1].Tier.Size)
+	require.NotNil(t, cost.ContextOver200K)
+	assert.InDelta(t, 2, *cost.ContextOver200K.Input, 0.001)
+	assert.InDelta(t, 20, *cost.ContextOver200K.Output, 0.001)
+}
+
+// ---------- 5) source 组 ----------
+
+// TestTieredCostSourceRules 多档无请求规则 → exact；多档带请求规则 → estimated
+// （探测不受请求规则影响，空 RequestInput 下乘数为 1）。请求规则的真实存储
+// 形态是乘在 tier 结果上的请求三元：(cond ? multiplier : 1)，编译期被
+// requestRulePatcher 插桩；||| 仅为文档中的拼接标记，存储串不包含它。
+func TestTieredCostSourceRules(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+	expr := `len <= 200000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)`
+	cost, source, ok := deriveTieredCostFromExpr(expr)
+	require.True(t, ok)
+	require.NotNil(t, cost)
+	assert.Equal(t, CostSourceExact, source)
+
+	// 请求规则形态：tier 结果整体乘以 (header 条件 ? 2 : 1)，空 RequestInput 乘 1
+	exprR := `(len <= 200000 ? tier("a", p * 3 + c * 15) : tier("b", p * 6 + c * 22.5)) * (has(header("x"), "y") ? 2 : 1)`
+	costR, sourceR, okR := deriveTieredCostFromExpr(exprR)
+	require.True(t, okR)
+	require.NotNil(t, costR)
+	assert.Equal(t, CostSourceEstimated, sourceR)
+	require.Len(t, costR.Tiers, 1)
+	assertPriceFour(t, costR.Tiers[0].Input, costR.Tiers[0].Output, costR.Tiers[0].CacheRead, costR.Tiers[0].CacheWrite, floatPtr(6), floatPtr(22.5), floatPtr(6), nil)
+}
+
+// ---------- 6) 用户真实形态示例（端到端验收） ----------
+
+// TestTieredCostUserExamples 覆盖用户两个真实目标输出：
+// gpt（size=272000，cr/cc 参与）与 qwen（size=256000）。
+func TestTieredCostUserExamples(t *testing.T) {
+	t.Cleanup(resetTieredCostCache)
+
+	gptExpr := `len <= 272000 ? tier("standard", p * 0.2 + c * 1.2 + cr * 0.02 + cc * 0.25) : tier("long", p * 0.4 + c * 1.8 + cr * 0.04 + cc * 0.5)`
+	cost, source, ok := deriveTieredCostFromExpr(gptExpr)
+	require.True(t, ok)
+	assert.Equal(t, CostSourceExact, source)
+	assertPriceFour(t, cost.Input, cost.Output, cost.CacheRead, cost.CacheWrite, floatPtr(0.2), floatPtr(1.2), floatPtr(0.02), floatPtr(0.25))
+	require.Len(t, cost.Tiers, 1)
+	assert.Equal(t, "context", cost.Tiers[0].Tier.Type)
+	assert.Equal(t, 272000, cost.Tiers[0].Tier.Size)
+	assertPriceFour(t, cost.Tiers[0].Input, cost.Tiers[0].Output, cost.Tiers[0].CacheRead, cost.Tiers[0].CacheWrite, floatPtr(0.4), floatPtr(1.8), floatPtr(0.04), floatPtr(0.5))
+	require.NotNil(t, cost.ContextOver200K)
+	assertPriceFour(t, cost.ContextOver200K.Input, cost.ContextOver200K.Output, cost.ContextOver200K.CacheRead, cost.ContextOver200K.CacheWrite, floatPtr(0.4), floatPtr(1.8), floatPtr(0.04), floatPtr(0.5))
+	// JSON 形状：tiers / tier 元信息 / context_over_200k 均出现
+	raw, err := common.Marshal(cost)
+	require.NoError(t, err)
+	s := string(raw)
+	assert.Contains(t, s, `"tiers"`)
+	assert.Contains(t, s, `"tier":{"type":"context","size":272000}`)
+	assert.Contains(t, s, `"context_over_200k"`)
+
+	qwenExpr := `len <= 256000 ? tier("standard", p * 0.4 + c * 1.6 + cr * 0.04 + cc * 0.5) : tier("long", p * 1.2 + c * 4.8 + cr * 0.12 + cc * 1.5)`
+	cost, source, ok = deriveTieredCostFromExpr(qwenExpr)
+	require.True(t, ok)
+	assert.Equal(t, CostSourceExact, source)
+	assertPriceFour(t, cost.Input, cost.Output, cost.CacheRead, cost.CacheWrite, floatPtr(0.4), floatPtr(1.6), floatPtr(0.04), floatPtr(0.5))
+	require.Len(t, cost.Tiers, 1)
+	assert.Equal(t, 256000, cost.Tiers[0].Tier.Size)
+	assertPriceFour(t, cost.Tiers[0].Input, cost.Tiers[0].Output, cost.Tiers[0].CacheRead, cost.Tiers[0].CacheWrite, floatPtr(1.2), floatPtr(4.8), floatPtr(0.12), floatPtr(1.5))
+	require.NotNil(t, cost.ContextOver200K)
+	assertPriceFour(t, cost.ContextOver200K.Input, cost.ContextOver200K.Output, cost.ContextOver200K.CacheRead, cost.ContextOver200K.CacheWrite, floatPtr(1.2), floatPtr(4.8), floatPtr(0.12), floatPtr(1.5))
 }
