@@ -100,6 +100,36 @@ func endpointsJSON(providerNpm string) json.RawMessage {
 }
 
 // jsonEndpointsEqual 语义比较端点 JSON（键序/缩进无关），解析失败回退字符串比较
+// buildUpstreamCapabilities 将 opencode-go 条目的子结构与富能力字段组装为
+// model.Model.Capabilities JSON（与前端/响应解析格式一致，见 model_rich.go）。
+// 全部子结构缺失时返回 nil（写入空）。
+func buildUpstreamCapabilities(entry service.OpenCodeGoModelEntry) json.RawMessage {
+	caps := make(map[string]any)
+	if entry.Modalities != nil && (len(entry.Modalities.Input) > 0 || len(entry.Modalities.Output) > 0) {
+		caps["modalities"] = map[string]any{
+			"input":  entry.Modalities.Input,
+			"output": entry.Modalities.Output,
+		}
+	}
+	if entry.Limit != nil && (entry.Limit.Context > 0 || entry.Limit.Output > 0) {
+		caps["limits"] = map[string]any{
+			"context": entry.Limit.Context,
+			"output":  entry.Limit.Output,
+		}
+	}
+	if len(entry.ReasoningOptions) > 0 {
+		caps["reasoning_options"] = entry.ReasoningOptions
+	}
+	if len(caps) == 0 {
+		return nil
+	}
+	bytes, err := common.Marshal(caps)
+	if err != nil {
+		return nil
+	}
+	return json.RawMessage(bytes)
+}
+
 func jsonEndpointsEqual(local string, upstream json.RawMessage) bool {
 	if len(upstream) == 0 {
 		return true
@@ -161,6 +191,20 @@ type upstreamModel struct {
 	Status      int             `json:"status"`
 	Tags        string          `json:"tags"`
 	VendorName  string          `json:"vendor_name"`
+
+	// 富模型元数据（仅 opencode-go 源提供，llm-metadata 源为缺省值）
+	DisplayName      string          `json:"display_name"`
+	Family           string          `json:"family"`
+	ProviderNpm      string          `json:"provider_npm"`
+	ReleaseDate      string          `json:"release_date"`
+	LastUpdated      string          `json:"last_updated"`
+	OpenWeights      *bool           `json:"open_weights"`
+	CapAttachment    *bool           `json:"cap_attachment"`
+	CapReasoning     *bool           `json:"cap_reasoning"`
+	CapToolCall      *bool           `json:"cap_tool_call"`
+	CapStructuredOut *bool           `json:"cap_structured_output"`
+	CapTemperature   *bool           `json:"cap_temperature"`
+	Capabilities     json.RawMessage `json:"capabilities"`
 }
 
 type upstreamVendor struct {
@@ -278,10 +322,10 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 				cacheMutex.Unlock()
 
 				// Try decode as envelope first
-				if err := json.Unmarshal(buf, out); err != nil {
+				if err := common.Unmarshal(buf, out); err != nil {
 					// Try decode as pure array
 					var arr []T
-					if err2 := json.Unmarshal(buf, &arr); err2 != nil {
+					if err2 := common.Unmarshal(buf, &arr); err2 != nil {
 						lastErr = err
 						return
 					}
@@ -303,9 +347,9 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 					lastErr = errors.New("cache miss for 304 response")
 					return
 				}
-				if err := json.Unmarshal(buf, out); err != nil {
+				if err := common.Unmarshal(buf, out); err != nil {
 					var arr []T
-					if err2 := json.Unmarshal(buf, &arr); err2 != nil {
+					if err2 := common.Unmarshal(buf, &arr); err2 != nil {
 						lastErr = err
 						return
 					}
@@ -395,12 +439,24 @@ func fetchSyncUpstreamData(ctx context.Context, source, locale string) (modelsUR
 		// 端点按 provider.npm 映射（默认 openai），空 provider 同样写默认端点
 		for _, entry := range entries {
 			modelsEnv.Data = append(modelsEnv.Data, upstreamModel{
-				ModelName:   entry.ID,
-				Description: entry.Description,
-				Endpoints:   endpointsJSON(entry.Provider),
-				VendorName:  openCodeGoVendorForModel(entry.ID),
-				Status:      openCodeGoStatusToModelStatus(entry.Status),
-				NameRule:    0,
+				ModelName:        entry.ID,
+				Description:      entry.Description,
+				Endpoints:        endpointsJSON(entry.Provider),
+				VendorName:       openCodeGoVendorForModel(entry.ID),
+				Status:           openCodeGoStatusToModelStatus(entry.Status),
+				NameRule:         0,
+				DisplayName:      entry.Name,
+				Family:           entry.Family,
+				ProviderNpm:      entry.Provider,
+				ReleaseDate:      entry.ReleaseDate,
+				LastUpdated:      entry.LastUpdated,
+				OpenWeights:      entry.OpenWeights,
+				CapAttachment:    entry.Attachment,
+				CapReasoning:     entry.Reasoning,
+				CapToolCall:      entry.ToolCall,
+				CapStructuredOut: entry.StructuredOutput,
+				CapTemperature:   entry.Temperature,
+				Capabilities:     buildUpstreamCapabilities(entry),
 			})
 		}
 		return modelsURL, vendorsURL, vendorsEnv, modelsEnv, nil
@@ -529,15 +585,27 @@ func SyncUpstreamModels(c *gin.Context) {
 
 		// 创建模型
 		mi := &model.Model{
-			ModelName:    name,
-			Description:  up.Description,
-			Icon:         up.Icon,
-			Tags:         up.Tags,
-			VendorID:     vendorID,
-			Status:       chooseStatus(up.Status, 1),
-			NameRule:     up.NameRule,
-			Endpoints:    string(up.Endpoints),
-			SyncOfficial: 1,
+			ModelName:         name,
+			Description:       up.Description,
+			Icon:              up.Icon,
+			Tags:              up.Tags,
+			VendorID:          vendorID,
+			Status:            chooseStatus(up.Status, 1),
+			NameRule:          up.NameRule,
+			Endpoints:         string(up.Endpoints),
+			SyncOfficial:      1,
+			DisplayName:       up.DisplayName,
+			Family:            up.Family,
+			ProviderNpm:       up.ProviderNpm,
+			ReleaseDate:       up.ReleaseDate,
+			LastUpdated:       up.LastUpdated,
+			OpenWeights:       up.OpenWeights,
+			CapAttachment:     up.CapAttachment,
+			CapReasoning:      up.CapReasoning,
+			CapToolCall:       up.CapToolCall,
+			CapStructuredOutput: up.CapStructuredOut,
+			CapTemperature:    up.CapTemperature,
+			Capabilities:      string(up.Capabilities),
 		}
 		if err := mi.Insert(); err == nil {
 			createdModels++
@@ -547,7 +615,37 @@ func SyncUpstreamModels(c *gin.Context) {
 		}
 	}
 
-	// 4) 处理可选覆盖（更新本地已有模型的差异字段）
+	// 4) 已有模型"只填缺失"富元数据（不覆盖人工值）：
+	//    对新创建之外的已存在模型，若其富字段为空/nil 而上游有值，则补齐。
+	//    仅处理 sync_official <> 0 的模型，避免覆盖管理员手工配置。
+	filledModels := 0
+	filledList := make([]string, 0)
+	if len(modelByName) > 0 {
+		upstreamNames := make([]string, 0, len(modelByName))
+		for name := range modelByName {
+			upstreamNames = append(upstreamNames, name)
+		}
+		var locals []model.Model
+		if err := model.DB.Where("model_name IN ? AND sync_official <> 0", upstreamNames).Find(&locals).Error; err == nil {
+			for i := range locals {
+				local := &locals[i]
+				up, ok := modelByName[local.ModelName]
+				if !ok {
+					continue
+				}
+				updates := missingRichFieldsMap(local, up)
+				if len(updates) == 0 {
+					continue
+				}
+				if err := model.DB.Model(&model.Model{}).Where("id = ?", local.Id).Updates(updates).Error; err == nil {
+					filledModels++
+					filledList = append(filledList, local.ModelName)
+				}
+			}
+		}
+	}
+
+	// 5) 处理可选覆盖（更新本地已有模型的差异字段）
 	if len(req.Overwrite) > 0 {
 		// vendorIDCache 已用于创建阶段，可复用
 		for _, ow := range req.Overwrite {
@@ -624,9 +722,54 @@ func SyncUpstreamModels(c *gin.Context) {
 			"skipped_models":  skipped,
 			"created_list":    createdList,
 			"updated_list":    updatedList,
+			"filled_models":   filledModels,
+			"filled_list":     filledList,
 			"source":          buildSyncSourceInfo(req.Source, req.Locale, modelsURL, vendorsURL),
 		},
 	})
+}
+
+// missingRichFieldsMap 返回本地模型缺失（空值/nil）而上游有值的富元数据字段。
+// 只填缺失、不覆盖人工配置的非空值。返回空 map 表示无需更新。
+func missingRichFieldsMap(local *model.Model, up upstreamModel) map[string]interface{} {
+	updates := make(map[string]interface{})
+	if local.DisplayName == "" && up.DisplayName != "" {
+		updates["display_name"] = up.DisplayName
+	}
+	if local.Family == "" && up.Family != "" {
+		updates["family"] = up.Family
+	}
+	if local.ProviderNpm == "" && up.ProviderNpm != "" {
+		updates["provider_npm"] = up.ProviderNpm
+	}
+	if local.ReleaseDate == "" && up.ReleaseDate != "" {
+		updates["release_date"] = up.ReleaseDate
+	}
+	if local.LastUpdated == "" && up.LastUpdated != "" {
+		updates["last_updated"] = up.LastUpdated
+	}
+	if local.OpenWeights == nil && up.OpenWeights != nil {
+		updates["open_weights"] = *up.OpenWeights
+	}
+	if local.CapAttachment == nil && up.CapAttachment != nil {
+		updates["cap_attachment"] = *up.CapAttachment
+	}
+	if local.CapReasoning == nil && up.CapReasoning != nil {
+		updates["cap_reasoning"] = *up.CapReasoning
+	}
+	if local.CapToolCall == nil && up.CapToolCall != nil {
+		updates["cap_tool_call"] = *up.CapToolCall
+	}
+	if local.CapStructuredOutput == nil && up.CapStructuredOut != nil {
+		updates["cap_structured_output"] = *up.CapStructuredOut
+	}
+	if local.CapTemperature == nil && up.CapTemperature != nil {
+		updates["cap_temperature"] = *up.CapTemperature
+	}
+	if local.Capabilities == "" && len(up.Capabilities) > 0 {
+		updates["capabilities"] = string(up.Capabilities)
+	}
+	return updates
 }
 
 func containsField(fields []string, key string) bool {

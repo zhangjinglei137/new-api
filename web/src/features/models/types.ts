@@ -36,6 +36,18 @@ export interface BoundChannel {
 export interface Model {
   id: number
   model_name: string
+  display_name?: string
+  family?: string
+  provider_npm?: string
+  release_date?: string
+  last_updated?: string
+  open_weights?: boolean | null
+  cap_attachment?: boolean | null
+  cap_reasoning?: boolean | null
+  cap_tool_call?: boolean | null
+  cap_structured_output?: boolean | null
+  cap_temperature?: boolean | null
+  capabilities?: string
   description?: string
   icon?: string
   tags?: string
@@ -230,6 +242,18 @@ export interface PrefillGroupsResponse {
 export const modelFormSchema = z.object({
   id: z.number().optional(),
   model_name: z.string().min(1, 'Model name is required'),
+  display_name: z.string().default(''),
+  family: z.string().default(''),
+  provider_npm: z.string().default(''),
+  release_date: z.string().default(''),
+  last_updated: z.string().default(''),
+  open_weights: z.boolean().nullable().default(null),
+  cap_attachment: z.boolean().nullable().default(null),
+  cap_reasoning: z.boolean().nullable().default(null),
+  cap_tool_call: z.boolean().nullable().default(null),
+  cap_structured_output: z.boolean().nullable().default(null),
+  cap_temperature: z.boolean().nullable().default(null),
+  capabilities: z.string().default(''),
   description: z.string().default(''),
   icon: z.string().default(''),
   tags: z.array(z.string()).default([]),

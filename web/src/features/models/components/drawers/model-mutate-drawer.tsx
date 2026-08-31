@@ -90,6 +90,29 @@ import type { Model } from '../../types'
 const extendedModelFormSchema = z.object({
   id: z.number().optional(),
   model_name: z.string().min(1, 'Model name is required'),
+  display_name: z.string(),
+  family: z.string(),
+  provider_npm: z.string(),
+  release_date: z.string(),
+  last_updated: z.string(),
+  open_weights: z.boolean().nullable(),
+  cap_attachment: z.boolean().nullable(),
+  cap_reasoning: z.boolean().nullable(),
+  cap_tool_call: z.boolean().nullable(),
+  cap_structured_output: z.boolean().nullable(),
+  cap_temperature: z.boolean().nullable(),
+  capabilities: z.string().refine(
+    (value) => {
+      if (!value.trim()) return true
+      try {
+        JSON.parse(value)
+        return true
+      } catch {
+        return false
+      }
+    },
+    'Capabilities must be valid JSON'
+  ),
   description: z.string(),
   icon: z.string(),
   tags: z.array(z.string()),
@@ -111,6 +134,15 @@ type ExtendedModelFormValues = z.infer<typeof extendedModelFormSchema>
 
 type PricingMode = 'per-token' | 'per-request'
 type PricingSubMode = 'ratio' | 'price'
+
+const capabilityFields = [
+  { name: 'open_weights', label: 'Open weights' },
+  { name: 'cap_attachment', label: 'Attachment support' },
+  { name: 'cap_reasoning', label: 'Reasoning support' },
+  { name: 'cap_tool_call', label: 'Tool calling support' },
+  { name: 'cap_structured_output', label: 'Structured output support' },
+  { name: 'cap_temperature', label: 'Temperature support' },
+] as const
 
 type PricingFields = Pick<
   ExtendedModelFormValues,
@@ -362,6 +394,18 @@ export function ModelMutateDrawer({
     resolver: zodResolver(extendedModelFormSchema),
     defaultValues: {
       model_name: '',
+      display_name: '',
+      family: '',
+      provider_npm: '',
+      release_date: '',
+      last_updated: '',
+      open_weights: null,
+      cap_attachment: null,
+      cap_reasoning: null,
+      cap_tool_call: null,
+      cap_structured_output: null,
+      cap_temperature: null,
+      capabilities: '',
       description: '',
       icon: '',
       tags: [],
@@ -430,6 +474,18 @@ export function ModelMutateDrawer({
       form.reset({
         id: model.id,
         model_name: model.model_name,
+        display_name: model.display_name || '',
+        family: model.family || '',
+        provider_npm: model.provider_npm || '',
+        release_date: model.release_date || '',
+        last_updated: model.last_updated || '',
+        open_weights: model.open_weights ?? null,
+        cap_attachment: model.cap_attachment ?? null,
+        cap_reasoning: model.cap_reasoning ?? null,
+        cap_tool_call: model.cap_tool_call ?? null,
+        cap_structured_output: model.cap_structured_output ?? null,
+        cap_temperature: model.cap_temperature ?? null,
+        capabilities: model.capabilities || '',
         description: model.description || '',
         icon: model.icon || '',
         tags: parseModelTags(model.tags),
@@ -455,6 +511,18 @@ export function ModelMutateDrawer({
       setAdvancedOpen(pricing.advancedOpen)
       form.reset({
         model_name: modelName,
+        display_name: '',
+        family: '',
+        provider_npm: '',
+        release_date: '',
+        last_updated: '',
+        open_weights: null,
+        cap_attachment: null,
+        cap_reasoning: null,
+        cap_tool_call: null,
+        cap_structured_output: null,
+        cap_temperature: null,
+        capabilities: '',
         description: '',
         icon: '',
         tags: [],
@@ -875,6 +943,162 @@ export function ModelMutateDrawer({
                   </FormItem>
                 )}
               />
+            </SideDrawerSection>
+
+            {/* Model Metadata */}
+            <SideDrawerSection>
+              <h3 className='text-sm font-semibold'>{t('Model Metadata')}</h3>
+
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='display_name'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Display name')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={t('Public name shown to users')}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='family'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Model family')}</FormLabel>
+                      <FormControl>
+                        <Input placeholder='gpt' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='provider_npm'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Provider NPM package')}</FormLabel>
+                      <FormControl>
+                        <Input placeholder='@ai-sdk/anthropic' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='release_date'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Release date')}</FormLabel>
+                      <FormControl>
+                        <Input type='date' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='last_updated'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Last updated')}</FormLabel>
+                      <FormControl>
+                        <Input type='date' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className='border-border/60 divide-border/60 grid divide-y border-y'>
+                {capabilityFields.map((capability) => (
+                  <FormField
+                    key={capability.name}
+                    control={form.control}
+                    name={capability.name}
+                    render={({ field }) => (
+                      <FormItem className='flex min-h-14 items-center justify-between gap-3 py-2'>
+                        <FormLabel className='font-normal'>
+                          {t(capability.label)}
+                        </FormLabel>
+                        <Select
+                          value={
+                            field.value === null
+                              ? 'unknown'
+                              : String(field.value)
+                          }
+                          onValueChange={(value) =>
+                            field.onChange(
+                              value === 'unknown' ? null : value === 'true'
+                            )
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger size='sm' className='w-32'>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectItem value='unknown'>{t('Unknown')}</SelectItem>
+                            <SelectItem value='true'>{t('Supported')}</SelectItem>
+                            <SelectItem value='false'>
+                              {t('Unsupported')}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                ))}
+              </div>
+
+              <Collapsible defaultOpen>
+                <CollapsibleTrigger
+                  render={
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className='flex w-full items-center justify-between'
+                    />
+                  }
+                >
+                  {t('Advanced model capabilities')}
+                  <ChevronDown className='size-4' />
+                </CollapsibleTrigger>
+                <CollapsibleContent className='pt-4'>
+                  <FormField
+                    control={form.control}
+                    name='capabilities'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Capabilities JSON')}</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            rows={8}
+                            className='font-mono text-xs'
+                            placeholder='{"modalities":{"input":["text"]}}'
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Optional raw JSON. Leave empty when not configured.')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
             </SideDrawerSection>
 
             {/* Matching Configuration */}

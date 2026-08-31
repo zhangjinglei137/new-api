@@ -25,12 +25,34 @@ type openCodeGoProviderRef struct {
 }
 
 type openCodeGoModel struct {
-	ID          string                `json:"id"`
-	Name        string                `json:"name"`
-	Description string                `json:"description"`
-	Status      string                `json:"status"`
-	Cost        openCodeGoCost        `json:"cost"`
-	Provider    openCodeGoProviderRef `json:"provider"`
+	ID               string                `json:"id"`
+	Name             string                `json:"name"`
+	Description      string                `json:"description"`
+	Status           string                `json:"status"`
+	Family           string                `json:"family"`
+	Attachment       *bool                 `json:"attachment"`
+	Reasoning        *bool                 `json:"reasoning"`
+	ReasoningOptions []map[string]any      `json:"reasoning_options"`
+	ToolCall         *bool                 `json:"tool_call"`
+	StructuredOutput *bool                 `json:"structured_output"`
+	Temperature      *bool                 `json:"temperature"`
+	OpenWeights      *bool                 `json:"open_weights"`
+	ReleaseDate      string                `json:"release_date"`
+	LastUpdated      string                `json:"last_updated"`
+	Modalities       *openCodeGoModalities `json:"modalities"`
+	Limit            *openCodeGoLimit      `json:"limit"`
+	Cost             openCodeGoCost        `json:"cost"`
+	Provider         openCodeGoProviderRef `json:"provider"`
+}
+
+type openCodeGoModalities struct {
+	Input  []string `json:"input"`
+	Output []string `json:"output"`
+}
+
+type openCodeGoLimit struct {
+	Context int `json:"context"`
+	Output  int `json:"output"`
 }
 
 type openCodeGoCost struct {
@@ -57,7 +79,8 @@ func collectOpenCodeGoModels(upstream map[string]openCodeGoProvider) map[string]
 				continue
 			}
 			if isOpenCodeGoZeroCost(m.Cost) {
-				// 免费模型覆盖同 id 条目；name/description/provider 缺失时回退原条目的值
+				// 免费模型覆盖同 id 条目；缺失的元数据字段回退原条目的值，
+				// 避免免费条目（通常只含价格信息）抹掉付费条目的富元数据。
 				if existing, ok := models[name]; ok {
 					if m.Name == "" {
 						m.Name = existing.Name
@@ -67,6 +90,42 @@ func collectOpenCodeGoModels(upstream map[string]openCodeGoProvider) map[string]
 					}
 					if m.Provider.NPM == "" {
 						m.Provider = existing.Provider
+					}
+					if m.Family == "" {
+						m.Family = existing.Family
+					}
+					if m.Attachment == nil {
+						m.Attachment = existing.Attachment
+					}
+					if m.Reasoning == nil {
+						m.Reasoning = existing.Reasoning
+					}
+					if len(m.ReasoningOptions) == 0 {
+						m.ReasoningOptions = existing.ReasoningOptions
+					}
+					if m.ToolCall == nil {
+						m.ToolCall = existing.ToolCall
+					}
+					if m.StructuredOutput == nil {
+						m.StructuredOutput = existing.StructuredOutput
+					}
+					if m.Temperature == nil {
+						m.Temperature = existing.Temperature
+					}
+					if m.OpenWeights == nil {
+						m.OpenWeights = existing.OpenWeights
+					}
+					if m.ReleaseDate == "" {
+						m.ReleaseDate = existing.ReleaseDate
+					}
+					if m.LastUpdated == "" {
+						m.LastUpdated = existing.LastUpdated
+					}
+					if m.Modalities == nil {
+						m.Modalities = existing.Modalities
+					}
+					if m.Limit == nil {
+						m.Limit = existing.Limit
 					}
 				}
 				models[name] = m
@@ -145,7 +204,31 @@ type OpenCodeGoModelEntry struct {
 	// Status 是 api.json 条目中的 status 字段（""、beta、preview 等；deprecated 已被过滤）。
 	Status string
 	// Provider 是 api.json 条目中 provider.npm 值（如 "@ai-sdk/openai"），无则空。
-	Provider string
+	Provider         string
+	Family           string
+	Attachment       *bool
+	Reasoning        *bool
+	ReasoningOptions []map[string]any
+	ToolCall         *bool
+	StructuredOutput *bool
+	Temperature      *bool
+	OpenWeights      *bool
+	ReleaseDate      string
+	LastUpdated      string
+	Modalities       *ModalitiesEntry
+	Limit            *LimitEntry
+}
+
+// ModalitiesEntry 输入/输出模态
+type ModalitiesEntry struct {
+	Input  []string `json:"input"`
+	Output []string `json:"output"`
+}
+
+// LimitEntry 上下文/输出限额（tokens）
+type LimitEntry struct {
+	Context int `json:"context"`
+	Output  int `json:"output"`
 }
 
 // parseOpenCodeGoModelEntries 解析 models.opencode.ai api.json 的结构化条目
@@ -171,6 +254,22 @@ func parseOpenCodeGoModelEntries(data []byte) ([]OpenCodeGoModelEntry, error) {
 		entry.Name = m.Name
 		if entry.Name == "" {
 			entry.Name = name
+		}
+		entry.Family = m.Family
+		entry.Attachment = m.Attachment
+		entry.Reasoning = m.Reasoning
+		entry.ReasoningOptions = m.ReasoningOptions
+		entry.ToolCall = m.ToolCall
+		entry.StructuredOutput = m.StructuredOutput
+		entry.Temperature = m.Temperature
+		entry.OpenWeights = m.OpenWeights
+		entry.ReleaseDate = m.ReleaseDate
+		entry.LastUpdated = m.LastUpdated
+		if m.Modalities != nil {
+			entry.Modalities = &ModalitiesEntry{Input: m.Modalities.Input, Output: m.Modalities.Output}
+		}
+		if m.Limit != nil {
+			entry.Limit = &LimitEntry{Context: m.Limit.Context, Output: m.Limit.Output}
 		}
 		entries = append(entries, entry)
 	}

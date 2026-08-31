@@ -4496,6 +4496,8 @@
         "System Administration": "系统管理",
         "System Announcements": "系统公告",
         "System Behavior": "系统行为",
+        "Model metadata extension": "模型元数据扩展",
+        "Return rich model metadata such as name, family, modalities, limits, cost, and reasoning in /v1/models (OpenAI branch).": "开启后，/v1/models（OpenAI 分支）将返回名称、家族、模态、限制、成本和推理等丰富模型元数据。",
         "System data statistics": "系统数据统计",
         "System default": "系统默认",
         "System Info": "系统信息",
@@ -5585,6 +5587,23 @@
         "Versions": "版本",
         "View the complete details for this task": "查看此任务的完整详情",
         "When disabled, all uploaded custom plugins are ignored and every platform falls back to its built-in factory plugin.": "关闭后，所有上传的自定义插件都会被忽略，每个平台均回落到内置的出厂插件。",
-        "When disabled, the entire task plugin system stops serving, including factory and custom plugins.": "关闭后，整个任务插件系统停止服务，包括出厂插件和自定义插件。"
+        "When disabled, the entire task plugin system stops serving, including factory and custom plugins.": "关闭后，整个任务插件系统停止服务，包括出厂插件和自定义插件。",
+        "Model Metadata": "模型元数据",
+        "Model family": "模型家族",
+        "Provider NPM package": "提供商 NPM 包",
+        "Release date": "发布日期",
+        "Last updated": "最后更新",
+        "Public name shown to users": "向用户展示的公开名称",
+        "Attachment support": "附件支持",
+        "Reasoning support": "推理支持",
+        "Tool calling support": "工具调用支持",
+        "Structured output support": "结构化输出支持",
+        "Temperature support": "温度参数支持",
+        "Supported": "支持",
+        "Unsupported": "不支持",
+        "Advanced model capabilities": "高级模型能力",
+        "Capabilities JSON": "能力 JSON",
+        "Optional raw JSON. Leave empty when not configured.": "可选的原始 JSON，未配置时留空。",
+        "Capabilities must be valid JSON": "能力必须是合法的 JSON"
     }
 }

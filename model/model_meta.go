@@ -42,6 +42,22 @@ type Model struct {
 
 	MatchedModels []string `json:"matched_models,omitempty" gorm:"-"`
 	MatchedCount  int      `json:"matched_count,omitempty" gorm:"-"`
+
+	// 富模型元数据（/v1/models 扩展返回，后台可编辑）
+	// 注意：所有新增列一律不加 gorm:"default:..." 标签，避免三库 AutoMigrate
+	// 反复 ALTER；默认值放业务层。*bool 三态：nil=未知 / false=不支持 / true=支持。
+	DisplayName           string `json:"display_name,omitempty" gorm:"type:varchar(255)"`
+	Family                string `json:"family,omitempty" gorm:"type:varchar(128)"`
+	ProviderNpm           string `json:"provider_npm,omitempty" gorm:"type:varchar(255)"`
+	ReleaseDate           string `json:"release_date,omitempty" gorm:"type:varchar(32)"`
+	LastUpdated           string `json:"last_updated,omitempty" gorm:"type:varchar(32)"`
+	OpenWeights           *bool  `json:"open_weights,omitempty"`
+	CapAttachment         *bool  `json:"cap_attachment,omitempty"`
+	CapReasoning          *bool  `json:"cap_reasoning,omitempty"`
+	CapToolCall           *bool  `json:"cap_tool_call,omitempty"`
+	CapStructuredOutput   *bool  `json:"cap_structured_output,omitempty"`
+	CapTemperature        *bool  `json:"cap_temperature,omitempty"`
+	Capabilities          string `json:"capabilities,omitempty" gorm:"type:text"`
 }
 
 func (mi *Model) Insert() error {
@@ -78,7 +94,10 @@ func (mi *Model) Update() error {
 	mi.UpdatedTime = common.GetTimestamp()
 	// 使用 Select 强制更新所有字段，包括零值
 	return DB.Model(&Model{}).Where("id = ?", mi.Id).
-		Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "updated_time").
+		Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "updated_time",
+			"display_name", "family", "provider_npm", "release_date", "last_updated",
+			"open_weights", "cap_attachment", "cap_reasoning", "cap_tool_call", "cap_structured_output", "cap_temperature",
+			"capabilities").
 		Updates(mi).Error
 }
 

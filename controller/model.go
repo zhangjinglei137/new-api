@@ -307,6 +307,19 @@ func ListModels(c *gin.Context, modelType int) {
 			"nextPageToken": nil,
 		})
 	default:
+		if modelMetadataExtendedEnabled(c) {
+			metas := model.GetModelMetasByNames(userModelNames)
+			richModels := make([]OpenAIModelsExtended, 0, len(userOpenAiModels))
+			for _, oaiModel := range userOpenAiModels {
+				richModels = append(richModels, buildRichOpenAIModel(oaiModel, metas[oaiModel.Id]))
+			}
+			c.JSON(200, gin.H{
+				"success": true,
+				"data":    richModels,
+				"object":  "list",
+			})
+			return
+		}
 		c.JSON(200, gin.H{
 			"success": true,
 			"data":    userOpenAiModels,
@@ -357,6 +370,12 @@ func RetrieveModel(c *gin.Context, modelType int) {
 				Type:        "model",
 			})
 		default:
+			if modelMetadataExtendedEnabled(c) {
+				metas := model.GetModelMetasByNames([]string{aiModel.Id})
+				rich := buildRichOpenAIModel(aiModel, metas[aiModel.Id])
+				c.JSON(200, rich)
+				return
+			}
 			c.JSON(200, aiModel)
 		}
 	} else {
