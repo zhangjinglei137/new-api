@@ -72,6 +72,79 @@ func TestOpenCodeGoStatusToModelStatus(t *testing.T) {
 	}
 }
 
+// TestOpenCodeGoVendorForProvider 验证 provider.npm → 供应商映射。
+func TestOpenCodeGoVendorForProvider(t *testing.T) {
+	cases := []struct {
+		npm  string
+		want string
+	}{
+		{"@ai-sdk/openai", "OpenAI"},
+		{"@ai-sdk/anthropic", "Anthropic"},
+		{"@ai-sdk/google", "Google"},
+		{"@ai-sdk/google-vertex", "Google"},
+		{"@ai-sdk/xai", "xAI"},
+		{"@ai-sdk/deepseek", "DeepSeek"},
+		{"@ai-sdk/qwen", "Qwen"},
+		{"@ai-sdk/minimax", "MiniMax"},
+		{"@ai-sdk/tencent-hunyuan", "Hunyuan"},
+		{"@ai-sdk/zhipu", "Z.AI"},
+		{"@ai-sdk/openrouter", "OpenRouter"},
+		{"", ""},
+		// 泛化包不映射，交由正则/兜底，避免误判
+		{"@ai-sdk/openai-compatible", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.npm, func(t *testing.T) {
+			assert.Equal(t, tc.want, openCodeGoVendorForProvider(tc.npm))
+		})
+	}
+}
+
+// TestOpenCodeGoVendorForModel 验证模型 ID 正则归属（含新增主流厂商前缀）。
+func TestOpenCodeGoVendorForModel(t *testing.T) {
+	cases := []struct {
+		modelID string
+		want    string
+	}{
+		{"gpt-4o", "OpenAI"},
+		{"grok-3", "xAI"},
+		{"glm-4", "Z.AI"},
+		{"deepseek-chat", "DeepSeek"},
+		{"qwen2.5-coder", "Qwen"},
+		// 新增前缀
+		{"claude-3-5-sonnet", "Anthropic"},
+		{"llama-3.1-8b", "Meta"},
+		{"mistral-large", "Mistral"},
+		{"gemma-2-27b", "Google"},
+		{"gemini-2.5-flash", "Google"},
+		{"command-r", "Cohere"},
+		{"o1-mini", "OpenAI"},
+		{"o3-mini", "OpenAI"},
+		// 兜底
+		{"zz-some-unknown-model", "OpenCode Go"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.modelID, func(t *testing.T) {
+			assert.Equal(t, tc.want, openCodeGoVendorForModel(tc.modelID))
+		})
+	}
+}
+
+// TestOpenCodeGoVendorForModelAndProvider 验证判定顺序：Provider(npm) 映射 >
+// 模型 ID 正则 > 兜底 "OpenCode Go"。
+func TestOpenCodeGoVendorForModelAndProvider(t *testing.T) {
+	// Provider 映射优先于正则（模型 ID 不匹配任何规则）
+	assert.Equal(t, "Anthropic", openCodeGoVendorForModelAndProvider("zz-anthropic-served", "@ai-sdk/anthropic"))
+	// 无 provider 时回退正则
+	assert.Equal(t, "OpenAI", openCodeGoVendorForModelAndProvider("gpt-4o", ""))
+	assert.Equal(t, "Anthropic", openCodeGoVendorForModelAndProvider("claude-3-5-sonnet", ""))
+	// 泛化包不映射 → 回退正则
+	assert.Equal(t, "Anthropic", openCodeGoVendorForModelAndProvider("claude-3-5-sonnet", "@ai-sdk/openai-compatible"))
+	// 均不命中 → 兜底
+	assert.Equal(t, "OpenCode Go", openCodeGoVendorForModelAndProvider("zz-unknown-xyz", ""))
+	assert.Equal(t, "OpenCode Go", openCodeGoVendorForModelAndProvider("zz-unknown-xyz", "@ai-sdk/openai-compatible"))
+}
+
 // setupSyncUpstreamServer 将 SYNC_UPSTREAM_BASE 指向本地 httptest server，
 // 按路径返回模型/供应商 envelope JSON，避免测试访问真实上游。
 func setupSyncUpstreamServer(t *testing.T, modelsJSON, vendorsJSON string) {
@@ -104,6 +177,7 @@ type syncUpstreamResponse struct {
 	Data    struct {
 		CreatedModels int `json:"created_models"`
 		UpdatedModels int `json:"updated_models"`
+		FilledModels  int `json:"filled_models"`
 	} `json:"data"`
 }
 
@@ -207,4 +281,92 @@ func TestSyncUpstreamModelsOverwriteSkipsIdenticalEndpoints(t *testing.T) {
 	var stored model.Model
 	require.NoError(t, db.Where("model_name = ?", "zz-sync-endpoint-model").First(&stored).Error)
 	assert.Equal(t, "{\n  \"openai\": {\n    \"method\": \"POST\",\n    \"path\": \"/v1/chat/completions\"\n  }\n}", stored.Endpoints)
+}
+
+// TestSyncUpstreamModelsRemapsFallbackVendor 验证存量误映射修复：模型当前归属
+// 兜底供应商 "OpenCode Go"，上游按新判定顺序推导出真实供应商 → vendor_id 被
+// 重映射到真实供应商（复用 DB 已存在的同名供应商）。
+func TestSyncUpstreamModelsRemapsFallbackVendor(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+
+	fallback := &model.Vendor{Name: "OpenCode Go"}
+	require.NoError(t, db.Create(fallback).Error)
+	anthropic := &model.Vendor{Name: "Anthropic"}
+	require.NoError(t, db.Create(anthropic).Error)
+
+	require.NoError(t, db.Create(&model.Model{
+		ModelName: "zz-remap-model",
+		VendorID:  fallback.Id,
+		Status:    1,
+	}).Error)
+
+	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-remap-model","description":"","status":1,"vendor_name":"Anthropic","provider_npm":"@ai-sdk/anthropic"}]}`
+	vendorsJSON := `{"success":true,"message":"","data":[{"name":"Anthropic","status":1}]}`
+	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
+
+	// 触发同步（overwrite 非空 → 拉取上游并走 step 4 补齐/重映射路径）
+	body := `{"overwrite":[{"model_name":"zz-remap-model","fields":["description"]}]}`
+	resp := runSyncUpstreamModels(t, body)
+
+	assert.Equal(t, 1, resp.Data.FilledModels, "vendor remap should be counted as filled")
+
+	var stored model.Model
+	require.NoError(t, db.Where("model_name = ?", "zz-remap-model").First(&stored).Error)
+	assert.Equal(t, anthropic.Id, stored.VendorID, "vendor_id should be remapped from fallback to real vendor")
+}
+
+// TestSyncUpstreamModelsKeepsFallbackWhenNoRealVendorDerived 验证无法推导真实
+// 供应商时保持兜底，不做重映射。
+func TestSyncUpstreamModelsKeepsFallbackWhenNoRealVendorDerived(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+
+	fallback := &model.Vendor{Name: "OpenCode Go"}
+	require.NoError(t, db.Create(fallback).Error)
+
+	require.NoError(t, db.Create(&model.Model{
+		ModelName: "zz-noderive-model",
+		VendorID:  fallback.Id,
+		Status:    1,
+	}).Error)
+
+	// provider_npm 为空且模型 ID 无匹配正则 → 上游 vendor_name 仍为兜底，不重映射
+	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-noderive-model","description":"","status":1,"vendor_name":"OpenCode Go"}]}`
+	vendorsJSON := `{"success":true,"message":"","data":[]}`
+	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
+
+	body := `{"overwrite":[{"model_name":"zz-noderive-model","fields":["description"]}]}`
+	runSyncUpstreamModels(t, body)
+
+	var stored model.Model
+	require.NoError(t, db.Where("model_name = ?", "zz-noderive-model").First(&stored).Error)
+	assert.Equal(t, fallback.Id, stored.VendorID, "vendor_id should stay on fallback when no real vendor is derivable")
+}
+
+// TestSyncUpstreamModelsDoesNotRemapUserSetVendor 验证非兜底供应商的模型不受
+// 重映射影响（用户手动指定过的供应商不动）。
+func TestSyncUpstreamModelsDoesNotRemapUserSetVendor(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+
+	fallback := &model.Vendor{Name: "OpenCode Go"}
+	require.NoError(t, db.Create(fallback).Error)
+	openAI := &model.Vendor{Name: "OpenAI"}
+	require.NoError(t, db.Create(openAI).Error)
+
+	// 模型已归属 OpenAI（非兜底），即便上游可推导出 Anthropic 也不改
+	require.NoError(t, db.Create(&model.Model{
+		ModelName: "zz-user-set-vendor",
+		VendorID:  openAI.Id,
+		Status:    1,
+	}).Error)
+
+	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-user-set-vendor","description":"","status":1,"vendor_name":"Anthropic","provider_npm":"@ai-sdk/anthropic"}]}`
+	vendorsJSON := `{"success":true,"message":"","data":[]}`
+	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
+
+	body := `{"overwrite":[{"model_name":"zz-user-set-vendor","fields":["description"]}]}`
+	runSyncUpstreamModels(t, body)
+
+	var stored model.Model
+	require.NoError(t, db.Where("model_name = ?", "zz-user-set-vendor").First(&stored).Error)
+	assert.Equal(t, openAI.Id, stored.VendorID, "non-fallback vendor must not be overwritten")
 }

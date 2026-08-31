@@ -33,8 +33,60 @@ const (
 	openCodeGoSyncVendor    = "OpenCode Go"
 )
 
-// openCodeGoVendorRules 按模型 id 前缀正则归属供应商：本地已存在则复用
-// （ensureVendorID 先查 DB），不存在则创建；匹配不到兜底 openCodeGoSyncVendor。
+// openCodeGoProviderVendors 将 api.json 的 provider.npm 值映射为供应商名
+// （主要手段）。仅收录明确一对一的主流 SDK 包；@ai-sdk/openai-compatible
+// 等泛化包不在此映射，交由模型 ID 正则/兜底处理，避免误判。
+// 命名与 DB 既有供应商保持一致（OpenAI、Z.AI、Hunyuan、Qwen、DeepSeek、
+// MiniMax、xAI、Nvidia、Moonshot、OpenRouter、OpenCode Go 等），避免同一
+// 厂商建出多个供应商；未收录的厂商按规范英文名新建。
+var openCodeGoProviderVendors = map[string]string{
+	"@ai-sdk/openai":          "OpenAI",
+	"@ai-sdk/anthropic":       "Anthropic",
+	"@ai-sdk/google":          "Google",
+	"@ai-sdk/google-vertex":   "Google",
+	"@ai-sdk/mistral":         "Mistral",
+	"@ai-sdk/xai":             "xAI",
+	"@ai-sdk/azure":           "Azure OpenAI",
+	"@ai-sdk/amazon-bedrock":  "AWS Bedrock",
+	"@ai-sdk/aws-bedrock":     "AWS Bedrock",
+	"@ai-sdk/cerebras":        "Cerebras",
+	"@ai-sdk/deepseek":        "DeepSeek",
+	"@ai-sdk/groq":            "Groq",
+	"@ai-sdk/perplexity":      "Perplexity",
+	"@ai-sdk/togetherai":      "Together AI",
+	"@ai-sdk/cohere":          "Cohere",
+	"@ai-sdk/fireworks":       "Fireworks AI",
+	"@ai-sdk/moonshot":        "Moonshot",
+	"@ai-sdk/qwen":            "Qwen",
+	"@ai-sdk/nvidia":          "Nvidia",
+	"@ai-sdk/ollama":          "Ollama",
+	"@ai-sdk/huggingface":     "Hugging Face",
+	"@ai-sdk/replicate":       "Replicate",
+	"@ai-sdk/modal":           "Modal",
+	"@ai-sdk/luma":            "Luma",
+	"@ai-sdk/elevenlabs":      "ElevenLabs",
+	"@ai-sdk/minimax":         "MiniMax",
+	"@ai-sdk/tencent-hunyuan": "Hunyuan",
+	"@ai-sdk/zhipu":           "Z.AI",
+	"@ai-sdk/kling":           "Kling",
+	"@ai-sdk/openrouter":      "OpenRouter",
+	"@ai-sdk/baidu":           "Baidu",
+	"@ai-sdk/baichuan":        "Baichuan",
+	"@ai-sdk/sambanova":       "SambaNova",
+	"@ai-sdk/upstage":         "Upstage",
+	"@ai-sdk/watsonx":         "IBM watsonx",
+	"@ai-sdk/portkey":         "Portkey",
+}
+
+// openCodeGoVendorForProvider 返回 npm 包对应的供应商名；无映射返回空串。
+func openCodeGoVendorForProvider(npm string) string {
+	return openCodeGoProviderVendors[npm]
+}
+
+// openCodeGoVendorRules 按模型 id 前缀正则归属供应商（次要手段）：本地已存在
+// 则复用（ensureVendorID 先查 DB），不存在则创建；匹配不到兜底 openCodeGoSyncVendor。
+// 规则按序匹配，命中最特异的放前面；Provider(npm) 映射优先于本规则（见
+// openCodeGoVendorForModelAndProvider）。
 var openCodeGoVendorRules = []struct {
 	re     *regexp.Regexp
 	vendor string
@@ -50,6 +102,20 @@ var openCodeGoVendorRules = []struct {
 	{regexp.MustCompile(`^hy`), "Hunyuan"},
 	{regexp.MustCompile(`^nemotron`), "Nvidia"},
 	{regexp.MustCompile(`^laguna`), "Poolside"},
+	// 补充主流厂商前缀（放已有规则之后，避免与更特异的规则冲突）
+	{regexp.MustCompile(`^claude-`), "Anthropic"},
+	{regexp.MustCompile(`^llama-`), "Meta"},
+	{regexp.MustCompile(`^mistral-`), "Mistral"},
+	{regexp.MustCompile(`^gemma-`), "Google"},
+	{regexp.MustCompile(`^gemini-`), "Google"},
+	{regexp.MustCompile(`^phi-`), "Microsoft"},
+	{regexp.MustCompile(`^command-`), "Cohere"},
+	{regexp.MustCompile(`^doubao-`), "Volcengine"},
+	{regexp.MustCompile(`^ernie-`), "Baidu"},
+	{regexp.MustCompile(`^spark-`), "iFlytek"},
+	{regexp.MustCompile(`^o1-`), "OpenAI"},
+	{regexp.MustCompile(`^o3-`), "OpenAI"},
+	{regexp.MustCompile(`^o4-`), "OpenAI"},
 }
 
 func openCodeGoVendorForModel(modelID string) string {
@@ -59,6 +125,15 @@ func openCodeGoVendorForModel(modelID string) string {
 		}
 	}
 	return openCodeGoSyncVendor
+}
+
+// openCodeGoVendorForModelAndProvider 按判定顺序归属供应商：
+// Provider(npm) 映射 > 模型 ID 正则 > 兜底 "OpenCode Go"。
+func openCodeGoVendorForModelAndProvider(modelID, providerNpm string) string {
+	if v := openCodeGoVendorForProvider(providerNpm); v != "" {
+		return v
+	}
+	return openCodeGoVendorForModel(modelID)
 }
 
 // openCodeGoEndpointForProvider 将 api.json 的 provider.npm 映射为端点类型：
@@ -413,10 +488,13 @@ func fetchSyncUpstreamData(ctx context.Context, source, locale string) (modelsUR
 		if fetchErr != nil {
 			return "", "", vendorsEnv, modelsEnv, fetchErr
 		}
-		// 供应商列表：OpenCode Go + 规则表中全部目标供应商（去重）
+		// 供应商列表：OpenCode Go + 规则表全部目标供应商 + provider 映射厂商（去重）
 		vendorSet := map[string]struct{}{openCodeGoSyncVendor: {}}
 		for _, r := range openCodeGoVendorRules {
 			vendorSet[r.vendor] = struct{}{}
+		}
+		for _, v := range openCodeGoProviderVendors {
+			vendorSet[v] = struct{}{}
 		}
 		vendorsEnv = upstreamEnvelope[upstreamVendor]{Success: true}
 		for name := range vendorSet {
@@ -431,14 +509,15 @@ func fetchSyncUpstreamData(ctx context.Context, source, locale string) (modelsUR
 			})
 		}
 		modelsEnv = upstreamEnvelope[upstreamModel]{Success: true}
-		// description 直接采用 api.json 英文原文；供应商按模型 id 正则归属；
+		// description 直接采用 api.json 英文原文；供应商按判定顺序归属
+		// （Provider(npm) 映射 > 模型 ID 正则 > 兜底，见 openCodeGoVendorForModelAndProvider）；
 		// 端点按 provider.npm 映射（默认 openai），空 provider 同样写默认端点
 		for _, entry := range entries {
 			modelsEnv.Data = append(modelsEnv.Data, upstreamModel{
 				ModelName:        entry.ID,
 				Description:      entry.Description,
 				Endpoints:        endpointsJSON(entry.Provider),
-				VendorName:       openCodeGoVendorForModel(entry.ID),
+				VendorName:       openCodeGoVendorForModelAndProvider(entry.ID, entry.Provider),
 				Status:           openCodeGoStatusToModelStatus(entry.Status),
 				NameRule:         0,
 				DisplayName:      entry.Name,
@@ -614,12 +693,20 @@ func SyncUpstreamModels(c *gin.Context) {
 	// 4) 已有模型"只填缺失"富元数据（不覆盖人工值）：
 	//    对新创建之外的已存在模型，若其富字段为空/nil 而上游有值，则补齐。
 	//    仅处理 sync_official <> 0 的模型，避免覆盖管理员手工配置。
+	//    同时做存量误映射修复：模型当前归属兜底供应商 "OpenCode Go"（旧逻辑
+	//    误映射），而上游按新判定顺序能推导出真实供应商时，重映射 vendor_id。
 	filledModels := 0
 	filledList := make([]string, 0)
 	if len(modelByName) > 0 {
 		upstreamNames := make([]string, 0, len(modelByName))
 		for name := range modelByName {
 			upstreamNames = append(upstreamNames, name)
+		}
+		// 解析兜底供应商 "OpenCode Go" 的 ID（仅当该供应商已存在于 DB 时启用重映射）
+		fallbackVendorID := 0
+		var fbVendor model.Vendor
+		if err := model.DB.Where("name = ?", openCodeGoSyncVendor).First(&fbVendor).Error; err == nil {
+			fallbackVendorID = fbVendor.Id
 		}
 		var locals []model.Model
 		if err := model.DB.Where("model_name IN ? AND sync_official <> 0", upstreamNames).Find(&locals).Error; err == nil {
@@ -630,6 +717,14 @@ func SyncUpstreamModels(c *gin.Context) {
 					continue
 				}
 				updates := missingRichFieldsMap(local, up)
+				// 存量误映射修复：当前指向兜底、且上游推导出真实供应商 → 更新 vendor_id。
+				// 仅针对「当前是兜底供应商」的情况，不覆盖用户手动指定过的供应商。
+				if fallbackVendorID > 0 && local.VendorID == fallbackVendorID &&
+					up.VendorName != "" && up.VendorName != openCodeGoSyncVendor {
+					if newVendorID := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors); newVendorID > 0 && newVendorID != local.VendorID {
+						updates["vendor_id"] = newVendorID
+					}
+				}
 				if len(updates) == 0 {
 					continue
 				}

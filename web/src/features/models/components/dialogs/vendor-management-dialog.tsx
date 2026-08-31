@@ -192,6 +192,12 @@ export function VendorManagementDialog({
             {isFetching && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
             {t('Refresh')}
           </Button>
+          <StatusBadge
+            label={`${total} ${t('vendors')}`}
+            variant='neutral'
+            size='sm'
+            copyable={false}
+          />
         </div>
 
         {error && (
@@ -287,29 +293,29 @@ export function VendorManagementDialog({
           />
         </div>
 
-        <div className='flex items-center justify-between gap-2'>
-          <StatusBadge
-            label={`${total} ${t('vendors')}`}
-            variant='neutral'
-            size='sm'
-            copyable={false}
-          />
-          <DataTablePagination
-            table={
-              {
-                getState: () => ({ pagination: { pageIndex: page - 1, pageSize } }),
-                getPageCount: () => totalPages,
-                getRowCount: () => total,
-                setPageSize: (size: number) => handlePageSizeChange(size),
-                setPageIndex: (index: number) => setPage(index + 1),
-                previousPage: () => setPage((p) => Math.max(1, p - 1)),
-                nextPage: () => setPage((p) => Math.min(totalPages, p + 1)),
-                getCanPreviousPage: () => page > 1,
-                getCanNextPage: () => page < totalPages,
-              } as unknown as Parameters<typeof DataTablePagination>[0]['table']
-            }
-          />
-        </div>
+        {/* Pagination must stay in block-level flow (direct child of the dialog
+            body), NOT inside the flex row above: its root uses
+            `@container/pagination` (= `container-type: inline-size`), and a flex
+            item with inline-size containment gets a flex base size of 0 — the
+            bar would collapse to zero width and be clipped by its own
+            `overflow-clip`, making the controls invisible. As a block element it
+            fills the dialog body width and the container queries resolve
+            against that width. */}
+        <DataTablePagination
+          table={
+            {
+              getState: () => ({ pagination: { pageIndex: page - 1, pageSize } }),
+              getPageCount: () => totalPages,
+              getRowCount: () => total,
+              setPageSize: (size: number) => handlePageSizeChange(size),
+              setPageIndex: (index: number) => setPage(index + 1),
+              previousPage: () => setPage((p) => Math.max(1, p - 1)),
+              nextPage: () => setPage((p) => Math.min(totalPages, p + 1)),
+              getCanPreviousPage: () => page > 1,
+              getCanNextPage: () => page < totalPages,
+            } as unknown as Parameters<typeof DataTablePagination>[0]['table']
+          }
+        />
 
         {isLoading && (
           <div className='flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground'>
