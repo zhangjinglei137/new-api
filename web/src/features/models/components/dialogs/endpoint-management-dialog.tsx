@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cable, Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -26,6 +26,10 @@ import { StaticDataTable } from '@/components/data-table/static/static-data-tabl
 import { Dialog } from '@/components/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  ComboboxInput,
+  type ComboboxInputOption,
+} from '@/components/ui/combobox-input'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -48,6 +52,30 @@ const PATH_OPTIONAL_ENDPOINT_TYPES = new Set<string>(['openai-video'])
 type EndpointManagementDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+}
+
+/**
+ * Build the npm suggestion list for the combobox: the server-provided
+ * `npm_options` merged with every npm value currently present in the rows
+ * (so the current value is always selectable/displayable), de-duplicated,
+ * empty values dropped, and sorted alphabetically.
+ */
+function buildNpmOptions(
+  serverOptions: string[] | undefined,
+  rows: EndpointDefinition[]
+): ComboboxInputOption[] {
+  const seen = new Set<string>()
+  const options: ComboboxInputOption[] = []
+  const push = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) return
+    seen.add(trimmed)
+    options.push({ value: trimmed, label: trimmed })
+  }
+  for (const npm of serverOptions ?? []) push(npm)
+  for (const row of rows) push(row.npm ?? '')
+  options.sort((a, b) => a.value.localeCompare(b.value))
+  return options
 }
 
 export function EndpointManagementDialog({
@@ -76,6 +104,12 @@ export function EndpointManagementDialog({
       previous.map((row) => (row.type === type ? { ...row, ...patch } : row))
     )
   }
+
+  // npm suggestions: server `npm_options` + every current row value.
+  const npmOptions = useMemo(
+    () => buildNpmOptions(data?.data?.npm_options, rows),
+    [data?.data?.npm_options, rows]
+  )
 
   const validate = (): string | null => {
     for (const row of rows) {
@@ -135,7 +169,7 @@ export function EndpointManagementDialog({
       description={t(
         'Configure the endpoint definitions offered by the model editor template list.'
       )}
-      contentClassName='w-[calc(100vw-2rem)] sm:max-w-[52rem]'
+      contentClassName='w-[calc(100vw-2rem)] sm:max-w-[68rem]'
       contentHeight='auto'
       bodyClassName='space-y-3'
       footer={
@@ -163,16 +197,22 @@ export function EndpointManagementDialog({
         </div>
       ) : (
         <>
-          <div className='border-border/60 overflow-hidden rounded-lg border'>
+          {/* overflow-x-auto (mobile) with sm:overflow-visible (desktop): the
+              table scrolls horizontally on small screens, while on desktop the
+              npm combobox dropdown can escape the table container unclipped.
+              StaticDataTable's own overflow-hidden is overridden by the
+              overflow-visible passed below (cn/twMerge). */}
+          <div className='border-border/60 overflow-x-auto rounded-lg border sm:overflow-visible'>
             <StaticDataTable
               data={rows}
               getRowKey={(row) => row.type}
-              tableClassName='min-w-[720px]'
+              tableClassName='min-w-[900px]'
+              className='overflow-visible'
               columns={[
                 {
                   id: 'type',
                   header: t('Endpoint Type'),
-                  className: 'w-[22%]',
+                  className: 'w-[18%]',
                   cell: ({ type }) => (
                     <div className='flex flex-wrap items-center gap-1.5'>
                       <span className='font-mono text-xs font-medium'>
@@ -192,7 +232,7 @@ export function EndpointManagementDialog({
                 {
                   id: 'display_name',
                   header: t('Display Name'),
-                  className: 'w-[24%]',
+                  className: 'w-[18%]',
                   cell: ({ type, display_name }) => (
                     <Input
                       value={display_name || ''}
@@ -226,7 +266,7 @@ export function EndpointManagementDialog({
                 {
                   id: 'method',
                   header: t('Method'),
-                  className: 'w-[14%]',
+                  className: 'w-[12%]',
                   cell: ({ type, method }) => (
                     <Input
                       value={method || ''}
@@ -241,14 +281,15 @@ export function EndpointManagementDialog({
                 {
                   id: 'npm',
                   header: t('NPM'),
-                  className: 'w-[14%]',
+                  className: 'w-[26%] min-w-[240px]',
                   cell: ({ type, npm }) => (
-                    <Input
+                    <ComboboxInput
+                      options={npmOptions}
                       value={npm || ''}
-                      onChange={(event) =>
-                        updateRow(type, { npm: event.target.value })
-                      }
+                      onValueChange={(value) => updateRow(type, { npm: value })}
                       placeholder='@ai-sdk/openai'
+                      emptyText={t('No matching items')}
+                      allowCustomValue
                       className='font-mono'
                     />
                   ),

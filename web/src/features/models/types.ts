@@ -260,6 +260,12 @@ export interface GetEndpointDefinitionsResponse {
   message?: string
   data?: {
     endpoints?: EndpointDefinition[]
+    /**
+     * All npm package names that have appeared across endpoint definitions,
+     * de-duplicated and sorted. Used as suggestions in the endpoint
+     * management dialog's npm combobox.
+     */
+    npm_options?: string[]
   }
 }
 

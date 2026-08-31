@@ -123,6 +123,22 @@ func GetVendorModelCounts() (map[int64]int64, error) {
 	return m, nil
 }
 
+// GetAllProviderNPMs 返回 models 表里所有去重、非空的 provider_npm 值（按名称排序）。
+// 用于管理端 NPM 下拉候选项统计。PostgreSQL 下 provider_npm 可能为 NULL 或空串：
+// `<> ''` 对两者都会排除（NULL 参与比较结果为 NULL，不满足条件），
+// SQLite/MySQL 同理。仅做聚合查询，不做任何 schema 变更。
+func GetAllProviderNPMs() ([]string, error) {
+	var npms []string
+	if err := DB.Model(&Model{}).
+		Where("provider_npm <> ''").
+		Distinct("provider_npm").
+		Order("provider_npm").
+		Pluck("provider_npm", &npms).Error; err != nil {
+		return nil, err
+	}
+	return npms, nil
+}
+
 func GetAllModels(offset int, limit int) ([]*Model, error) {
 	models, _, err := SearchModels("", "", "", "", offset, limit)
 	return models, err
