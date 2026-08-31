@@ -119,15 +119,16 @@ var openCodeGoVendorRules = []struct {
 	{regexp.MustCompile(`^o3-`), "OpenAI"},
 	{regexp.MustCompile(`^o4-`), "OpenAI"},
 	// opencode-go 分组前缀补全（供应商名经上游 api.json 查证）：
-	// longcat 有独立分组 name="LongCat"；ling/ring 为 InclusionAI 产品线
-	// （llmgateway 分组 name="InclusionAI Ling 3.0 Flash"）；north 为
-	// Cohere 产品（cohere 分组 north-mini-code-1-0）；trinity 为 Arcee
-	// 产品（arcee 分组 trinity-large-thinking）；muse-spark 在各聚合分组
-	// 均挂 meta/ 前缀（openrouter 分组 meta/muse-spark-*）；ox-alpha 仅
-	// 存在于 opencode-go/opencode 分组（OpenCode 生态自家模型）。
+	// longcat 有独立分组 name="LongCat"；ling/ring 为蚂蚁集团 InclusionAI
+	// 产品线（llmgateway 分组 name="InclusionAI Ling 3.0 Flash"），用户要求
+	// 供应商名显示为 AntGroup；north 为 Cohere 产品（cohere 分组
+	// north-mini-code-1-0）；trinity 为 Arcee 产品（arcee 分组
+	// trinity-large-thinking）；muse-spark 在各聚合分组均挂 meta/ 前缀
+	// （openrouter 分组 meta/muse-spark-*）；ox-alpha 仅存在于
+	// opencode-go/opencode 分组（OpenCode 生态自家模型）。
 	{regexp.MustCompile(`^longcat-`), "LongCat"},
-	{regexp.MustCompile(`^ling-`), "InclusionAI"},
-	{regexp.MustCompile(`^ring-`), "InclusionAI"},
+	{regexp.MustCompile(`^ling-`), "AntGroup"},
+	{regexp.MustCompile(`^ring-`), "AntGroup"},
 	{regexp.MustCompile(`^north-`), "Cohere"},
 	{regexp.MustCompile(`^trinity-`), "Arcee"},
 	{regexp.MustCompile(`^muse-`), "Meta"},

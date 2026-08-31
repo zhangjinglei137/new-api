@@ -913,14 +913,64 @@ func updateChannelUsedQuota(id int, quota int) {
 	}
 }
 
+// DeleteChannelByStatus 按状态删除渠道并清理其能力记录（孤儿能力会导致
+// 缺失模型误报，删除渠道必须同步删除 abilities）。
 func DeleteChannelByStatus(status int64) (int64, error) {
-	result := DB.Where("status = ?", status).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	// 先收集将删除的渠道 id，再删除渠道与能力
+	var ids []int
+	if err := tx.Model(&Channel{}).Where("status = ?", status).Pluck("id", &ids).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	result := tx.Where("status = ?", status).Delete(&Channel{})
+	if result.Error != nil {
+		tx.Rollback()
+		return 0, result.Error
+	}
+	if len(ids) > 0 {
+		if err := tx.Where("channel_id in (?)", ids).Delete(&Ability{}).Error; err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+	}
+	if err := tx.Commit().Error; err != nil {
+		return 0, err
+	}
+	return result.RowsAffected, nil
 }
 
+// DeleteDisabledChannel 删除所有禁用渠道并清理其能力记录（含自动禁用与
+// 手动禁用）。孤儿能力会导致缺失模型误报，删除渠道必须同步删除 abilities。
 func DeleteDisabledChannel() (int64, error) {
-	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	statusList := []int{common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled}
+	var ids []int
+	if err := tx.Model(&Channel{}).Where("status in (?)", statusList).Pluck("id", &ids).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	result := tx.Where("status in (?)", statusList).Delete(&Channel{})
+	if result.Error != nil {
+		tx.Rollback()
+		return 0, result.Error
+	}
+	if len(ids) > 0 {
+		if err := tx.Where("channel_id in (?)", ids).Delete(&Ability{}).Error; err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+	}
+	if err := tx.Commit().Error; err != nil {
+		return 0, err
+	}
+	return result.RowsAffected, nil
 }
 
 func GetPaginatedTags(offset int, limit int) ([]*string, error) {

@@ -122,8 +122,8 @@ func TestOpenCodeGoVendorForModel(t *testing.T) {
 		{"o3-mini", "OpenAI"},
 		// opencode-go 分组前缀补全
 		{"longcat-2.0", "LongCat"},
-		{"ling-3.0-flash-fin-free", "InclusionAI"},
-		{"ring-2.6-1t-free", "InclusionAI"},
+		{"ling-3.0-flash-fin-free", "AntGroup"},
+		{"ring-2.6-1t-free", "AntGroup"},
 		{"north-mini-code-free", "Cohere"},
 		{"trinity-large-preview-free", "Arcee"},
 		{"muse-spark-1.2-contributor-free", "Meta"},
@@ -162,7 +162,7 @@ func TestOpenCodeGoVendorForModelAndProvider(t *testing.T) {
 	// 无 provider 时正则命中
 	assert.Equal(t, "OpenAI", openCodeGoVendorForModelAndProvider("gpt-4o", ""))
 	assert.Equal(t, "LongCat", openCodeGoVendorForModelAndProvider("longcat-2.0", ""))
-	assert.Equal(t, "InclusionAI", openCodeGoVendorForModelAndProvider("ling-3.0-flash-fin-free", ""))
+	assert.Equal(t, "AntGroup", openCodeGoVendorForModelAndProvider("ling-3.0-flash-fin-free", ""))
 	// 正则未命中 → provider 映射兜底（muse- 有正则则优先正则；无正则的
 	// 任意 id + 有映射的 npm → provider 供应商，至少比 OpenCode Go 有意义）
 	assert.Equal(t, "OpenAI", openCodeGoVendorForModelAndProvider("zz-unknown-served", "@ai-sdk/openai"))
@@ -224,11 +224,16 @@ func runSyncUpstreamModels(t *testing.T, body string) syncUpstreamResponse {
 
 func TestSyncUpstreamModelsCreatesModelWithSyncOfficial(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
+	// 先建渠道再建能力：指向不存在渠道的能力是孤儿，会被 GetMissingModels
+	// 排除（缺失模型误报修复），不会进入缺失创建路径
+	require.NoError(t, db.Create(&model.Channel{Name: "zz-sync-ch", Type: 1, Status: common.ChannelStatusEnabled}).Error)
+	var ch model.Channel
+	require.NoError(t, db.Where("name = ?", "zz-sync-ch").First(&ch).Error)
 	// abilities 引用一个本地元数据表中不存在的模型 → 进入缺失创建路径
 	require.NoError(t, db.Create(&model.Ability{
 		Group:     "default",
 		Model:     "zz-sync-create-model",
-		ChannelId: 1,
+		ChannelId: ch.Id,
 		Enabled:   true,
 	}).Error)
 
