@@ -60,9 +60,8 @@ func TestListModelsExtendedSwitchOutputIncludesRichFields(t *testing.T) {
 	require.NoError(t, db.Create(&model.Model{
 		ModelName:    "rich-test-model",
 		DisplayName:  "Rich Test",
-		Family:       "test",
 		CapReasoning: boolPtr(true),
-		ProviderNpm:  "@ai-sdk/anthropic",
+		Endpoints:    `{"anthropic":{"path":"/v1/messages","method":"POST"}}`,
 		Capabilities: `{"limits":{"context":1000000},"modalities":{"input":["text"],"output":["text"]}}`,
 	}).Error)
 	require.NoError(t, db.Create(&model.Ability{
@@ -72,6 +71,7 @@ func TestListModelsExtendedSwitchOutputIncludesRichFields(t *testing.T) {
 	old := operation_setting.ModelMetadataExtendedEnabled
 	operation_setting.ModelMetadataExtendedEnabled = true
 	t.Cleanup(func() { operation_setting.ModelMetadataExtendedEnabled = old })
+	t.Cleanup(common.ResetEndpointDefinitions)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -82,20 +82,20 @@ func TestListModelsExtendedSwitchOutputIncludesRichFields(t *testing.T) {
 
 	body := w.Body.String()
 	assert.True(t, strings.Contains(body, `"name":"Rich Test"`), "body=%s", body)
-	assert.True(t, strings.Contains(body, `"family":"test"`), "body=%s", body)
 	assert.True(t, strings.Contains(body, `"reasoning":true`), "body=%s", body)
 	assert.True(t, strings.Contains(body, `"provider":{"npm":"@ai-sdk/anthropic"}`), "body=%s", body)
 	assert.True(t, strings.Contains(body, `"limit":{"context":1000000}`), "body=%s", body)
+	assert.False(t, strings.Contains(body, `"family"`), "family must not be output, body=%s", body)
 }
 
 // TestBuildRichOpenAIModelFields 验证富字段组装：三态 *bool、capabilities
-// 子结构、provider、cost_source。
+// 子结构、provider（由 endpoints 推导）、cost_source。
 func TestBuildRichOpenAIModelFields(t *testing.T) {
+	t.Cleanup(common.ResetEndpointDefinitions)
 	meta := &model.Model{
 		ModelName:           "rich-test",
 		DisplayName:         "Rich Test Model",
-		Family:              "glm",
-		ProviderNpm:         "@ai-sdk/anthropic",
+		Endpoints:           `{"anthropic":{"path":"/v1/messages","method":"POST"}}`,
 		ReleaseDate:         "2026-08-26",
 		LastUpdated:         "2026-08-26",
 		OpenWeights:         boolPtr(false),
@@ -111,7 +111,6 @@ func TestBuildRichOpenAIModelFields(t *testing.T) {
 	rich := buildRichOpenAIModel(base, meta)
 
 	assert.Equal(t, "Rich Test Model", rich.Name)
-	assert.Equal(t, "glm", rich.Family)
 	require.NotNil(t, rich.Provider)
 	assert.Equal(t, "@ai-sdk/anthropic", rich.Provider.NPM)
 	require.NotNil(t, rich.Attachment)
@@ -127,6 +126,8 @@ func TestBuildRichOpenAIModelFields(t *testing.T) {
 	require.NotNil(t, rich.Limit)
 	assert.Equal(t, 1000000, rich.Limit.Context)
 	require.Len(t, rich.ReasoningOptions, 1)
+	require.Len(t, rich.Groups, 1)
+	assert.Equal(t, "chat", rich.Groups[0].Name)
 }
 
 // TestBuildRichOpenAIModelNilMeta 验证 meta 为 nil 时富字段全部省略，仅基础字段。
@@ -134,21 +135,189 @@ func TestBuildRichOpenAIModelNilMeta(t *testing.T) {
 	base := dto.OpenAIModels{Id: "m", Object: "model", Created: 1, OwnedBy: "x"}
 	rich := buildRichOpenAIModel(base, nil)
 	assert.Equal(t, "m", rich.Id)
-	assert.Empty(t, rich.Family)
 	assert.Nil(t, rich.Provider)
 	assert.Nil(t, rich.Cost)
 	assert.Empty(t, rich.CostSource)
+	assert.Nil(t, rich.Groups)
 }
 
-// TestParseModelCapabilities 验证 capabilities 解析的健壮性。
+// TestParseModelCapabilities 验证 capabilities 解析的健壮性与双格式归一化。
 func TestParseModelCapabilities(t *testing.T) {
+	// 旧格式：无 groups 但含旧顶层字段 → 归一化为单组 chat，旧字段保留
 	caps := parseModelCapabilities(`{"limits":{"context":10}}`)
 	require.NotNil(t, caps)
 	require.NotNil(t, caps.Limits)
 	assert.Equal(t, 10, caps.Limits.Context)
+	require.Len(t, caps.Groups, 1)
+	assert.Equal(t, "chat", caps.Groups[0].Name)
+	require.NotNil(t, caps.Groups[0].Limits)
+	assert.Equal(t, 10, caps.Groups[0].Limits.Context)
 
+	// 新格式：有 groups 直接用
+	caps = parseModelCapabilities(`{"groups":[{"name":"reasoning","limits":{"context":20},"modalities":{"input":["text"],"output":["text"]}}]}`)
+	require.NotNil(t, caps)
+	require.Len(t, caps.Groups, 1)
+	assert.Equal(t, "reasoning", caps.Groups[0].Name)
+	require.NotNil(t, caps.Groups[0].Limits)
+	assert.Equal(t, 20, caps.Groups[0].Limits.Context)
+
+	// 空串 / 坏 JSON / 空对象 / 空 groups 数组 → nil
 	assert.Nil(t, parseModelCapabilities(""))
 	assert.Nil(t, parseModelCapabilities("{not-json"))
+	assert.Nil(t, parseModelCapabilities(`{}`))
+	assert.Nil(t, parseModelCapabilities(`{"groups":[]}`))
+}
+
+// TestBuildRichOpenAIModelCapabilitiesGolden 表驱动 golden 测试：capabilities
+// 双格式归一化在 buildRichOpenAIModel 的输出表现（顶层投影 + groups 全量）。
+func TestBuildRichOpenAIModelCapabilitiesGolden(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		// 顶层投影期望（nil 表示对应字段省略）
+		wantModalities *OpenAIModelModalities
+		wantLimit      *OpenAIModelLimit
+		wantReasoning  bool
+		wantGroups     []string // groups 的 name 顺序
+	}{
+		{
+			name:           "legacy single group",
+			raw:            `{"modalities":{"input":["text","image"],"output":["text"]},"limits":{"context":1000000,"output":131072},"reasoning_options":[{"type":"effort","values":["low","high"]}]}`,
+			wantModalities: &OpenAIModelModalities{Input: []string{"text", "image"}, Output: []string{"text"}},
+			wantLimit:      &OpenAIModelLimit{Context: 1000000, Output: 131072},
+			wantReasoning:  true,
+			wantGroups:     []string{"chat"},
+		},
+		{
+			name:           "new single group",
+			raw:            `{"groups":[{"name":"chat","modalities":{"input":["text"],"output":["text"]},"limits":{"context":1000000},"reasoning_options":[{"type":"effort","values":["low","high"]}]}]}`,
+			wantModalities: &OpenAIModelModalities{Input: []string{"text"}, Output: []string{"text"}},
+			wantLimit:      &OpenAIModelLimit{Context: 1000000},
+			wantReasoning:  true,
+			wantGroups:     []string{"chat"},
+		},
+		{
+			name: "new multiple groups projection from first",
+			raw:  `{"groups":[{"name":"chat","limits":{"context":1000000}},{"name":"reasoning","limits":{"context":200000},"modalities":{"input":["text"],"output":["text"]}}]}`,
+			// 顶层 = groups[0] 投影：仅 limit
+			wantLimit:  &OpenAIModelLimit{Context: 1000000},
+			wantGroups: []string{"chat", "reasoning"},
+		},
+		{
+			name:       "name only group",
+			raw:        `{"groups":[{"name":"chat"}]}`,
+			wantGroups: []string{"chat"},
+		},
+		{
+			name: "empty groups",
+			raw:  `{"groups":[]}`,
+		},
+		{
+			name: "bad json",
+			raw:  `{not-json`,
+		},
+		{
+			name: "empty string",
+			raw:  "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			meta := &model.Model{
+				ModelName:    "golden-cap",
+				DisplayName:  "Golden Cap",
+				Capabilities: tc.raw,
+			}
+			rich := buildRichOpenAIModel(dto.OpenAIModels{Id: "golden-cap"}, meta)
+
+			if tc.wantModalities == nil {
+				assert.Nil(t, rich.Modalities, "modalities should be omitted")
+			} else {
+				require.NotNil(t, rich.Modalities)
+				assert.Equal(t, tc.wantModalities.Input, rich.Modalities.Input)
+				assert.Equal(t, tc.wantModalities.Output, rich.Modalities.Output)
+			}
+			if tc.wantLimit == nil {
+				assert.Nil(t, rich.Limit, "limit should be omitted")
+			} else {
+				require.NotNil(t, rich.Limit)
+				assert.Equal(t, tc.wantLimit.Context, rich.Limit.Context)
+				assert.Equal(t, tc.wantLimit.Output, rich.Limit.Output)
+			}
+			if !tc.wantReasoning {
+				assert.Nil(t, rich.ReasoningOptions, "reasoning_options should be omitted")
+			} else {
+				require.Len(t, rich.ReasoningOptions, 1)
+			}
+			var names []string
+			for _, g := range rich.Groups {
+				names = append(names, g.Name)
+			}
+			assert.Equal(t, tc.wantGroups, names, "groups should be output in stored order")
+		})
+	}
+}
+
+// TestBuildRichOpenAIModelBoolFieldsOnlyNoCaps 验证仅布尔字段、无 capabilities
+// 时输出布尔字段且不输出任何能力结构。
+func TestBuildRichOpenAIModelBoolFieldsOnlyNoCaps(t *testing.T) {
+	meta := &model.Model{
+		ModelName:     "bool-only",
+		CapAttachment: boolPtr(true),
+		CapReasoning:  boolPtr(false),
+	}
+	rich := buildRichOpenAIModel(dto.OpenAIModels{Id: "bool-only"}, meta)
+	require.NotNil(t, rich.Attachment)
+	assert.True(t, *rich.Attachment)
+	require.NotNil(t, rich.Reasoning)
+	assert.False(t, *rich.Reasoning)
+	assert.Nil(t, rich.Modalities)
+	assert.Nil(t, rich.Limit)
+	assert.Nil(t, rich.ReasoningOptions)
+	assert.Nil(t, rich.Groups)
+}
+
+// TestDeriveProviderNpmPriority 验证 provider.npm 推导的确定性优先级：
+// 固定优先级取「模型已配置且该类型 npm 非空」的第一个值。
+func TestDeriveProviderNpmPriority(t *testing.T) {
+	t.Cleanup(common.ResetEndpointDefinitions)
+	cases := []struct {
+		name      string
+		endpoints string
+		want      string
+	}{
+		{
+			name:      "anthropic wins over openai",
+			endpoints: `{"openai":{"path":"/v1/chat/completions","method":"POST"},"anthropic":{"path":"/v1/messages","method":"POST"}}`,
+			want:      "@ai-sdk/anthropic",
+		},
+		{
+			name:      "openai-response npm",
+			endpoints: `{"openai-response":{"path":"/v1/responses","method":"POST"}}`,
+			want:      "@ai-sdk/openai",
+		},
+		{
+			name:      "openai only no npm",
+			endpoints: `{"openai":{"path":"/v1/chat/completions","method":"POST"}}`,
+			want:      "",
+		},
+		{
+			name:      "empty endpoints",
+			endpoints: ``,
+			want:      "",
+		},
+		{
+			name:      "bad json",
+			endpoints: `{not-json`,
+			want:      "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			meta := &model.Model{ModelName: "npm-test", Endpoints: tc.endpoints}
+			assert.Equal(t, tc.want, deriveProviderNpm(meta))
+		})
+	}
 }
 
 // TestDeriveOpenAIModelCostFallbackRatio 验证非自用模式下未配置倍率返回

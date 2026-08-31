@@ -152,6 +152,11 @@ export interface GetVendorsResponse {
     total: number
     page: number
     page_size: number
+    /**
+     * Number of models referencing each vendor, keyed by vendor id string.
+     * Aggregated server-side; may be absent on deployments that do not emit it.
+     */
+    vendor_counts?: Record<string, number>
   }
 }
 
@@ -230,6 +235,32 @@ export interface PrefillGroupsResponse {
   success: boolean
   message?: string
   data?: PrefillGroup[]
+}
+
+// ============================================================================
+// Endpoint Definition Types
+// ============================================================================
+
+/**
+ * Endpoint definition entity returned by `/api/model_setting/endpoints`.
+ */
+export interface EndpointDefinition {
+  type: string
+  display_name?: string
+  path?: string
+  method?: string
+  npm?: string
+}
+
+/**
+ * Get endpoint definitions response
+ */
+export interface GetEndpointDefinitionsResponse {
+  success: boolean
+  message?: string
+  data?: {
+    endpoints?: EndpointDefinition[]
+  }
 }
 
 // ============================================================================

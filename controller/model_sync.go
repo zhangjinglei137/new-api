@@ -75,24 +75,17 @@ func openCodeGoEndpointForProvider(providerNpm string) string {
 	}
 }
 
-// endpointTemplates 是模型端点模板（与前端 ENDPOINT_TEMPLATES 一致），
-// 供 opencode-go 同步组装端点 map。
-var endpointTemplates = map[string]map[string]any{
-	"openai":           {"path": "/v1/chat/completions", "method": "POST"},
-	"openai-response":  {"path": "/v1/responses", "method": "POST"},
-	"anthropic":        {"path": "/v1/messages", "method": "POST"},
-	"gemini":           {"path": "/v1beta/models/{model}:generateContent", "method": "POST"},
-	"jina-rerank":      {"path": "/rerank", "method": "POST"},
-	"image-generation": {"path": "/v1/images/generations", "method": "POST"},
-	"embeddings":       {"path": "/v1/embeddings", "method": "POST"},
-}
-
 // endpointsJSON 组装模型端点 JSON（map 形态，如
 // {"openai":{"path":"/v1/chat/completions","method":"POST"}}，与模型库端点
-// 配置 UI 及 model/pricing.go 的解析格式一致）；marshal 失败返回 nil。
+// 配置 UI 及 model/pricing.go 的解析格式一致）；path/method 统一取自 common
+// 端点定义配置层（与前端/后端同一数据源）；marshal 失败返回 nil。
 func endpointsJSON(providerNpm string) json.RawMessage {
 	endpoint := openCodeGoEndpointForProvider(providerNpm)
-	bytes, err := common.Marshal(map[string]any{endpoint: endpointTemplates[endpoint]})
+	info, ok := common.GetDefaultEndpointInfo(constant.EndpointType(endpoint))
+	if !ok {
+		return nil
+	}
+	bytes, err := common.Marshal(map[string]any{endpoint: map[string]any{"path": info.Path, "method": info.Method}})
 	if err != nil {
 		return nil
 	}
@@ -101,29 +94,32 @@ func endpointsJSON(providerNpm string) json.RawMessage {
 
 // jsonEndpointsEqual 语义比较端点 JSON（键序/缩进无关），解析失败回退字符串比较
 // buildUpstreamCapabilities 将 opencode-go 条目的子结构与富能力字段组装为
-// model.Model.Capabilities JSON（与前端/响应解析格式一致，见 model_rich.go）。
-// 全部子结构缺失时返回 nil（写入空）。
+// model.Model.Capabilities JSON（新 groups 格式，与响应解析格式一致，见
+// model_rich.go）：{"groups":[{"name":"chat","modalities":{...},"limits":{...},
+// "reasoning_options":[...]}]}。仅当有子结构时才输出对应字段；全部缺失返回
+// nil（写入空）。
 func buildUpstreamCapabilities(entry service.OpenCodeGoModelEntry) json.RawMessage {
-	caps := make(map[string]any)
+	group := map[string]any{"name": "chat"}
 	if entry.Modalities != nil && (len(entry.Modalities.Input) > 0 || len(entry.Modalities.Output) > 0) {
-		caps["modalities"] = map[string]any{
+		group["modalities"] = map[string]any{
 			"input":  entry.Modalities.Input,
 			"output": entry.Modalities.Output,
 		}
 	}
 	if entry.Limit != nil && (entry.Limit.Context > 0 || entry.Limit.Output > 0) {
-		caps["limits"] = map[string]any{
+		group["limits"] = map[string]any{
 			"context": entry.Limit.Context,
 			"output":  entry.Limit.Output,
 		}
 	}
 	if len(entry.ReasoningOptions) > 0 {
-		caps["reasoning_options"] = entry.ReasoningOptions
+		group["reasoning_options"] = entry.ReasoningOptions
 	}
-	if len(caps) == 0 {
+	// 仅 name 无任何子结构 → 全部缺失，返回 nil 保持现状
+	if len(group) == 1 {
 		return nil
 	}
-	bytes, err := common.Marshal(caps)
+	bytes, err := common.Marshal(map[string]any{"groups": []any{group}})
 	if err != nil {
 		return nil
 	}

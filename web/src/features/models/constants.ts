@@ -170,6 +170,46 @@ export const ENDPOINT_TEMPLATES: Record<
 }
 
 // ============================================================================
+// Capability Group Presets
+// ============================================================================
+
+/**
+ * Preset names offered for capability groups. Users may also type a custom
+ * name. Values are technical identifiers stored verbatim in the capabilities
+ * JSON; the UI labels go through `t()`.
+ */
+export const CAPABILITY_GROUP_NAME_PRESETS = [
+  'chat',
+  'image',
+  'video',
+  'embeddings',
+  'rerank',
+  'audio',
+] as const
+
+/**
+ * Preset input/output modalities offered by the capability group editor.
+ */
+export const CAPABILITY_MODALITY_PRESETS = [
+  'text',
+  'image',
+  'audio',
+  'video',
+  'pdf',
+  'computer_use',
+] as const
+
+/**
+ * Preset reasoning options offered by the capability group editor.
+ */
+export const REASONING_OPTION_PRESETS = [
+  'low',
+  'medium',
+  'high',
+  'none',
+] as const
+
+// ============================================================================
 // Sync Locale Options
 // ============================================================================
 

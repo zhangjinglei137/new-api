@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -33,6 +34,15 @@ type OpenAIModelModalities struct {
 	Output []string `json:"output,omitempty"`
 }
 
+// OpenAIModelCapabilityGroup 能力分组：一组模态/限额/推理选项。
+// 顶层 modalities/limit/reasoning_options 是 groups[0] 的投影，groups 按存储顺序完整输出。
+type OpenAIModelCapabilityGroup struct {
+	Name             string                  `json:"name"`
+	Modalities       *OpenAIModelModalities  `json:"modalities,omitempty"`
+	Limits           *OpenAIModelLimit       `json:"limits,omitempty"`
+	ReasoningOptions []map[string]any        `json:"reasoning_options,omitempty"`
+}
+
 // OpenAIModelCost 公开定价（单位 USD/1M tokens）。数值来自 tiered_expr 精确
 // 系数或 price/ratio 换算估算，配合 cost_source 字段说明来源。
 // 使用指针类型：nil 表示未推导出该维度（省略），显式 0 表示免费，避免
@@ -55,32 +65,36 @@ const (
 // 追加扩展元数据。定义在根模块，避免污染 relaykit 的独立 DTO。
 type OpenAIModelsExtended struct {
 	dto.OpenAIModels
-	Name            string                  `json:"name,omitempty"`
-	Description     string                  `json:"description,omitempty"`
-	Family          string                  `json:"family,omitempty"`
-	Provider        *OpenAIModelProvider    `json:"provider,omitempty"`
-	Attachment      *bool                   `json:"attachment,omitempty"`
-	Reasoning       *bool                   `json:"reasoning,omitempty"`
-	ReasoningOptions []map[string]any       `json:"reasoning_options,omitempty"`
-	ToolCall        *bool                   `json:"tool_call,omitempty"`
-	StructuredOutput *bool                  `json:"structured_output,omitempty"`
-	Temperature     *bool                   `json:"temperature,omitempty"`
-	OpenWeights     *bool                   `json:"open_weights,omitempty"`
-	ReleaseDate     string                  `json:"release_date,omitempty"`
-	LastUpdated     string                  `json:"last_updated,omitempty"`
-	Modalities      *OpenAIModelModalities  `json:"modalities,omitempty"`
-	Limit           *OpenAIModelLimit       `json:"limit,omitempty"`
-	Cost            *OpenAIModelCost        `json:"cost,omitempty"`
-	CostSource      string                  `json:"cost_source,omitempty"`
+	Name             string                       `json:"name,omitempty"`
+	Description      string                       `json:"description,omitempty"`
+	Provider         *OpenAIModelProvider         `json:"provider,omitempty"`
+	Attachment       *bool                        `json:"attachment,omitempty"`
+	Reasoning        *bool                        `json:"reasoning,omitempty"`
+	ReasoningOptions []map[string]any             `json:"reasoning_options,omitempty"`
+	ToolCall         *bool                        `json:"tool_call,omitempty"`
+	StructuredOutput *bool                        `json:"structured_output,omitempty"`
+	Temperature      *bool                        `json:"temperature,omitempty"`
+	OpenWeights      *bool                        `json:"open_weights,omitempty"`
+	ReleaseDate      string                       `json:"release_date,omitempty"`
+	LastUpdated      string                       `json:"last_updated,omitempty"`
+	Modalities       *OpenAIModelModalities       `json:"modalities,omitempty"`
+	Limit            *OpenAIModelLimit            `json:"limit,omitempty"`
+	Cost             *OpenAIModelCost             `json:"cost,omitempty"`
+	CostSource       string                       `json:"cost_source,omitempty"`
+	Groups           []OpenAIModelCapabilityGroup `json:"groups,omitempty"`
 }
 
-// modelCapabilities 是 model.Model.Capabilities 的 JSON 结构
-// （{"modalities":{...},"limits":{...},"reasoning_options":[...]}）。
+// modelCapabilities 是 model.Model.Capabilities 的 JSON 结构。支持双格式：
+//   - 新格式：{"groups":[{"name":"chat","modalities":{...},"limits":{...},"reasoning_options":[...]}]}
+//   - 旧格式：{"modalities":{...},"limits":{...},"reasoning_options":[...]}
+//
+// parseModelCapabilities 会把旧格式归一化为单组（name=chat），内存转换、不回写 DB。
 // 任何子结构缺失/解析失败时对应响应字段省略，不报错。
 type modelCapabilities struct {
-	Modalities      *OpenAIModelModalities `json:"modalities"`
-	Limits          *OpenAIModelLimit      `json:"limits"`
-	ReasoningOptions []map[string]any       `json:"reasoning_options"`
+	Groups           []OpenAIModelCapabilityGroup `json:"groups"`
+	Modalities       *OpenAIModelModalities       `json:"modalities"`
+	Limits           *OpenAIModelLimit            `json:"limits"`
+	ReasoningOptions []map[string]any             `json:"reasoning_options"`
 }
 
 // costDerivation 返回推导出的公开定价与来源标记。
@@ -228,7 +242,12 @@ func roundCost(v float64) float64 {
 
 func floatPtr(v float64) *float64 { return &v }
 
-// parseModelCapabilities 解析 model.Model.Capabilities JSON；失败返回 nil 结构（各字段省略）。
+// parseModelCapabilities 解析 model.Model.Capabilities JSON，双格式归一化：
+//   - 有 groups（非空数组）→ 直接用，顶层投影取 groups[0]；
+//   - 无 groups 但含任一旧顶层字段（modalities/limits/reasoning_options）→
+//     归一化为 groups:[{name:"chat", ...出现的字段}]（内存转换，不回写 DB），
+//     旧字段保留以兼容读取；
+//   - 两者皆无 / 坏 JSON / 空串 → 返回 nil（各字段省略）。
 func parseModelCapabilities(raw string) *modelCapabilities {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -237,7 +256,56 @@ func parseModelCapabilities(raw string) *modelCapabilities {
 	if err := common.Unmarshal([]byte(raw), &caps); err != nil {
 		return nil
 	}
+	if len(caps.Groups) == 0 {
+		if caps.Modalities == nil && caps.Limits == nil && len(caps.ReasoningOptions) == 0 {
+			return nil
+		}
+		// 旧格式归一化为单组 chat
+		caps.Groups = []OpenAIModelCapabilityGroup{{
+			Name:             "chat",
+			Modalities:       caps.Modalities,
+			Limits:           caps.Limits,
+			ReasoningOptions: caps.ReasoningOptions,
+		}}
+	}
 	return &caps
+}
+
+// endpointNpmPriority 是 provider.npm 推导的固定遍历优先级。
+// 模型 endpoints 是 JSON map，遍历无序，必须按此优先级取
+// 「模型已配置且该类型 npm 非空」的第一个值。
+var endpointNpmPriority = []string{
+	string(constant.EndpointTypeAnthropic),
+	string(constant.EndpointTypeGemini),
+	string(constant.EndpointTypeOpenAIResponse),
+	string(constant.EndpointTypeOpenAIResponseCompact),
+	string(constant.EndpointTypeOpenAIAlphaSearch),
+	string(constant.EndpointTypeOpenAI),
+	string(constant.EndpointTypeOpenAIVideo),
+	string(constant.EndpointTypeJinaRerank),
+	string(constant.EndpointTypeImageGeneration),
+	string(constant.EndpointTypeEmbeddings),
+}
+
+// deriveProviderNpm 从模型 endpoints 配置推导 npm 包名（确定性）：
+// npm 映射来自 common 的端点定义配置层（非内置硬编码），无命中返回空串。
+func deriveProviderNpm(meta *model.Model) string {
+	if strings.TrimSpace(meta.Endpoints) == "" {
+		return ""
+	}
+	var raw map[string]any
+	if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err != nil {
+		return ""
+	}
+	for _, et := range endpointNpmPriority {
+		if _, ok := raw[et]; !ok {
+			continue
+		}
+		if npm := common.GetEndpointNPM(et); npm != "" {
+			return npm
+		}
+	}
+	return ""
 }
 
 // buildRichOpenAIModel 把基础 OpenAI 模型对象与数据库元数据合并为富对象。
@@ -252,9 +320,8 @@ func buildRichOpenAIModel(base dto.OpenAIModels, meta *model.Model) OpenAIModels
 		rich.Name = meta.ModelName
 	}
 	rich.Description = meta.Description
-	rich.Family = meta.Family
-	if strings.TrimSpace(meta.ProviderNpm) != "" {
-		rich.Provider = &OpenAIModelProvider{NPM: meta.ProviderNpm}
+	if npm := deriveProviderNpm(meta); npm != "" {
+		rich.Provider = &OpenAIModelProvider{NPM: npm}
 	}
 	rich.Attachment = meta.CapAttachment
 	rich.Reasoning = meta.CapReasoning
@@ -265,10 +332,13 @@ func buildRichOpenAIModel(base dto.OpenAIModels, meta *model.Model) OpenAIModels
 	rich.ReleaseDate = meta.ReleaseDate
 	rich.LastUpdated = meta.LastUpdated
 
+	// capabilities：顶层 modalities/limit/reasoning_options 是 groups[0] 的投影；
+	// 无组（旧格式）时等于旧字段原值；groups[0] 缺某子结构 → 对应顶层字段省略。
 	if caps := parseModelCapabilities(meta.Capabilities); caps != nil {
-		rich.Modalities = caps.Modalities
-		rich.Limit = caps.Limits
-		rich.ReasoningOptions = caps.ReasoningOptions
+		rich.Groups = caps.Groups
+		rich.Modalities = caps.Groups[0].Modalities
+		rich.Limit = caps.Groups[0].Limits
+		rich.ReasoningOptions = caps.Groups[0].ReasoningOptions
 	}
 
 	if cost, source := deriveOpenAIModelCost(meta.ModelName); cost != nil {

@@ -22,6 +22,7 @@ import {
   RefreshCw,
   List,
   Building2,
+  Cable,
   AlertCircle,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -60,7 +61,11 @@ export function ModelsPrimaryButtons() {
   }
 
   const handleManageVendors = () => {
-    setOpen('create-vendor') // Will be a separate vendors management dialog
+    setOpen('manage-vendors')
+  }
+
+  const handleManageEndpoints = () => {
+    setOpen('manage-endpoints')
   }
 
   return (
@@ -104,6 +109,13 @@ export function ModelsPrimaryButtons() {
             {t('Manage Vendors')}
             <DropdownMenuShortcut>
               <Building2 className='h-4 w-4' />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem onClick={handleManageEndpoints}>
+            {t('Manage Endpoints')}
+            <DropdownMenuShortcut>
+              <Cable className='h-4 w-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
         </DropdownMenuContent>

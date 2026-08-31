@@ -81,9 +81,16 @@ import { normalizeJsonString } from '@/features/system-settings/models/utils'
 import type { ModelSettings } from '@/features/system-settings/types'
 import { safeJsonParse } from '@/features/system-settings/utils/json-parser'
 
-import { createModel, updateModel, getModel, getVendors } from '../../api'
+import {
+  createModel,
+  updateModel,
+  getModel,
+  getVendors,
+  getEndpointDefinitions,
+} from '../../api'
+import { CapabilityGroupsEditor } from '../capability-groups-editor'
 import { getNameRuleOptions, ENDPOINT_TEMPLATES } from '../../constants'
-import { modelsQueryKeys, vendorsQueryKeys, parseModelTags } from '../../lib'
+import { endpointDefinitionsQueryKeys, modelsQueryKeys, vendorsQueryKeys, parseModelTags } from '../../lib'
 import type { Model } from '../../types'
 
 // Extended schema for ratio configuration (internal form state only)
@@ -91,8 +98,6 @@ const extendedModelFormSchema = z.object({
   id: z.number().optional(),
   model_name: z.string().min(1, 'Model name is required'),
   display_name: z.string(),
-  family: z.string(),
-  provider_npm: z.string(),
   release_date: z.string(),
   last_updated: z.string(),
   open_weights: z.boolean().nullable(),
@@ -395,8 +400,6 @@ export function ModelMutateDrawer({
     defaultValues: {
       model_name: '',
       display_name: '',
-      family: '',
-      provider_npm: '',
       release_date: '',
       last_updated: '',
       open_weights: null,
@@ -475,8 +478,6 @@ export function ModelMutateDrawer({
         id: model.id,
         model_name: model.model_name,
         display_name: model.display_name || '',
-        family: model.family || '',
-        provider_npm: model.provider_npm || '',
         release_date: model.release_date || '',
         last_updated: model.last_updated || '',
         open_weights: model.open_weights ?? null,
@@ -512,8 +513,6 @@ export function ModelMutateDrawer({
       form.reset({
         model_name: modelName,
         display_name: '',
-        family: '',
-        provider_npm: '',
         release_date: '',
         last_updated: '',
         open_weights: null,
@@ -786,10 +785,47 @@ export function ModelMutateDrawer({
     ]
   )
 
+  // Fetch endpoint definitions for the "Load template" dropdown. Falls back
+  // to the local ENDPOINT_TEMPLATES constant when the API is unavailable.
+  const { data: endpointDefinitionsData } = useQuery({
+    queryKey: endpointDefinitionsQueryKeys.list(),
+    queryFn: () => getEndpointDefinitions(),
+    enabled: open,
+    retry: 1,
+  })
+
+  const endpointTemplateOptions = useMemo(() => {
+    const apiDefinitions = endpointDefinitionsData?.data?.endpoints
+    if (apiDefinitions && apiDefinitions.length > 0) {
+      return apiDefinitions.map((definition) => ({
+        key: definition.type,
+        label: definition.display_name || definition.type,
+      }))
+    }
+    return Object.keys(ENDPOINT_TEMPLATES).map((key) => ({
+      key,
+      label: key,
+    }))
+  }, [endpointDefinitionsData])
+
   const handleFillEndpointTemplate = (templateKey: string) => {
-    const template = ENDPOINT_TEMPLATES[templateKey]
-    if (template) {
+    const apiDefinitions = endpointDefinitionsData?.data?.endpoints
+    const definition = apiDefinitions?.find(
+      (entry) => entry.type === templateKey
+    )
+    if (definition) {
+      const { display_name: _displayName, npm: _npm, ...template } = definition
       const templateJson = JSON.stringify({ [templateKey]: template }, null, 2)
+      form.setValue('endpoints', templateJson)
+      return
+    }
+    const fallbackTemplate = ENDPOINT_TEMPLATES[templateKey]
+    if (fallbackTemplate) {
+      const templateJson = JSON.stringify(
+        { [templateKey]: fallbackTemplate },
+        null,
+        2
+      )
       form.setValue('endpoints', templateJson)
     }
   }
@@ -968,32 +1004,6 @@ export function ModelMutateDrawer({
                 />
                 <FormField
                   control={form.control}
-                  name='family'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Model family')}</FormLabel>
-                      <FormControl>
-                        <Input placeholder='gpt' {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name='provider_npm'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Provider NPM package')}</FormLabel>
-                      <FormControl>
-                        <Input placeholder='@ai-sdk/anthropic' {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
                   name='release_date'
                   render={({ field }) => (
                     <FormItem>
@@ -1083,15 +1093,15 @@ export function ModelMutateDrawer({
                       <FormItem>
                         <FormLabel>{t('Capabilities JSON')}</FormLabel>
                         <FormControl>
-                          <Textarea
-                            rows={8}
-                            className='font-mono text-xs'
-                            placeholder='{"modalities":{"input":["text"]}}'
-                            {...field}
+                          <CapabilityGroupsEditor
+                            value={field.value || ''}
+                            onChange={field.onChange}
                           />
                         </FormControl>
                         <FormDescription>
-                          {t('Optional raw JSON. Leave empty when not configured.')}
+                          {t(
+                            'Optional raw JSON. Leave empty when not configured.'
+                          )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1152,9 +1162,9 @@ export function ModelMutateDrawer({
               <div className='flex items-center justify-between'>
                 <h3 className='text-sm font-semibold'>{t('Endpoints')}</h3>
                 <Select<string>
-                  items={Object.keys(ENDPOINT_TEMPLATES).map((key) => ({
-                    value: key,
-                    label: key,
+                  items={endpointTemplateOptions.map((option) => ({
+                    value: option.key,
+                    label: option.label,
                   }))}
                   onValueChange={(v) =>
                     v !== null && handleFillEndpointTemplate(v)
@@ -1165,9 +1175,9 @@ export function ModelMutateDrawer({
                   </SelectTrigger>
                   <SelectContent alignItemWithTrigger={false}>
                     <SelectGroup>
-                      {Object.keys(ENDPOINT_TEMPLATES).map((key) => (
-                        <SelectItem key={key} value={key}>
-                          {key}
+                      {endpointTemplateOptions.map((option) => (
+                        <SelectItem key={option.key} value={option.key}>
+                          {option.label}
                         </SelectItem>
                       ))}
                     </SelectGroup>

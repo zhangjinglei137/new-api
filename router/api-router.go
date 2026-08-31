@@ -383,6 +383,14 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.DELETE("/:id", controller.DeleteModelMeta)
 		}
 
+		// 模型设置：端点定义配置（配置覆盖内置默认）
+		modelSettingRoute := apiRouter.Group("/model_setting")
+		modelSettingRoute.Use(middleware.AdminAuth())
+		{
+			modelSettingRoute.GET("/endpoints", controller.GetEndpointSettings)
+			modelSettingRoute.PUT("/endpoints", controller.UpdateEndpointSettings)
+		}
+
 		// Deployments (model deployment management)
 		deploymentsRoute := apiRouter.Group("/deployments")
 		deploymentsRoute.Use(middleware.AdminAuth())

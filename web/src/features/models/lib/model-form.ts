@@ -32,8 +32,6 @@ export const modelFormSchema = z.object({
   id: z.number().optional(),
   model_name: z.string().min(1, 'Model name is required'),
   display_name: z.string().default(''),
-  family: z.string().default(''),
-  provider_npm: z.string().default(''),
   release_date: z.string().default(''),
   last_updated: z.string().default(''),
   open_weights: z.boolean().nullable().default(null),
@@ -42,7 +40,10 @@ export const modelFormSchema = z.object({
   cap_tool_call: z.boolean().nullable().default(null),
   cap_structured_output: z.boolean().nullable().default(null),
   cap_temperature: z.boolean().nullable().default(null),
-  capabilities: z.string().refine(validateJSON, 'Capabilities must be valid JSON').default(''),
+  capabilities: z
+    .string()
+    .refine(validateCapabilitiesGroups, 'Capabilities must be valid JSON')
+    .default(''),
   description: z.string().default(''),
   icon: z.string().default(''),
   tags: z.array(z.string()).default([]),
@@ -86,8 +87,6 @@ export function transformModelToFormDefaults(model: Model): ModelFormValues {
     id: model.id,
     model_name: model.model_name,
     display_name: model.display_name || '',
-    family: model.family || '',
-    provider_npm: model.provider_npm || '',
     release_date: model.release_date || '',
     last_updated: model.last_updated || '',
     open_weights: model.open_weights ?? null,
@@ -120,8 +119,6 @@ export function transformFormDataToModelPayload(
     id: formData.id,
     model_name: formData.model_name,
     display_name: formData.display_name || '',
-    family: formData.family || '',
-    provider_npm: formData.provider_npm || '',
     release_date: formData.release_date || '',
     last_updated: formData.last_updated || '',
     open_weights: formData.open_weights,
@@ -167,6 +164,16 @@ export function validateJSON(value: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Validate that a capabilities string parses as JSON. The structural rules
+ * (non-empty group names, non-negative limits, string-array modalities) are
+ * enforced by the capability group editor itself, so any parseable JSON is
+ * accepted here.
+ */
+export function validateCapabilitiesGroups(value: string): boolean {
+  return validateJSON(value)
 }
 
 /**

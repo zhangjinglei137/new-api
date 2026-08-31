@@ -178,6 +178,7 @@ func InitOptionMap() {
 	common.OptionMap["DemoSiteEnabled"] = strconv.FormatBool(operation_setting.DemoSiteEnabled)
 	common.OptionMap["SelfUseModeEnabled"] = strconv.FormatBool(operation_setting.SelfUseModeEnabled)
 	common.OptionMap["ModelMetadataExtendedEnabled"] = strconv.FormatBool(operation_setting.ModelMetadataExtendedEnabled)
+	common.OptionMap[common.EndpointDefinitionsOptionKey] = common.EndpointDefinitionsDefaultJSON()
 	common.OptionMap["ModelRequestRateLimitEnabled"] = strconv.FormatBool(setting.ModelRequestRateLimitEnabled)
 	common.OptionMap["CheckSensitiveOnPromptEnabled"] = strconv.FormatBool(setting.CheckSensitiveOnPromptEnabled)
 	common.OptionMap["StopOnSensitiveEnabled"] = strconv.FormatBool(setting.StopOnSensitiveEnabled)
@@ -225,6 +226,9 @@ func validateOptionValue(key string, value string) error {
 	}
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
+	}
+	if key == common.EndpointDefinitionsOptionKey {
+		return common.ValidateEndpointDefinitions(value)
 	}
 	return nil
 }
@@ -626,6 +630,12 @@ func updateOptionMap(key string, value string) (err error) {
 		// WaffoPayMethods is read directly from OptionMap via setting.GetWaffoPayMethods().
 		// The value is already stored in OptionMap at the top of this function (line: common.OptionMap[key] = value).
 		// No additional in-memory variable to update.
+	case common.EndpointDefinitionsOptionKey:
+		err = common.SetEndpointDefinitions(value)
+		if err == nil {
+			// supportedEndpointMap 依赖端点默认值，配置变更后立即重建
+			RefreshPricing()
+		}
 	}
 	return err
 }

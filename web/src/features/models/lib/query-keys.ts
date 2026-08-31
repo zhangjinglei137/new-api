@@ -51,6 +51,15 @@ export const prefillGroupsQueryKeys = {
 }
 
 /**
+ * React Query cache keys for endpoint definitions
+ */
+export const endpointDefinitionsQueryKeys = {
+  all: ['endpoint-definitions'] as const,
+  lists: () => [...endpointDefinitionsQueryKeys.all, 'list'] as const,
+  list: () => [...endpointDefinitionsQueryKeys.lists()] as const,
+}
+
+/**
  * React Query cache keys for deployments
  */
 export const deploymentsQueryKeys = {

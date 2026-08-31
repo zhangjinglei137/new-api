@@ -24,6 +24,8 @@ import type {
   GetModelResponse,
   GetVendorsResponse,
   GetVendorResponse,
+  GetEndpointDefinitionsResponse,
+  EndpointDefinition,
   Model,
   Vendor,
   SearchModelsParams,
@@ -175,6 +177,29 @@ export async function deleteVendor(
   id: number
 ): Promise<{ success: boolean; message?: string }> {
   const res = await api.delete(`/api/vendors/${id}`)
+  return res.data
+}
+
+// ============================================================================
+// Endpoint Definition Operations
+// ============================================================================
+
+/**
+ * Get the fixed set of endpoint definitions (type, display_name, path, method,
+ * npm) used by the model form's "Load template" and the endpoint manager.
+ */
+export async function getEndpointDefinitions(): Promise<GetEndpointDefinitionsResponse> {
+  const res = await api.get('/api/model_setting/endpoints')
+  return res.data
+}
+
+/**
+ * Update endpoint definitions (same shape as the GET response).
+ */
+export async function updateEndpointDefinitions(data: {
+  endpoints: EndpointDefinition[]
+}): Promise<{ success: boolean; message?: string }> {
+  const res = await api.put('/api/model_setting/endpoints', data)
   return res.data
 }
 

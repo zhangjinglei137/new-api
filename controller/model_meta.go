@@ -2,6 +2,9 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,6 +100,10 @@ func CreateModelMeta(c *gin.Context) {
 		common.ApiErrorMsg(c, "模型名称不能为空")
 		return
 	}
+	if err := validateModelCapabilities(m.Capabilities); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
 	// 名称冲突检查
 	if dup, err := model.IsModelNameDuplicated(0, m.ModelName); err != nil {
 		common.ApiError(c, err)
@@ -135,6 +142,10 @@ func UpdateModelMeta(c *gin.Context) {
 			return
 		}
 	} else {
+		if err := validateModelCapabilities(m.Capabilities); err != nil {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
 		// 名称冲突检查
 		if dup, err := model.IsModelNameDuplicated(m.Id, m.ModelName); err != nil {
 			common.ApiError(c, err)
@@ -151,6 +162,85 @@ func UpdateModelMeta(c *gin.Context) {
 	}
 	model.RefreshPricing()
 	common.ApiSuccess(c, &m)
+}
+
+// validateModelCapabilities 校验 capabilities 结构（双格式都放行，不做词表校验）：
+//   - 空串合法；JSON 必须可解析；
+//   - 有 groups 时每个 group 的 name 非空；modalities.input/output 为字符串数组；
+//     limits.context/output 为非负整数；reasoning_options 为数组；
+//   - 无 groups 时按旧格式对同名字段做同样的结构校验。
+func validateModelCapabilities(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var doc map[string]any
+	if err := common.Unmarshal([]byte(raw), &doc); err != nil {
+		return errors.New("capabilities 不是合法的 JSON")
+	}
+	if groups, ok := doc["groups"]; ok && groups != nil {
+		arr, ok := groups.([]any)
+		if !ok {
+			return errors.New("capabilities.groups 必须是数组")
+		}
+		for i, g := range arr {
+			gm, ok := g.(map[string]any)
+			if !ok {
+				return fmt.Errorf("capabilities.groups[%d] 必须是对象", i)
+			}
+			name, _ := gm["name"].(string)
+			if strings.TrimSpace(name) == "" {
+				return fmt.Errorf("capabilities.groups[%d].name 不能为空", i)
+			}
+			if err := validateCapabilitySet(gm); err != nil {
+				return fmt.Errorf("capabilities.groups[%d]: %v", i, err)
+			}
+		}
+		return nil
+	}
+	return validateCapabilitySet(doc)
+}
+
+// validateCapabilitySet 校验单个能力集合的 modalities/limits/reasoning_options。
+func validateCapabilitySet(m map[string]any) error {
+	if mod, ok := m["modalities"]; ok && mod != nil {
+		mm, ok := mod.(map[string]any)
+		if !ok {
+			return errors.New("modalities 必须是对象")
+		}
+		for _, key := range []string{"input", "output"} {
+			if v, ok := mm[key]; ok && v != nil {
+				arr, ok := v.([]any)
+				if !ok {
+					return fmt.Errorf("modalities.%s 必须是字符串数组", key)
+				}
+				for _, item := range arr {
+					if _, ok := item.(string); !ok {
+						return fmt.Errorf("modalities.%s 必须是字符串数组", key)
+					}
+				}
+			}
+		}
+	}
+	if lim, ok := m["limits"]; ok && lim != nil {
+		lm, ok := lim.(map[string]any)
+		if !ok {
+			return errors.New("limits 必须是对象")
+		}
+		for _, key := range []string{"context", "output"} {
+			if v, ok := lm[key]; ok && v != nil {
+				f, ok := v.(float64)
+				if !ok || f < 0 || f != math.Trunc(f) {
+					return fmt.Errorf("limits.%s 必须是非负整数", key)
+				}
+			}
+		}
+	}
+	if ro, ok := m["reasoning_options"]; ok && ro != nil {
+		if _, ok := ro.([]any); !ok {
+			return errors.New("reasoning_options 必须是数组")
+		}
+	}
+	return nil
 }
 
 // DeleteModelMeta 删除模型
