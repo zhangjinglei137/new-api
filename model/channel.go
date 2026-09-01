@@ -1167,7 +1167,7 @@ func (channel *Channel) MaskSensitiveOtherSettings() {
 		return
 	}
 	changed := false
-	for _, key := range []string{"volc_coding_plan_csrf_token", "volc_coding_plan_cookie", "opencode_auth_cookie"} {
+	for _, key := range []string{"volc_coding_plan_csrf_token", "volc_coding_plan_cookie", "opencode_auth_cookie", "commandcode_cookie"} {
 		if _, ok := settings[key]; ok {
 			delete(settings, key)
 			changed = true

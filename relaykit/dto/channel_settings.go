@@ -146,6 +146,9 @@ type ChannelOtherSettings struct {
 	ModelProxyRules     []ModelProxyRule `json:"model_proxy_rules,omitempty"`
 	OpenCodeWorkspaceId string           `json:"opencode_workspace_id,omitempty"`
 	OpenCodeAuthCookie  string           `json:"opencode_auth_cookie,omitempty"`
+	// CommandCodeCookie 为 AES-GCM 加密后的 CommandCode 登录会话整段 Cookie
+	// （与 opencode_auth_cookie 同模式，只存密文）。
+	CommandCodeCookie string `json:"commandcode_cookie,omitempty"`
 	// EndpointProfile 标识渠道使用的特殊套餐端点（如 Coding Plan）。取值 "coding"/"coding-intl"/空。
 	EndpointProfile string `json:"endpoint_profile,omitempty"`
 	// VolcCodingPlanCsrfToken 为 AES-GCM 加密后的火山方舟 Coding Plan 控制台 x-csrf-token。
