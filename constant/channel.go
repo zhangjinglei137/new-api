@@ -59,6 +59,7 @@ const (
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
 	ChannelTypeTaskPlugin     = 61
+	ChannelTypeSenseNova      = 97
 	ChannelTypeCommandCode    = 98
 	ChannelTypeOpenCodeGo     = 99
 	ChannelTypeDummy          = 100 // this one is only for count, do not add any channel after this
@@ -163,7 +164,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //94
 	"",                                          //95
 	"",                                          //96
-	"",                                          //97
+	"https://token.sensenova.cn",                //97
 	"https://api.commandcode.ai/provider",       //98
 	"https://opencode.ai/zen/go",                //99
 }
@@ -234,6 +235,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSub2API:        "Sub2API",
 	ChannelTypeNewAPI:         "New API",
 	ChannelTypeTaskPlugin:     "Task Plugin",
+	ChannelTypeSenseNova:      "SenseNova",
 	ChannelTypeCommandCode:    "CommandCode",
 	ChannelTypeOpenCodeGo:     "OpenCode Go",
 }

@@ -653,7 +653,8 @@ func AddChannel(c *gin.Context) {
 	}
 
 	// 新建渠道时对敏感 settings 字段做与 UpdateChannel 一致的处理：
-	// opencode_auth_cookie / commandcode_cookie 非空明文加密后写入；
+	// opencode_auth_cookie / commandcode_cookie / sensenova_username /
+	// sensenova_password 非空明文加密后写入；
 	// volc_coding_plan_* 仅走独立 PATCH 接口，创建请求中的值一律忽略。
 	if addChannelRequest.Channel.OtherSettings != "" {
 		merged, err := mergeSensitiveOtherSettings(addChannelRequest.Channel.OtherSettings, "")
@@ -979,7 +980,8 @@ type ChannelStatusRequest struct {
 // DB 原值，防止前端误写敏感凭证字段：
 //   - volc_coding_plan_csrf_token / volc_coding_plan_cookie 由独立 PATCH 接口管理，
 //     请求中的值一律忽略，保留 DB 原密文（未配置则移除）。
-//   - opencode_auth_cookie / commandcode_cookie 请求中为非空新明文时加密后写入；
+//   - opencode_auth_cookie / commandcode_cookie / sensenova_username /
+//     sensenova_password 请求中为非空新明文时加密后写入；
 //     缺失/为空则保留 DB 原值（含历史明文，原样保留）。
 func mergeSensitiveOtherSettings(requestSettings, originSettings string) (string, error) {
 	merged := map[string]any{}
@@ -1003,8 +1005,8 @@ func mergeSensitiveOtherSettings(requestSettings, originSettings string) (string
 		}
 	}
 
-	// 会话 Cookie 类字段：新明文加密后写入，缺失/为空保留 DB 原值。
-	for _, key := range []string{"opencode_auth_cookie", "commandcode_cookie"} {
+	// 会话 Cookie / 登录凭证类字段：新明文加密后写入，缺失/为空保留 DB 原值。
+	for _, key := range []string{"opencode_auth_cookie", "commandcode_cookie", "sensenova_username", "sensenova_password"} {
 		if raw, ok := merged[key]; ok {
 			if value, ok := raw.(string); ok && strings.TrimSpace(value) != "" {
 				encrypted, err := common.EncryptSecret(value)
@@ -1185,8 +1187,8 @@ func UpdateChannel(c *gin.Context) {
 		}
 	}
 	// 敏感 settings 字段合并：volc_coding_plan_* 由独立 PATCH 接口管理，普通 PUT
-	// 一律保留 DB 原值；opencode_auth_cookie / commandcode_cookie 新明文加密后
-	// 写入，缺失则保留原值。
+	// 一律保留 DB 原值；opencode_auth_cookie / commandcode_cookie /
+	// sensenova_username / sensenova_password 新明文加密后写入，缺失则保留原值。
 	if _, settingsProvided := requestData["settings"]; settingsProvided {
 		merged, err := mergeSensitiveOtherSettings(channel.OtherSettings, originChannel.OtherSettings)
 		if err != nil {

@@ -149,6 +149,11 @@ type ChannelOtherSettings struct {
 	// CommandCodeCookie 为 AES-GCM 加密后的 CommandCode 登录会话整段 Cookie
 	// （与 opencode_auth_cookie 同模式，只存密文）。
 	CommandCodeCookie string `json:"commandcode_cookie,omitempty"`
+	// SenseNovaUsername / SenseNovaPassword 为 SenseNova（日日新）渠道的登录
+	// 凭证。两者均 AES-GCM 加密存储（sensenova_password 存密文，sensenova_username
+	// 同样掩码，避免明文外泄），读取时用 common.DecryptSecret（兼容历史明文）。
+	SenseNovaUsername string `json:"sensenova_username,omitempty"`
+	SenseNovaPassword string `json:"sensenova_password,omitempty"`
 	// EndpointProfile 标识渠道使用的特殊套餐端点（如 Coding Plan）。取值 "coding"/"coding-intl"/空。
 	EndpointProfile string `json:"endpoint_profile,omitempty"`
 	// VolcCodingPlanCsrfToken 为 AES-GCM 加密后的火山方舟 Coding Plan 控制台 x-csrf-token。

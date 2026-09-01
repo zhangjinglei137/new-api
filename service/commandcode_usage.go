@@ -14,12 +14,17 @@ import (
 	"github.com/QuantumNous/new-api/model"
 )
 
-const (
+// commandCodeCreditsURL / commandCodeSubscriptionsURL 为上游内部计费接口地址。
+// 用 var 而非 const，便于测试覆盖为本地端点验证代理链路。
+var (
 	commandCodeCreditsURL       = "https://api.commandcode.ai/internal/billing/credits"
 	commandCodeSubscriptionsURL = "https://api.commandcode.ai/internal/billing/subscriptions"
-	commandCodeCreditsTimeout   = 15 * time.Second
-	commandCodeSubsTimeout      = 6 * time.Second
-	commandCodeUserAgent        = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+const (
+	commandCodeCreditsTimeout = 15 * time.Second
+	commandCodeSubsTimeout    = 6 * time.Second
+	commandCodeUserAgent      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 // commandCodeCookieWhitelist 是允许从整段 Cookie 提取并转发的会话 cookie 名，

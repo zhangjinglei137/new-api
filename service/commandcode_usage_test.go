@@ -3,10 +3,15 @@ package service
 import (
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -200,13 +205,13 @@ func TestBuildCommandCodeUsageInfoCatalogFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name         string
-		credits      *commandCodeCredits
-		sub          *commandCodeSubscription
-		wantMetered  bool
-		wantLimit    float64
-		wantUsed     float64
-		wantUsedPct  float64
+		name        string
+		credits     *commandCodeCredits
+		sub         *commandCodeSubscription
+		wantMetered bool
+		wantLimit   float64
+		wantUsed    float64
+		wantUsedPct float64
 	}{
 		{
 			name:        "unknown plan id falls back to money-only with zero limit",
@@ -439,4 +444,75 @@ func TestFetchCommandCodeUsageSubscriptionsFailureIgnored(t *testing.T) {
 	assert.Equal(t, "weekly", info.Windows[1].Period)
 	assert.False(t, info.Windows[2].Metered)
 	assert.InDelta(t, 8.7784, info.Windows[2].Used, 1e-9)
+}
+
+// TestFetchCommandCodeUsageUsesChannelProxy 验证渠道配置代理时，FetchCommandCodeUsage
+// 的 credits/subscriptions 请求确实经该代理 transport 发出：搭建本地上游与本地
+// 代理，渠道 Proxy 指向本地代理，断言代理收到了按代理模式（绝对 URI）转发的请求，
+// 且用量结果正确返回。
+func TestFetchCommandCodeUsageUsesChannelProxy(t *testing.T) {
+	withRelayHTTPTransportSettings(t)
+
+	// 本地上游：模拟 commandcode 内部计费接口。
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "credits") {
+			_, _ = io.WriteString(w, `{"credits":{"monthlyCredits":8.7784,"purchasedCredits":0},
+			  "windowLimits":{"fiveHour":{"used":1.2216,"cap":3,"resetAt":1786700000000},
+			  "weekly":{"used":1.2216,"cap":6,"resetAt":1787000000000}}}`)
+			return
+		}
+		_, _ = io.WriteString(w, commandCodeSubsFixture)
+	}))
+	t.Cleanup(upstream.Close)
+
+	// 本地代理：记录收到的请求并原样转发到上游。
+	var proxyHits atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyHits.Add(1)
+		if !r.URL.IsAbs() {
+			http.Error(w, "expected absolute-URI request line in proxy mode", http.StatusBadRequest)
+			return
+		}
+		out, err := http.NewRequest(r.Method, r.URL.String(), r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		out.Header = r.Header.Clone()
+		resp, err := http.DefaultTransport.RoundTrip(out)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		for k, vv := range resp.Header {
+			for _, v := range vv {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	}))
+	t.Cleanup(proxy.Close)
+	t.Cleanup(func() { InvalidateProxyClient(proxy.URL) })
+
+	// 将上游接口地址覆盖为本地端点（真实网络请求不得离开测试进程）。
+	prevCreditsURL, prevSubsURL := commandCodeCreditsURL, commandCodeSubscriptionsURL
+	commandCodeCreditsURL = upstream.URL + "/internal/billing/credits"
+	commandCodeSubscriptionsURL = upstream.URL + "/internal/billing/subscriptions"
+	t.Cleanup(func() {
+		commandCodeCreditsURL = prevCreditsURL
+		commandCodeSubscriptionsURL = prevSubsURL
+	})
+
+	channel := &model.Channel{Type: constant.ChannelTypeCommandCode}
+	channel.SetSetting(dto.ChannelSettings{Proxy: proxy.URL})
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		CommandCodeCookie: "__Secure-commandcode_prod_.session_token=opaque",
+	})
+
+	info, err := FetchCommandCodeUsage(channel)
+	require.NoError(t, err)
+	require.Len(t, info.Windows, 3)
+	assert.Equal(t, int32(2), proxyHits.Load(), "credits 与 subscriptions 两个请求都必须经渠道代理发出")
 }
