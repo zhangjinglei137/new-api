@@ -129,30 +129,45 @@ func readSenseNovaReqBody(req *http.Request) string {
 
 // senseNovaLoginSteps 描述登录流程各步骤的模拟响应（空值字段表示该步骤不生效）。
 type senseNovaLoginSteps struct {
-	aStatus       int    // 步骤 A 状态码
-	aLocation     string // 步骤 A 302 Location
-	bStatus       int    // 步骤 B 状态码
-	bBody         string // 步骤 B 响应体（含 redirect 字段）
-	cStatus       int    // 步骤 C 状态码
-	cLocation     string // 步骤 C 302 Location
-	dStatus       int    // 步骤 D 状态码
-	dBody         string // 步骤 D 响应体
-	refreshStatus int    // 续期接口状态码
-	refreshBody   string // 续期接口响应体
+	aStatus          int    // 步骤 A 状态码
+	aLocation        string // 步骤 A 302 Location
+	bStatus          int    // 步骤 B 状态码
+	bBody            string // 步骤 B 响应体（含 redirect 字段）
+	cStatus          int    // 步骤 C 第一跳状态码
+	cLocation        string // 步骤 C 第一跳 Location（无 consent 时直接携带 code）
+	cConsentStatus   int    // 步骤 C 第二跳（consent 页）状态码
+	cConsentLocation string // 步骤 C 第二跳 Location（consent → 授权页；空 = 无 consent 步骤）
+	cFinalStatus     int    // 步骤 C 最后一跳状态码（携带 code）
+	cFinalLocation   string // 步骤 C 最后一跳 Location（携带 code；空 = 无 consent 步骤）
+	dStatus          int    // 步骤 D 状态码
+	dBody            string // 步骤 D 响应体
+	refreshStatus    int    // 续期接口状态码
+	refreshBody      string // 续期接口响应体
 }
+
+// senseNovaMockConsentChallenge / senseNovaMockConsentVerifier 是 consent 链路的固定模拟值。
+const (
+	senseNovaMockConsentChallenge = "cccccccccccccccccccccccccccccccc"
+	senseNovaMockConsentVerifier  = "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+)
 
 func senseNovaSuccessSteps() *senseNovaLoginSteps {
 	return &senseNovaLoginSteps{
-		aStatus:       http.StatusFound,
-		aLocation:     "https://platform.sensenova.cn/login?login_challenge=" + senseNovaMockChallenge,
-		bStatus:       http.StatusOK,
-		bBody:         `{"redirect":"` + senseNovaMockRedirect + `"}`,
-		cStatus:       http.StatusFound,
-		cLocation:     "https://platform.sensenova.cn/?code=" + senseNovaMockCode + "&scope=openid+offline+offline_access&state=state-123",
-		dStatus:       http.StatusOK,
-		dBody:         senseNovaMockTokenBody,
-		refreshStatus: http.StatusOK,
-		refreshBody:   `{"access_token":"refreshed-789","refresh_token":"refresh-999","expires_in":7200}`,
+		aStatus:   http.StatusFound,
+		aLocation: "https://platform.sensenova.cn/login?login_challenge=" + senseNovaMockChallenge,
+		bStatus:   http.StatusOK,
+		bBody:     `{"redirect":"` + senseNovaMockRedirect + `"}`,
+		// 步骤 C 默认模拟 consent 3 跳链：redirect → consent 页 → 授权页 → code
+		cStatus:          http.StatusFound,
+		cLocation:        "https://iam.sensecoreapi.cn/iam/authn/v1/auth/consent?consent_challenge=" + senseNovaMockConsentChallenge,
+		cConsentStatus:   http.StatusFound,
+		cConsentLocation: "https://platform.sensenova.cn/oauth2/auth?client_id=nova&consent_verifier=" + senseNovaMockConsentVerifier + "&redirect_uri=https%3A%2F%2Fplatform.sensenova.cn&response_type=code&scope=openid+offline+offline_access&state=state-123",
+		cFinalStatus:     http.StatusSeeOther,
+		cFinalLocation:   "https://platform.sensenova.cn/?code=" + senseNovaMockCode + "&scope=openid+offline+offline_access&state=state-123",
+		dStatus:          http.StatusOK,
+		dBody:            senseNovaMockTokenBody,
+		refreshStatus:    http.StatusOK,
+		refreshBody:      `{"access_token":"refreshed-789","refresh_token":"refresh-999","expires_in":7200}`,
 	}
 }
 
@@ -160,10 +175,22 @@ func senseNovaSuccessSteps() *senseNovaLoginSteps {
 func senseNovaLoginHandler(steps *senseNovaLoginSteps) func(m *senseNovaMockTransport, req *http.Request) (*http.Response, error) {
 	return func(m *senseNovaMockTransport, req *http.Request) (*http.Response, error) {
 		switch {
+		case req.Method == http.MethodGet && req.URL.String() == steps.cConsentLocation:
+			// 步骤 C 第三跳：consent 后回到授权页 → 303 携带 code 的回调地址
+			return senseNovaMockResponse(steps.cFinalStatus, map[string]string{"Location": steps.cFinalLocation}, ""), nil
+		case req.Method == http.MethodGet && req.URL.String() == steps.cLocation:
+			// 步骤 C 第二跳：consent 同意页 → 302 回到授权页（并种下 iam 域 cookie）
+			return senseNovaMockResponse(steps.cConsentStatus, map[string]string{
+				"Location":   steps.cConsentLocation,
+				"Set-Cookie": "iam_session=iam-cookie-1",
+			}, ""), nil
 		case req.Method == http.MethodGet && req.URL.Host == "platform.sensenova.cn" &&
 			strings.HasPrefix(req.URL.Path, "/oauth2/auth") && req.URL.Query().Get("login_verifier") != "":
-			// 步骤 C：授权重定向
-			return senseNovaMockResponse(steps.cStatus, map[string]string{"Location": steps.cLocation}, ""), nil
+			// 步骤 C 第一跳：授权重定向（种下 platform 域会话 cookie，验证跨跳传递）
+			return senseNovaMockResponse(steps.cStatus, map[string]string{
+				"Location":   steps.cLocation,
+				"Set-Cookie": "platform_session=plat-1",
+			}, ""), nil
 		case req.Method == http.MethodGet && req.URL.Host == "platform.sensenova.cn" &&
 			strings.HasPrefix(req.URL.Path, "/oauth2/auth"):
 			// 步骤 A：授权页，302 + CSRF cookie
@@ -195,7 +222,8 @@ func TestLoginSenseNovaFlow(t *testing.T) {
 	assert.Equal(t, "refresh-456", token.RefreshToken)
 	assert.InDelta(t, 7200, token.ExpiresAt.Sub(time.Now()).Seconds(), 5)
 
-	require.Equal(t, 4, transport.len())
+	// A、B、C（3 跳）、D
+	require.Equal(t, 6, transport.len())
 
 	// 步骤 A：URL 参数完整（response_type/client_id/PKCE/redirect_uri/scope/state）
 	a := transport.request(0)
@@ -231,16 +259,26 @@ func TestLoginSenseNovaFlow(t *testing.T) {
 	assert.Equal(t, "username", loginBody["login_type"])
 	assert.Equal(t, "", loginBody["code_key"])
 
-	// 步骤 C：访问步骤 B 返回的 redirect 地址
-	c := transport.request(2)
-	assert.Equal(t, http.MethodGet, c.Method)
-	assert.Equal(t, senseNovaMockRedirect, c.URL.String())
+	// 步骤 C：授权回调重定向链（3 跳：redirect → consent 页 → 授权页 → code）
+	c1 := transport.request(2)
+	assert.Equal(t, http.MethodGet, c1.Method)
+	assert.Equal(t, senseNovaMockRedirect, c1.URL.String(), "第一跳必须访问步骤 B 返回的 redirect 地址")
+
+	c2 := transport.request(3)
+	assert.Equal(t, http.MethodGet, c2.Method)
+	assert.Equal(t, steps.cLocation, c2.URL.String(), "第二跳必须落在 consent 同意页（iam 域）")
+	assert.Equal(t, "", c2.Header.Get("Cookie"), "iam 域首次访问不应携带 platform 域 cookie")
+
+	c3 := transport.request(4)
+	assert.Equal(t, http.MethodGet, c3.Method)
+	assert.Equal(t, steps.cConsentLocation, c3.URL.String(), "第三跳必须携带 consent_verifier 回到授权页")
+	assert.Contains(t, c3.Header.Get("Cookie"), "platform_session=plat-1", "cookie jar 必须跨跳保留会话 cookie")
 
 	// 步骤 D：授权码 + code_verifier 换令牌，verifier 与步骤 A 的 challenge 匹配
-	d := transport.request(3)
+	d := transport.request(5)
 	assert.Equal(t, http.MethodPost, d.Method)
 	assert.Equal(t, "application/x-www-form-urlencoded", d.Header.Get("Content-Type"))
-	form, err := url.ParseQuery(transport.body(3))
+	form, err := url.ParseQuery(transport.body(5))
 	require.NoError(t, err)
 	assert.Equal(t, "authorization_code", form.Get("grant_type"))
 	assert.Equal(t, senseNovaMockCode, form.Get("code"))
@@ -250,6 +288,33 @@ func TestLoginSenseNovaFlow(t *testing.T) {
 	require.NotEmpty(t, verifier)
 	sum := sha256.Sum256([]byte(verifier))
 	assert.Equal(t, challenge, base64.RawURLEncoding.EncodeToString(sum[:]), "code_verifier 必须与步骤 A 的 code_challenge 对应")
+}
+
+// TestLoginSenseNovaNoConsentSingleHopCompat 验证无 consent 步骤的旧式单跳
+// 链路仍然兼容：redirect → 直接 302 到携带 code 的回调地址。
+func TestLoginSenseNovaNoConsentSingleHopCompat(t *testing.T) {
+	steps := senseNovaSuccessSteps()
+	// 去掉 consent 两跳：第一跳 Location 直接携带 code
+	steps.cLocation = "https://platform.sensenova.cn/?code=" + senseNovaMockCode + "&scope=openid+offline+offline_access&state=state-123"
+	steps.cConsentLocation = ""
+	steps.cFinalLocation = ""
+
+	transport := &senseNovaMockTransport{handler: senseNovaLoginHandler(steps)}
+	token, err := loginSenseNovaWithClient(&http.Client{Transport: transport}, "user-1", "pass-1")
+	require.NoError(t, err)
+	assert.Equal(t, "access-123", token.AccessToken)
+	assert.Equal(t, "refresh-456", token.RefreshToken)
+	require.Equal(t, 4, transport.len(), "无 consent 时步骤 C 应只有 1 跳（A、B、C、D）")
+
+	c := transport.request(2)
+	assert.Equal(t, http.MethodGet, c.Method)
+	assert.Equal(t, senseNovaMockRedirect, c.URL.String())
+	d := transport.request(3)
+	form, err := url.ParseQuery(transport.body(3))
+	require.NoError(t, err)
+	assert.Equal(t, "authorization_code", form.Get("grant_type"))
+	assert.Equal(t, senseNovaMockCode, form.Get("code"), "单跳链路必须同样提取到 code")
+	_ = d
 }
 
 func TestLoginSenseNovaFlowErrors(t *testing.T) {
@@ -266,7 +331,10 @@ func TestLoginSenseNovaFlowErrors(t *testing.T) {
 		{name: "login redirect to foreign host", mut: func(s *senseNovaLoginSteps) { s.bBody = `{"redirect":"https://evil.example/x"}` }, want: "跳转地址非法"},
 		{name: "login response not json", mut: func(s *senseNovaLoginSteps) { s.bBody = `not-json` }, want: "解析登录响应失败"},
 		{name: "callback not 302", mut: func(s *senseNovaLoginSteps) { s.cStatus = http.StatusOK }, want: "授权回调返回 200"},
-		{name: "callback missing code", mut: func(s *senseNovaLoginSteps) { s.cLocation = "https://platform.sensenova.cn/?error=access_denied" }, want: "缺少 code"},
+		{name: "callback location empty", mut: func(s *senseNovaLoginSteps) { s.cLocation = "" }, want: "授权回调缺少跳转地址"},
+		{name: "consent step not redirect", mut: func(s *senseNovaLoginSteps) { s.cConsentStatus = http.StatusOK }, want: "授权回调返回 200"},
+		{name: "callback exceeds max redirects", mut: func(s *senseNovaLoginSteps) { s.cFinalLocation = s.cConsentLocation }, want: "跳转次数超过"},
+		{name: "callback redirect to foreign host", mut: func(s *senseNovaLoginSteps) { s.cConsentLocation = "https://evil.example/steal" }, want: "跳转地址非法"},
 		{name: "token step 400", mut: func(s *senseNovaLoginSteps) { s.dStatus = http.StatusBadRequest }, want: "令牌接口返回 400"},
 		{name: "token missing access_token", mut: func(s *senseNovaLoginSteps) { s.dBody = `{"refresh_token":"x"}` }, want: "缺少 access_token"},
 	}
@@ -433,7 +501,7 @@ func TestGetSenseNovaTokenCredentialChangeTriggersFullLogin(t *testing.T) {
 	token, err := getSenseNovaTokenWithClient(&http.Client{Transport: transport}, channelID, "new-user", "new-pass")
 	require.NoError(t, err)
 	assert.Equal(t, "access-123", token.AccessToken)
-	require.Equal(t, 4, transport.len(), "凭证变更后必须触发完整登录，不得复用旧缓存")
+	require.Equal(t, 6, transport.len(), "凭证变更后必须触发完整登录（A、B、C×3、D），不得复用旧缓存")
 	assert.Contains(t, transport.body(1), `"username":"new-user"`, "登录请求必须携带新凭证")
 	assert.Contains(t, transport.body(1), `"password":"new-pass"`)
 
@@ -484,7 +552,7 @@ func TestGetSenseNovaTokenRefreshFailureFallsBackToLogin(t *testing.T) {
 	token, err := getSenseNovaTokenWithClient(&http.Client{Transport: transport}, channelID, "u", "p")
 	require.NoError(t, err)
 	assert.Equal(t, "access-123", token.AccessToken)
-	assert.Equal(t, 5, transport.len(), "续期失败后应回退完整登录（1 次续期 + 4 步登录）")
+	assert.Equal(t, 7, transport.len(), "续期失败后应回退完整登录（1 次续期 + 6 步登录）")
 }
 
 func TestGetSenseNovaTokenNoRefreshTokenFullLogin(t *testing.T) {
@@ -500,7 +568,7 @@ func TestGetSenseNovaTokenNoRefreshTokenFullLogin(t *testing.T) {
 	token, err := getSenseNovaTokenWithClient(&http.Client{Transport: transport}, channelID, "u", "p")
 	require.NoError(t, err)
 	assert.Equal(t, "access-123", token.AccessToken)
-	assert.Equal(t, 4, transport.len())
+	assert.Equal(t, 6, transport.len())
 }
 
 func TestRefreshSenseNovaTokenKeepsFallbackRefreshToken(t *testing.T) {
@@ -569,7 +637,7 @@ func TestFetchSenseNovaUsageRetriesOnTokenInvalid(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, info.Pools, 2)
 	assert.Equal(t, int32(1), poolSuccessCalls.Load(), "重登后应重新查询 pool-usage 一次")
-	assert.Equal(t, 6, transport.len(), "请求序列：pool-usage(401) + 4 步登录 + pool-usage(200)")
+	assert.Equal(t, 8, transport.len(), "请求序列：pool-usage(401) + 6 步登录 + pool-usage(200)")
 
 	// 重登后的令牌已回写缓存
 	entry.mu.Lock()

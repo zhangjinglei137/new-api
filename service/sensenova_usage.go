@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -40,7 +41,18 @@ const (
 	senseNovaDefaultTokenTTL = 2 * time.Hour
 	// senseNovaRefreshMargin 提前续期余量：令牌剩余有效期不足该值时先尝试续期。
 	senseNovaRefreshMargin = 60 * time.Second
+	// senseNovaMaxAuthRedirects 是步骤 C 授权回调链允许的最大跳数
+	// （正常为 3 跳：redirect → consent → code；留余量兜底异常循环）。
+	senseNovaMaxAuthRedirects = 5
 )
+
+// senseNovaRedirectHosts 是步骤 C 授权回调链允许的跳转目标 host 白名单：
+// platform（授权/回调页）、iam（consent 同意页）、signin（令牌端点）。
+var senseNovaRedirectHosts = map[string]struct{}{
+	senseNovaPlatformHost: {},
+	"iam.sensecoreapi.cn": {},
+	"signin.sensecore.cn": {},
+}
 
 // errSenseNovaTokenInvalid 表示访问令牌已失效（pool-usage 401/403），
 // 调用方应作废缓存并重新登录。
@@ -324,17 +336,9 @@ func loginSenseNovaWithClient(baseClient *http.Client, username, password string
 		return nil, fmt.Errorf("sensenova 登录失败: 登录跳转地址非法")
 	}
 
-	// 步骤 C：访问授权重定向 → 302 回调地址（携带 code）。
-	resp, err = senseNovaGet(client, ctx, redirectURL)
-	if err != nil {
-		return nil, fmt.Errorf("sensenova 登录失败: 授权回调请求失败: %w", err)
-	}
-	if resp.StatusCode != http.StatusFound {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("sensenova 登录失败: 授权回调返回 %d", resp.StatusCode)
-	}
-	code, err := parseSenseNovaAuthCode(resp.Header.Get("Location"))
-	_ = resp.Body.Close()
+	// 步骤 C：跟随授权回调重定向链（上游可能经过 consent 页），直到某跳
+	// Location 携带 code 为止；每跳均校验跳转目标 host 白名单。
+	code, err := senseNovaFollowAuthRedirects(client, ctx, redirectURL)
 	if err != nil {
 		return nil, err
 	}
@@ -556,6 +560,62 @@ func senseNovaEpochToRFC3339(s string) string {
 	return time.Unix(epoch, 0).UTC().Format(time.RFC3339)
 }
 
+// senseNovaFollowAuthRedirects 从步骤 B 返回的授权重定向地址开始，用同一
+// client（带 cookie jar，跨域跳转时按域自动分发会话 cookie）循环跟随 302/303
+// 跳转，直到某跳 Location 携带 code 参数为止；返回该 code。
+// 每跳均校验目标 https + host 白名单；非重定向响应、空 Location 或超过最大
+// 跳数均报错。Location 为相对路径时基于当前请求 URL 解析。
+func senseNovaFollowAuthRedirects(client *http.Client, ctx context.Context, startURL string) (string, error) {
+	current := startURL
+	for hop := 0; hop < senseNovaMaxAuthRedirects; hop++ {
+		resp, err := senseNovaGet(client, ctx, current)
+		if err != nil {
+			return "", fmt.Errorf("sensenova 登录失败: 授权回调请求失败: %w", err)
+		}
+		location := resp.Header.Get("Location")
+		if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusSeeOther {
+			_ = resp.Body.Close()
+			return "", fmt.Errorf("sensenova 登录失败: 授权回调返回 %d", resp.StatusCode)
+		}
+		if location == "" {
+			_ = resp.Body.Close()
+			return "", fmt.Errorf("sensenova 登录失败: 授权回调缺少跳转地址")
+		}
+		parsed, err := url.Parse(location)
+		if err != nil {
+			_ = resp.Body.Close()
+			return "", fmt.Errorf("sensenova 登录失败: 无效的回调跳转地址: %w", err)
+		}
+		if !parsed.IsAbs() {
+			base, berr := url.Parse(current)
+			if berr != nil {
+				_ = resp.Body.Close()
+				return "", fmt.Errorf("sensenova 登录失败: 无效的授权回调地址: %w", berr)
+			}
+			parsed = base.ResolveReference(parsed)
+		}
+		if parsed.Scheme != "https" || !senseNovaIsAllowedRedirectHost(parsed.Host) {
+			_ = resp.Body.Close()
+			return "", fmt.Errorf("sensenova 登录失败: 授权回调跳转地址非法")
+		}
+		_ = resp.Body.Close()
+		if code := parsed.Query().Get("code"); code != "" {
+			return code, nil
+		}
+		current = parsed.String()
+	}
+	return "", fmt.Errorf("sensenova 登录失败: 授权回调跳转次数超过 %d 次", senseNovaMaxAuthRedirects)
+}
+
+// senseNovaIsAllowedRedirectHost 判断跳转目标 host 是否在白名单内（忽略端口）。
+func senseNovaIsAllowedRedirectHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	_, ok := senseNovaRedirectHosts[host]
+	return ok
+}
+
 // senseNovaGet 发起带 UA 的 GET 请求（调用方负责关闭响应体）。
 func senseNovaGet(client *http.Client, ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -596,17 +656,4 @@ func parseSenseNovaLoginChallenge(location string) (string, error) {
 		return "", fmt.Errorf("sensenova 登录失败: 授权跳转缺少 login_challenge")
 	}
 	return challenge, nil
-}
-
-// parseSenseNovaAuthCode 从回调跳转地址提取授权码。
-func parseSenseNovaAuthCode(location string) (string, error) {
-	u, err := url.Parse(location)
-	if err != nil {
-		return "", fmt.Errorf("sensenova 登录失败: 无效的回调跳转地址: %w", err)
-	}
-	code := u.Query().Get("code")
-	if code == "" {
-		return "", fmt.Errorf("sensenova 登录失败: 回调跳转缺少 code")
-	}
-	return code, nil
 }
