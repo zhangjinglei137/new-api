@@ -97,7 +97,7 @@ func TestGetVolcCodingPlanUsageUnsupportedRegion(t *testing.T) {
 		Name:          "volc-unknown-region",
 		Key:           "k",
 		BaseURL:       common.GetPointer("https://ark.cn-hangzhou.volces.com/api/coding"),
-		OtherSettings: `{"endpoint_profile":"coding","volc_coding_plan_csrf_token":"e30","volc_coding_plan_cookie":"e30"}`,
+		OtherSettings: `{"endpoint_profile":"coding","volc_coding_plan_access_key_id":"enc-ak","volc_coding_plan_secret_access_key":"enc-sk"}`,
 	}
 	require.NoError(t, db.Create(channel).Error)
 
@@ -117,28 +117,7 @@ func TestGetVolcCodingPlanUsageUnsupportedRegion(t *testing.T) {
 	assert.Equal(t, "unsupported_region", response.ErrorCode)
 }
 
-func TestUpdateVolcCodingPlanCredentialsRejectsNonCodingProfile(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-
-	channel := &model.Channel{Type: constant.ChannelTypeVolcEngine, Name: "volc-plain", Key: "k"}
-	require.NoError(t, db.Create(channel).Error)
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", channel.Id)}}
-	ctx.Request = httptest.NewRequest(http.MethodPatch, "/api/channel/1/volc/codingplan/credentials", nil)
-	UpdateVolcCodingPlanCredentials(ctx)
-
-	var response struct {
-		Success bool   `json:"success"`
-		Message string `json:"message"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.False(t, response.Success)
-	assert.Contains(t, response.Message, "Coding Plan")
-}
-
-func TestGetVolcCodingPlanUsagePrefersAkSkPath(t *testing.T) {
+func TestGetVolcCodingPlanUsageAkSkPath(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	previousSecret := common.CryptoSecret
 	common.CryptoSecret = "controller-volc-aksk-test-secret"
@@ -194,53 +173,6 @@ func TestGetVolcCodingPlanUsagePrefersAkSkPath(t *testing.T) {
 	assert.Equal(t, "monthly", response.Data.Windows[1].Period)
 }
 
-func TestGetVolcCodingPlanUsageFallsBackToCookieWhenAkSkMissing(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-	previousSecret := common.CryptoSecret
-	common.CryptoSecret = "controller-volc-cookie-test-secret"
-	t.Cleanup(func() { common.CryptoSecret = previousSecret })
-
-	encCSRF, err := common.EncryptSecret("csrf-token-value")
-	require.NoError(t, err)
-	encCookie, err := common.EncryptSecret("SESSION_ID=abc123")
-	require.NoError(t, err)
-
-	proxyURL := newVolcCodingPlanConnectProxy(t, func(w http.ResponseWriter, r *http.Request) {
-		// 回落 Cookie 路径：带浏览器会话头，无 AK/SK 签名。
-		assert.Equal(t, "csrf-token-value", r.Header.Get("x-csrf-token"))
-		assert.Equal(t, "SESSION_ID=abc123", r.Header.Get("Cookie"))
-		assert.Empty(t, r.Header.Get("Authorization"))
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"Result":{"Status":"Active","QuotaUsage":[{"Level":"weekly","Percent":30}]}}`))
-	})
-
-	channel := &model.Channel{
-		Type:          constant.ChannelTypeVolcEngine,
-		Name:          "volc-cookie",
-		Key:           "k",
-		BaseURL:       common.GetPointer("https://ark.cn-beijing.volces.com/api/coding"),
-		Setting:       common.GetPointer(fmt.Sprintf(`{"proxy":%q}`, proxyURL)),
-		OtherSettings: fmt.Sprintf(`{"endpoint_profile":"coding","volc_coding_plan_csrf_token":%q,"volc_coding_plan_cookie":%q}`, encCSRF, encCookie),
-	}
-	require.NoError(t, db.Create(channel).Error)
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", channel.Id)}}
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/channel/1/volc/codingplan/usage", nil)
-	GetVolcCodingPlanUsage(ctx)
-
-	var response struct {
-		Success bool `json:"success"`
-		Data    struct {
-			Status string `json:"status"`
-		} `json:"data"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.True(t, response.Success)
-	assert.Equal(t, "Active", response.Data.Status)
-}
-
 func TestGetVolcCodingPlanUsageAkSkInvalidCredentialsExpired(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	previousSecret := common.CryptoSecret
@@ -284,107 +216,6 @@ func TestGetVolcCodingPlanUsageAkSkInvalidCredentialsExpired(t *testing.T) {
 	assert.Equal(t, "credentials_expired", response.ErrorCode)
 	assert.Equal(t, http.StatusUnauthorized, response.UpstreamStatus)
 	assert.Contains(t, response.Message, "Access Key")
-}
-
-func TestUpdateVolcCodingPlanCredentialsStoresAkSkEncrypted(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-	previousSecret := common.CryptoSecret
-	common.CryptoSecret = "controller-volc-aksk-update-test-secret"
-	t.Cleanup(func() { common.CryptoSecret = previousSecret })
-
-	channel := &model.Channel{
-		Type:          constant.ChannelTypeVolcEngine,
-		Name:          "volc-aksk-update",
-		Key:           "k",
-		OtherSettings: `{"endpoint_profile":"coding"}`,
-	}
-	require.NoError(t, db.Create(channel).Error)
-
-	body := []byte(`{"access_key_id":"AKLTtesttesttesttesttesttesttest","secret_access_key":"sk-test-secret-key-0000000000000000"}`)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", channel.Id)}}
-	ctx.Request = httptest.NewRequest(http.MethodPatch, "/api/channel/1/volc/codingplan/credentials", strings.NewReader(string(body)))
-	UpdateVolcCodingPlanCredentials(ctx)
-
-	var response struct {
-		Success bool `json:"success"`
-		Data    struct {
-			AccessKeyIdConfigured     bool `json:"access_key_id_configured"`
-			SecretAccessKeyConfigured bool `json:"secret_access_key_configured"`
-		} `json:"data"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.True(t, response.Success)
-	assert.True(t, response.Data.AccessKeyIdConfigured)
-	assert.True(t, response.Data.SecretAccessKeyConfigured)
-
-	// 落库必须是密文（envelope），明文不在响应中。
-	saved, err := model.GetChannelById(channel.Id, true)
-	require.NoError(t, err)
-	settings := saved.GetOtherSettings()
-	assert.NotEqual(t, "AKLTtesttesttesttesttesttesttest", settings.VolcCodingPlanAccessKeyId)
-	assert.NotEqual(t, "sk-test-secret-key-0000000000000000", settings.VolcCodingPlanSecretAccessKey)
-	decryptedAK, err := common.DecryptSecret(settings.VolcCodingPlanAccessKeyId)
-	require.NoError(t, err)
-	assert.Equal(t, "AKLTtesttesttesttesttesttesttest", decryptedAK)
-	decryptedSK, err := common.DecryptSecret(settings.VolcCodingPlanSecretAccessKey)
-	require.NoError(t, err)
-	assert.Equal(t, "sk-test-secret-key-0000000000000000", decryptedSK)
-	assert.NotContains(t, recorder.Body.String(), "AKLTtesttesttesttesttesttesttest")
-	assert.NotContains(t, recorder.Body.String(), "sk-test-secret-key")
-}
-
-func TestUpdateVolcCodingPlanCredentialsRejectsClearWithNewValue(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-	channel := &model.Channel{
-		Type:          constant.ChannelTypeVolcEngine,
-		Name:          "volc-reject-clear",
-		Key:           "k",
-		OtherSettings: `{"endpoint_profile":"coding"}`,
-	}
-	require.NoError(t, db.Create(channel).Error)
-
-	body := []byte(`{"clear_access_key_id":true,"access_key_id":"AKLTnewvalue"}`)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", channel.Id)}}
-	ctx.Request = httptest.NewRequest(http.MethodPatch, "/api/channel/1/volc/codingplan/credentials", strings.NewReader(string(body)))
-	UpdateVolcCodingPlanCredentials(ctx)
-
-	var response struct {
-		Success bool   `json:"success"`
-		Message string `json:"message"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.False(t, response.Success)
-	assert.Contains(t, response.Message, "clear_*")
-}
-
-func TestUpdateVolcCodingPlanCredentialsRejectsOversizedSecret(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-	channel := &model.Channel{
-		Type:          constant.ChannelTypeVolcEngine,
-		Name:          "volc-oversized",
-		Key:           "k",
-		OtherSettings: `{"endpoint_profile":"coding"}`,
-	}
-	require.NoError(t, db.Create(channel).Error)
-
-	body := []byte(`{"secret_access_key":"` + strings.Repeat("s", 2049) + `"}`)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", channel.Id)}}
-	ctx.Request = httptest.NewRequest(http.MethodPatch, "/api/channel/1/volc/codingplan/credentials", strings.NewReader(string(body)))
-	UpdateVolcCodingPlanCredentials(ctx)
-
-	var response struct {
-		Success bool   `json:"success"`
-		Message string `json:"message"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.False(t, response.Success)
-	assert.Contains(t, response.Message, "长度超限")
 }
 
 // newVolcCodingPlanConnectProxy 启动一个本地 HTTP 代理（CONNECT 隧道）并把隧道

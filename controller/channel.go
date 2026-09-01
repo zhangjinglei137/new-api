@@ -977,12 +977,11 @@ type ChannelStatusRequest struct {
 }
 
 // mergeSensitiveOtherSettings 合并普通渠道编辑请求（PUT）携带的 settings 与
-// DB 原值，防止前端误写敏感凭证字段：
-//   - volc_coding_plan_csrf_token / volc_coding_plan_cookie /
-//     volc_coding_plan_access_key_id / volc_coding_plan_secret_access_key
-//     由独立 PATCH 接口管理，请求中的值一律忽略，保留 DB 原密文（未配置则移除）。
+// DB 原值，防止前端误写敏感凭证字段。不再有由独立 PATCH 接口管理的字段——
+// 火山方舟 Coding Plan 的 AK/SK 与其它登录凭证类字段一致：
 //   - opencode_auth_cookie / commandcode_cookie / sensenova_username /
-//     sensenova_password 请求中为非空新明文时加密后写入；
+//     sensenova_password / volc_coding_plan_access_key_id /
+//     volc_coding_plan_secret_access_key 请求中为非空新明文时加密后写入；
 //     缺失/为空则保留 DB 原值（含历史明文，原样保留）。
 func mergeSensitiveOtherSettings(requestSettings, originSettings string) (string, error) {
 	merged := map[string]any{}
@@ -998,16 +997,9 @@ func mergeSensitiveOtherSettings(requestSettings, originSettings string) (string
 		}
 	}
 
-	for _, key := range []string{"volc_coding_plan_csrf_token", "volc_coding_plan_cookie", "volc_coding_plan_access_key_id", "volc_coding_plan_secret_access_key"} {
-		if value, ok := origin[key]; ok {
-			merged[key] = value
-		} else {
-			delete(merged, key)
-		}
-	}
-
-	// 会话 Cookie / 登录凭证类字段：新明文加密后写入，缺失/为空保留 DB 原值。
-	for _, key := range []string{"opencode_auth_cookie", "commandcode_cookie", "sensenova_username", "sensenova_password"} {
+	// 会话 Cookie / 登录凭证 / OpenAPI AK-SK 类字段：新明文加密后写入，
+	// 缺失/为空保留 DB 原值。
+	for _, key := range []string{"opencode_auth_cookie", "commandcode_cookie", "sensenova_username", "sensenova_password", "volc_coding_plan_access_key_id", "volc_coding_plan_secret_access_key"} {
 		if raw, ok := merged[key]; ok {
 			if value, ok := raw.(string); ok && strings.TrimSpace(value) != "" {
 				encrypted, err := common.EncryptSecret(value)

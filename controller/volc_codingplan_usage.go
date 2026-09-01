@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -16,7 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetVolcCodingPlanUsage 查询火山方舟 Coding Plan 渠道的用量。任何响应都不得包含凭证。
+// GetVolcCodingPlanUsage 查询火山方舟 Coding Plan 渠道的用量（AK/SK OpenAPI 签名认证）。
+// 任何响应都不得包含凭证。
 func GetVolcCodingPlanUsage(c *gin.Context) {
 	channelId, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -48,6 +48,31 @@ func GetVolcCodingPlanUsage(c *gin.Context) {
 		return
 	}
 
+	// 仅支持 AK/SK：OpenAPI V4 签名认证。AccessKeyId 与 SecretAccessKey 任一缺失
+	// 时视为未配置凭证。
+	if settings.VolcCodingPlanAccessKeyId == "" || settings.VolcCodingPlanSecretAccessKey == "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "OpenAPI Access Key / Secret Access Key 未配置，请在渠道设置中更新凭证", "error_code": "credentials_not_configured"})
+		return
+	}
+
+	region, ok := service.RegionFromVolcBaseURL(ch.GetBaseURL())
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "不支持的区域", "error_code": "unsupported_region"})
+		return
+	}
+
+	var accessKeyID, secretAccessKey string
+	accessKeyID, err = common.DecryptSecret(settings.VolcCodingPlanAccessKeyId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "OpenAPI 凭证不可用，请重新配置", "error_code": "credentials_unavailable"})
+		return
+	}
+	secretAccessKey, err = common.DecryptSecret(settings.VolcCodingPlanSecretAccessKey)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "OpenAPI 凭证不可用，请重新配置", "error_code": "credentials_unavailable"})
+		return
+	}
+
 	client, err := service.GetHttpClientWithProxy(ch.GetSetting().Proxy)
 	if err != nil {
 		common.ApiError(c, err)
@@ -57,55 +82,7 @@ func GetVolcCodingPlanUsage(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	// 优先 AK/SK：OpenAPI V4 签名认证。AccessKeyId 与 SecretAccessKey 任一缺失时
-	// 回落控制台会话 Cookie 路径（兼容原配置）。两类凭证都未配置时返回
-	// credentials_not_configured。
-	var statusCode int
-	var body []byte
-	var credentialsExpiredMessage string
-	if settings.VolcCodingPlanAccessKeyId != "" && settings.VolcCodingPlanSecretAccessKey != "" {
-		region, ok := service.RegionFromVolcBaseURL(ch.GetBaseURL())
-		if !ok {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "不支持的区域", "error_code": "unsupported_region"})
-			return
-		}
-		var accessKeyID, secretAccessKey string
-		accessKeyID, err = common.DecryptSecret(settings.VolcCodingPlanAccessKeyId)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "OpenAPI 凭证不可用，请重新配置", "error_code": "credentials_unavailable"})
-			return
-		}
-		secretAccessKey, err = common.DecryptSecret(settings.VolcCodingPlanSecretAccessKey)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "OpenAPI 凭证不可用，请重新配置", "error_code": "credentials_unavailable"})
-			return
-		}
-		statusCode, body, err = service.FetchVolcCodingPlanUsageByAkSk(ctx, client, region, accessKeyID, secretAccessKey)
-		credentialsExpiredMessage = "火山 OpenAPI Access Key / Secret Access Key 无效或已被禁用，请在渠道设置中更新凭证"
-	} else {
-		if settings.VolcCodingPlanCsrfToken == "" || settings.VolcCodingPlanCookie == "" {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "浏览器会话凭证未配置", "error_code": "credentials_not_configured"})
-			return
-		}
-		region, ok := service.RegionFromVolcBaseURL(ch.GetBaseURL())
-		if !ok {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "不支持的区域", "error_code": "unsupported_region"})
-			return
-		}
-		var csrfToken, cookie string
-		csrfToken, err = common.DecryptSecret(settings.VolcCodingPlanCsrfToken)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "浏览器会话凭证不可用，请重新配置", "error_code": "credentials_unavailable"})
-			return
-		}
-		cookie, err = common.DecryptSecret(settings.VolcCodingPlanCookie)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "浏览器会话凭证不可用，请重新配置", "error_code": "credentials_unavailable"})
-			return
-		}
-		statusCode, body, err = service.FetchVolcCodingPlanUsage(ctx, client, region, csrfToken, cookie)
-		credentialsExpiredMessage = "火山控制台会话已过期，请在渠道设置中更新 Cookie 与 x-csrf-token"
-	}
+	statusCode, body, err := service.FetchVolcCodingPlanUsageByAkSk(ctx, client, region, accessKeyID, secretAccessKey)
 	if err != nil {
 		common.SysError("failed to fetch volc coding plan usage: " + err.Error())
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取用量失败，请稍后重试", "error_code": "fetch_failed"})
@@ -115,7 +92,7 @@ func GetVolcCodingPlanUsage(c *gin.Context) {
 	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
 		c.JSON(http.StatusOK, gin.H{
 			"success":         false,
-			"message":         credentialsExpiredMessage,
+			"message":         "火山 OpenAPI Access Key / Secret Access Key 无效或已被禁用，请在渠道设置中更新凭证",
 			"upstream_status": statusCode,
 			"error_code":      "credentials_expired",
 		})
@@ -153,204 +130,6 @@ func GetVolcCodingPlanUsage(c *gin.Context) {
 		"data": gin.H{
 			"status":  info.Status,
 			"windows": windows,
-		},
-	})
-}
-
-type updateVolcCodingPlanCredentialsRequest struct {
-	CsrfToken            *string `json:"csrf_token"`
-	Cookie               *string `json:"cookie"`
-	ClearCsrf            bool    `json:"clear_csrf"`
-	ClearCookie          bool    `json:"clear_cookie"`
-	AccessKeyId          *string `json:"access_key_id,omitempty"`
-	SecretAccessKey      *string `json:"secret_access_key,omitempty"`
-	ClearAccessKeyId     bool    `json:"clear_access_key_id,omitempty"`
-	ClearSecretAccessKey bool    `json:"clear_secret_access_key,omitempty"`
-}
-
-// UpdateVolcCodingPlanCredentials 通过独立 PATCH 接口更新火山方舟 Coding Plan
-// 凭证：控制台会话（csrf_token / cookie，AES-GCM 加密后入库）与 OpenAPI AK/SK
-// （access_key_id / secret_access_key，均 AES-GCM 加密后入库）。审计日志只记录
-// channel_id / channel_name / changed。
-func UpdateVolcCodingPlanCredentials(c *gin.Context) {
-	channelId, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		common.ApiError(c, fmt.Errorf("invalid channel id: %w", err))
-		return
-	}
-
-	ch, err := model.GetChannelById(channelId, true)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	if ch == nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "channel not found"})
-		return
-	}
-	if ch.Type != constant.ChannelTypeVolcEngine {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "channel type is not VolcEngine"})
-		return
-	}
-	if ch.ChannelInfo.IsMultiKey {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "multi-key channel is not supported"})
-		return
-	}
-
-	settings := ch.GetOtherSettings()
-	if settings.EndpointProfile != "coding" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "该渠道未启用 Coding Plan 端点"})
-		return
-	}
-
-	rawBody, err := c.GetRawData()
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	var req updateVolcCodingPlanCredentialsRequest
-	if err := common.Unmarshal(rawBody, &req); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-
-	if (req.ClearCsrf && req.CsrfToken != nil) || (req.ClearCookie && req.Cookie != nil) ||
-		(req.ClearAccessKeyId && req.AccessKeyId != nil) || (req.ClearSecretAccessKey && req.SecretAccessKey != nil) {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "clear_* 与对应新值不能同时出现"})
-		return
-	}
-	if req.CsrfToken != nil && (strings.Contains(*req.CsrfToken, "\r") || strings.Contains(*req.CsrfToken, "\n")) {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "csrf_token 包含非法字符"})
-		return
-	}
-	if req.Cookie != nil && (strings.Contains(*req.Cookie, "\r") || strings.Contains(*req.Cookie, "\n")) {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "cookie 包含非法字符"})
-		return
-	}
-	if req.AccessKeyId != nil && (strings.Contains(*req.AccessKeyId, "\r") || strings.Contains(*req.AccessKeyId, "\n")) {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "access_key_id 包含非法字符"})
-		return
-	}
-	if req.SecretAccessKey != nil && (strings.Contains(*req.SecretAccessKey, "\r") || strings.Contains(*req.SecretAccessKey, "\n")) {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "secret_access_key 包含非法字符"})
-		return
-	}
-	if req.CsrfToken != nil && len(*req.CsrfToken) > 1024 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "csrf_token 长度超限"})
-		return
-	}
-	if req.Cookie != nil && len(*req.Cookie) > 32768 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "cookie 长度超限"})
-		return
-	}
-	if req.AccessKeyId != nil && len(*req.AccessKeyId) > 1024 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "access_key_id 长度超限"})
-		return
-	}
-	if req.SecretAccessKey != nil && len(*req.SecretAccessKey) > 2048 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "secret_access_key 长度超限"})
-		return
-	}
-
-	changed := false
-	switch {
-	case req.ClearCsrf:
-		if settings.VolcCodingPlanCsrfToken != "" {
-			settings.VolcCodingPlanCsrfToken = ""
-			changed = true
-		}
-	case req.CsrfToken != nil:
-		encrypted, err := common.EncryptSecret(*req.CsrfToken)
-		if err != nil {
-			common.SysError("failed to encrypt volc coding plan csrf token: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "凭证加密失败，请稍后重试"})
-			return
-		}
-		if settings.VolcCodingPlanCsrfToken != encrypted {
-			settings.VolcCodingPlanCsrfToken = encrypted
-			changed = true
-		}
-	}
-	switch {
-	case req.ClearCookie:
-		if settings.VolcCodingPlanCookie != "" {
-			settings.VolcCodingPlanCookie = ""
-			changed = true
-		}
-	case req.Cookie != nil:
-		encrypted, err := common.EncryptSecret(*req.Cookie)
-		if err != nil {
-			common.SysError("failed to encrypt volc coding plan cookie: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "凭证加密失败，请稍后重试"})
-			return
-		}
-		if settings.VolcCodingPlanCookie != encrypted {
-			settings.VolcCodingPlanCookie = encrypted
-			changed = true
-		}
-	}
-	switch {
-	case req.ClearAccessKeyId:
-		if settings.VolcCodingPlanAccessKeyId != "" {
-			settings.VolcCodingPlanAccessKeyId = ""
-			changed = true
-		}
-	case req.AccessKeyId != nil:
-		encrypted, err := common.EncryptSecret(*req.AccessKeyId)
-		if err != nil {
-			common.SysError("failed to encrypt volc coding plan access key id: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "凭证加密失败，请稍后重试"})
-			return
-		}
-		if settings.VolcCodingPlanAccessKeyId != encrypted {
-			settings.VolcCodingPlanAccessKeyId = encrypted
-			changed = true
-		}
-	}
-	switch {
-	case req.ClearSecretAccessKey:
-		if settings.VolcCodingPlanSecretAccessKey != "" {
-			settings.VolcCodingPlanSecretAccessKey = ""
-			changed = true
-		}
-	case req.SecretAccessKey != nil:
-		encrypted, err := common.EncryptSecret(*req.SecretAccessKey)
-		if err != nil {
-			common.SysError("failed to encrypt volc coding plan secret access key: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "凭证加密失败，请稍后重试"})
-			return
-		}
-		if settings.VolcCodingPlanSecretAccessKey != encrypted {
-			settings.VolcCodingPlanSecretAccessKey = encrypted
-			changed = true
-		}
-	}
-
-	if changed {
-		ch.SetOtherSettings(settings)
-		err = model.DB.Model(&model.Channel{}).Where("id = ?", ch.Id).Update("settings", ch.OtherSettings).Error
-		if err != nil {
-			common.SysError("failed to update volc coding plan credentials: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "保存失败，请稍后重试"})
-			return
-		}
-		model.InitChannelCache()
-	}
-
-	recordManageAudit(c, "channel.volc_coding_plan_credentials", map[string]interface{}{
-		"channel_id":   ch.Id,
-		"channel_name": ch.Name,
-		"changed":      changed,
-	})
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data": gin.H{
-			"csrf_token_configured":        settings.VolcCodingPlanCsrfToken != "",
-			"cookie_configured":            settings.VolcCodingPlanCookie != "",
-			"access_key_id_configured":     settings.VolcCodingPlanAccessKeyId != "",
-			"secret_access_key_configured": settings.VolcCodingPlanSecretAccessKey != "",
 		},
 	})
 }

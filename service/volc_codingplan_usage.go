@@ -16,10 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 )
 
-// volcCodingPlanUsageURLFmt 火山方舟 Coding Plan 用量查询接口。
-// region 取值如 cn-beijing / ap-southeast。
-const volcCodingPlanUsageURLFmt = "https://console.volcengine.com/api/top/ark/%s/2024-01-01/GetCodingPlanUsage"
-
 // volcCodingPlanOpenAPIURLFmt 火山方舟 OpenAPI 通用端点（AK/SK V4 签名认证路径）。
 // Action/Region 通过 %s 填入，Version 固定为 2024-01-01。
 const volcCodingPlanOpenAPIURLFmt = "https://open.volcengineapi.com/?Action=%s&Region=%s&Version=2024-01-01"
@@ -211,48 +207,6 @@ func volcJSONInt64(m map[string]any, keys ...string) int64 {
 		}
 	}
 	return 0
-}
-
-// FetchVolcCodingPlanUsage 向火山方舟控制台发起 Coding Plan 用量查询。
-// 入参非空校验；响应 body 原样返回。
-func FetchVolcCodingPlanUsage(ctx context.Context, client *http.Client, region, csrfToken, cookie string) (statusCode int, body []byte, err error) {
-	if client == nil {
-		return 0, nil, fmt.Errorf("nil http client")
-	}
-	region = strings.TrimSpace(region)
-	csrfToken = strings.TrimSpace(csrfToken)
-	cookie = strings.TrimSpace(cookie)
-	if region == "" {
-		return 0, nil, fmt.Errorf("empty region")
-	}
-	if csrfToken == "" {
-		return 0, nil, fmt.Errorf("empty x-csrf-token")
-	}
-	if cookie == "" {
-		return 0, nil, fmt.Errorf("empty cookie")
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf(volcCodingPlanUsageURLFmt, region), nil)
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-csrf-token", csrfToken)
-	req.Header.Set("Cookie", cookie)
-	req.Header.Set("Origin", "https://console.volcengine.com")
-	req.Header.Set("Referer", fmt.Sprintf("https://console.volcengine.com/ark/region:%s/subscription/coding-plan", region))
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return resp.StatusCode, nil, err
-	}
-	return resp.StatusCode, body, nil
 }
 
 // signVolcOpenAPIV4 为火山方舟 OpenAPI（open.volcengineapi.com）请求生成 V4

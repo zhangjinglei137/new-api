@@ -421,8 +421,11 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 			url = fmt.Sprintf("%s/api/paas/v4/models", baseURL)
 		}
 	case constant.ChannelTypeVolcEngine:
-		if plan, _, ok := constant.ResolveSpecialPlan(channel.Type, baseURL, channel.GetOtherSettings().EndpointProfile); ok && plan.OpenAIBaseURL != "" {
-			url = fmt.Sprintf("%s/v1/models", plan.OpenAIBaseURL)
+		if plan, _, ok := constant.ResolveSpecialPlan(channel.Type, baseURL, channel.GetOtherSettings().EndpointProfile); ok && plan.ClaudeBaseURL != "" {
+			// doubao-coding-plan 的 OpenAIBaseURL 是 /api/coding/v3，直接拼 /v1/models
+			// 会得到错误的 /api/coding/v3/v1/models；ClaudeBaseURL 是 /api/coding，
+			// 正确端点为 /api/coding/v1/models。
+			url = fmt.Sprintf("%s/v1/models", plan.ClaudeBaseURL)
 		} else {
 			url = fmt.Sprintf("%s/v1/models", baseURL)
 		}

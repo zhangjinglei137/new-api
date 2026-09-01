@@ -156,16 +156,10 @@ type ChannelOtherSettings struct {
 	SenseNovaPassword string `json:"sensenova_password,omitempty"`
 	// EndpointProfile 标识渠道使用的特殊套餐端点（如 Coding Plan）。取值 "coding"/"coding-intl"/空。
 	EndpointProfile string `json:"endpoint_profile,omitempty"`
-	// VolcCodingPlanCsrfToken 为 AES-GCM 加密后的火山方舟 Coding Plan 控制台 x-csrf-token。
-	VolcCodingPlanCsrfToken string `json:"volc_coding_plan_csrf_token,omitempty"`
-	// VolcCodingPlanCookie 为 AES-GCM 加密后的火山方舟 Coding Plan 控制台整段 Cookie。
-	VolcCodingPlanCookie string `json:"volc_coding_plan_cookie,omitempty"`
-	// VolcCodingPlanAccessKeyId 为 AES-GCM 加密后的火山方舟 Coding Plan OpenAPI
-	// Access Key ID（AK）。AK 明文可读但统一走加密路径（与 sensenova_username
-	// 一致掩码处理，避免任何明文外泄）。
-	VolcCodingPlanAccessKeyId string `json:"volc_coding_plan_access_key_id,omitempty"`
-	// VolcCodingPlanSecretAccessKey 为 AES-GCM 加密后的火山方舟 Coding Plan
-	// OpenAPI Secret Access Key（SK）。SK 必须只存密文，绝不明文入库。
+	// VolcCodingPlanAccessKeyId / VolcCodingPlanSecretAccessKey 为火山方舟 Coding Plan
+	// OpenAPI 凭证（AK 与 SK 均为 AES-GCM 密文，绝不明文入库）。凭证随普通渠道更新
+	// 经 mergeSensitiveOtherSettings 加密写入，读取时用 common.DecryptSecret。
+	VolcCodingPlanAccessKeyId     string `json:"volc_coding_plan_access_key_id,omitempty"`
 	VolcCodingPlanSecretAccessKey string `json:"volc_coding_plan_secret_access_key,omitempty"`
 }
 
