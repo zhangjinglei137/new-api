@@ -140,7 +140,6 @@ import {
   getPrefillGroups,
   getTaskPluginOptions,
   refreshCodexCredential,
-  updateVolcCodingPlanCredentials,
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
@@ -182,6 +181,10 @@ import {
   findMissingModelsInMapping,
   validateModelMappingJson,
   hasAdvancedSettingsErrors,
+  hasVolcCodingPlanCredential,
+  saveVolcCodingPlanCredentials,
+  clearVolcCodingPlanCredential,
+  type VolcCodingPlanCredentialKey,
 } from '../../lib'
 import {
   collectInvalidStatusCodeEntries,
@@ -693,9 +696,11 @@ export function ChannelMutateDrawer({
   >('standard')
   const [volcCsrfToken, setVolcCsrfToken] = useState('')
   const [volcCookie, setVolcCookie] = useState('')
+  const [volcAccessKeyId, setVolcAccessKeyId] = useState('')
+  const [volcSecretAccessKey, setVolcSecretAccessKey] = useState('')
   const [isSavingVolcCredentials, setIsSavingVolcCredentials] = useState(false)
   const [isClearingVolcCredential, setIsClearingVolcCredential] = useState<
-    'csrf' | 'cookie' | null
+    VolcCodingPlanCredentialKey | null
   >(null)
 
   const isEditing = Boolean(currentRow)
@@ -1577,24 +1582,27 @@ export function ChannelMutateDrawer({
 
   const handleSaveVolcCodingPlanCredentials = useCallback(async () => {
     if (!channelId) return
-    const csrfToken = volcCsrfToken.trim()
-    const cookie = volcCookie.trim()
-    if (!csrfToken && !cookie) {
+    const inputs = {
+      csrfToken: volcCsrfToken,
+      cookie: volcCookie,
+      accessKeyId: volcAccessKeyId,
+      secretAccessKey: volcSecretAccessKey,
+    }
+    if (!hasVolcCodingPlanCredential(inputs)) {
       toast.error(t('Enter at least one credential to save'))
       return
     }
     setIsSavingVolcCredentials(true)
     try {
-      const res = await updateVolcCodingPlanCredentials(channelId, {
-        csrf_token: csrfToken || undefined,
-        cookie: cookie || undefined,
-      })
+      const res = await saveVolcCodingPlanCredentials(channelId, inputs)
       if (!res.success) {
         throw new Error(res.message || t('Failed to save credentials'))
       }
       toast.success(t('Credentials saved'))
       setVolcCsrfToken('')
       setVolcCookie('')
+      setVolcAccessKeyId('')
+      setVolcSecretAccessKey('')
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t('Failed to save credentials')
@@ -1602,25 +1610,38 @@ export function ChannelMutateDrawer({
     } finally {
       setIsSavingVolcCredentials(false)
     }
-  }, [channelId, volcCsrfToken, volcCookie, t])
+  }, [
+    channelId,
+    volcCsrfToken,
+    volcCookie,
+    volcAccessKeyId,
+    volcSecretAccessKey,
+    t,
+  ])
 
   const handleClearVolcCodingPlanCredential = useCallback(
-    async (kind: 'csrf' | 'cookie') => {
+    async (kind: VolcCodingPlanCredentialKey) => {
       if (!channelId) return
       setIsClearingVolcCredential(kind)
       try {
-        const res = await updateVolcCodingPlanCredentials(
-          channelId,
-          kind === 'csrf' ? { clear_csrf: true } : { clear_cookie: true }
-        )
+        const res = await clearVolcCodingPlanCredential(channelId, kind)
         if (!res.success) {
           throw new Error(res.message || t('Failed to clear credential'))
         }
         toast.success(t('Credential cleared'))
-        if (kind === 'csrf') {
-          setVolcCsrfToken('')
-        } else {
-          setVolcCookie('')
+        switch (kind) {
+          case 'csrf':
+            setVolcCsrfToken('')
+            break
+          case 'cookie':
+            setVolcCookie('')
+            break
+          case 'access_key_id':
+            setVolcAccessKeyId('')
+            break
+          case 'secret_access_key':
+            setVolcSecretAccessKey('')
+            break
         }
       } catch (error) {
         toast.error(
@@ -3252,6 +3273,100 @@ export function ChannelMutateDrawer({
                                             >
                                               {isClearingVolcCredential ===
                                               'cookie' ? (
+                                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                              ) : (
+                                                <Eraser className='mr-2 h-4 w-4' />
+                                              )}
+                                              {t('Clear')}
+                                            </Button>
+                                          </div>
+                                          <div className='flex items-end gap-2'>
+                                            <div className='flex-1'>
+                                              <label
+                                                htmlFor='volc-access-key-id'
+                                                className='mb-1 block text-xs font-medium'
+                                              >
+                                                {t('Access Key ID')}
+                                              </label>
+                                              <Input
+                                                id='volc-access-key-id'
+                                                type='password'
+                                                value={volcAccessKeyId}
+                                                onChange={(e) =>
+                                                  setVolcAccessKeyId(
+                                                    e.target.value
+                                                  )
+                                                }
+                                                placeholder={t(
+                                                  'Leave blank to keep existing credential'
+                                                )}
+                                                autoComplete='off'
+                                              />
+                                            </div>
+                                            <Button
+                                              type='button'
+                                              variant='outline'
+                                              size='sm'
+                                              onClick={() =>
+                                                void handleClearVolcCodingPlanCredential(
+                                                  'access_key_id'
+                                                )
+                                              }
+                                              disabled={
+                                                isClearingVolcCredential ===
+                                                  'access_key_id' ||
+                                                isSavingVolcCredentials
+                                              }
+                                            >
+                                              {isClearingVolcCredential ===
+                                              'access_key_id' ? (
+                                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                              ) : (
+                                                <Eraser className='mr-2 h-4 w-4' />
+                                              )}
+                                              {t('Clear')}
+                                            </Button>
+                                          </div>
+                                          <div className='flex items-end gap-2'>
+                                            <div className='flex-1'>
+                                              <label
+                                                htmlFor='volc-secret-access-key'
+                                                className='mb-1 block text-xs font-medium'
+                                              >
+                                                {t('Secret Access Key')}
+                                              </label>
+                                              <Input
+                                                id='volc-secret-access-key'
+                                                type='password'
+                                                value={volcSecretAccessKey}
+                                                onChange={(e) =>
+                                                  setVolcSecretAccessKey(
+                                                    e.target.value
+                                                  )
+                                                }
+                                                placeholder={t(
+                                                  'Leave blank to keep existing credential'
+                                                )}
+                                                autoComplete='off'
+                                              />
+                                            </div>
+                                            <Button
+                                              type='button'
+                                              variant='outline'
+                                              size='sm'
+                                              onClick={() =>
+                                                void handleClearVolcCodingPlanCredential(
+                                                  'secret_access_key'
+                                                )
+                                              }
+                                              disabled={
+                                                isClearingVolcCredential ===
+                                                  'secret_access_key' ||
+                                                isSavingVolcCredentials
+                                              }
+                                            >
+                                              {isClearingVolcCredential ===
+                                              'secret_access_key' ? (
                                                 <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                                               ) : (
                                                 <Eraser className='mr-2 h-4 w-4' />

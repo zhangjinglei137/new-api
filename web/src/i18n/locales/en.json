@@ -5691,6 +5691,8 @@
     "Session expired, please update Cookie and CSRF token": "Session expired, please update Cookie and CSRF token",
     "CSRF token": "CSRF token",
     "Session cookie": "Session cookie",
+    "Access Key ID": "Access Key ID",
+    "Secret Access Key": "Secret Access Key",
     "Leave blank to keep existing credential": "Leave blank to keep existing credential",
     "Save credentials": "Save credentials",
     "Refresh usage": "Refresh usage",

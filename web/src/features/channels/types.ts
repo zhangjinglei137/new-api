@@ -121,6 +121,8 @@ export interface ChannelOtherSettings {
   // backend, never returned to the frontend — type-only fields).
   volc_coding_plan_csrf_token?: string
   volc_coding_plan_cookie?: string
+  volc_coding_plan_access_key_id?: string
+  volc_coding_plan_secret_access_key?: string
 }
 
 export interface AdvancedCustomConfig {

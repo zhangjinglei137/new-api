@@ -5691,6 +5691,8 @@
     "Session expired, please update Cookie and CSRF token": "会话已过期，请更新 Cookie 与 CSRF token",
     "CSRF token": "CSRF token",
     "Session cookie": "会话 Cookie",
+    "Access Key ID": "Access Key ID",
+    "Secret Access Key": "Secret Access Key",
     "Leave blank to keep existing credential": "留空保持不变",
     "Save credentials": "保存凭证",
     "Refresh usage": "刷新用量",

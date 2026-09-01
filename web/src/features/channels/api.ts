@@ -415,6 +415,8 @@ export type VolcCodingPlanCredentialsResponse = {
   data?: {
     csrf_token_configured: boolean
     cookie_configured: boolean
+    access_key_id_configured: boolean
+    secret_access_key_configured: boolean
   }
 }
 
@@ -454,6 +456,10 @@ export async function updateVolcCodingPlanCredentials(
     cookie?: string
     clear_csrf?: boolean
     clear_cookie?: boolean
+    access_key_id?: string
+    secret_access_key?: string
+    clear_access_key_id?: boolean
+    clear_secret_access_key?: boolean
   }
 ): Promise<VolcCodingPlanCredentialsResponse> {
   const res = await api.patch(
