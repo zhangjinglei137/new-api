@@ -393,7 +393,7 @@ export function SenseNovaUsageDialog(props: SenseNovaUsageDialogProps) {
           </div>
         )}
         {pools.some((pool) => pool.pool_type === 'dedicated') && (
-          <div className='border-info/20 bg-info/5 text-info-foreground flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs'>
+          <div className='border-info/20 bg-info/5 text-info flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs'>
             <Info className='mt-0.5 size-4 shrink-0' aria-hidden='true' />
             <span>{t('Using a dedicated pool earns rewards for the general pool.')}</span>
           </div>
