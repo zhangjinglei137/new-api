@@ -56,6 +56,7 @@ export function getChannelTypeIcon(type: number): string {
     60: 'NewAPI', // New API
     98: 'CommandCode', // CommandCode
     99: 'OpenCode', // OpenCode Go
+    97: 'Spark', // SenseNova
     3: 'Azure', // Azure
 
     // Anthropic

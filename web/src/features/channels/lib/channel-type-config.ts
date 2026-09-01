@@ -175,6 +175,18 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'Models exposed by this channel',
     },
   },
+  97: {
+    id: 97,
+    name: CHANNEL_TYPES[97],
+    icon: 'Spark',
+    defaultBaseUrl: 'https://token.sensenova.cn',
+    hints: {
+      baseUrl: 'Default: https://token.sensenova.cn',
+      key: 'SenseNova API key',
+      models: 'SenseNova model IDs',
+      other: 'Usage query requires a SenseNova username and password',
+    },
+  },
 }
 
 /**

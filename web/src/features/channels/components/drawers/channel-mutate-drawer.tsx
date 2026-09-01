@@ -148,6 +148,7 @@ import {
   CHANNEL_STATUS_LABELS,
   CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_OPENCODE_GO,
+  CHANNEL_TYPE_SENSENOVA,
   CHANNEL_TYPE_OPTIONS,
   CHANNEL_TYPE_TASK_PLUGIN,
   channelTypeOptionsForTaskPluginBind,
@@ -319,6 +320,8 @@ const SENSITIVE_FORM_FIELDS = [
   'opencode_workspace_id',
   'opencode_auth_cookie',
   'commandcode_cookie',
+  'sensenova_username',
+  'sensenova_password',
 ] satisfies (keyof ChannelFormValues)[]
 
 function readAdvancedSettingsPreference(): boolean {
@@ -374,6 +377,8 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.opencode_workspace_id?.trim() ||
     values.opencode_auth_cookie?.trim() ||
     values.commandcode_cookie?.trim()
+    || values.sensenova_username?.trim()
+    || values.sensenova_password?.trim()
   )
 }
 
@@ -1442,6 +1447,13 @@ export function ChannelMutateDrawer({
             2
           )
         )
+      }
+    }
+
+    if (currentType === CHANNEL_TYPE_SENSENOVA) {
+      const currentBaseUrlValue = form.getValues('base_url')
+      if (!currentBaseUrlValue || currentBaseUrlValue === '') {
+        form.setValue('base_url', 'https://token.sensenova.cn')
       }
     }
   }, [currentType, isEditing, form])
@@ -3653,6 +3665,59 @@ export function ChannelMutateDrawer({
                                   </FormItem>
                                 )}
                               />
+                            )}
+
+                            {currentType === CHANNEL_TYPE_SENSENOVA && (
+                              <div className='flex flex-col gap-4'>
+                                <div>
+                                  <div className='text-sm font-medium'>
+                                    {t('SenseNova usage credentials')}
+                                  </div>
+                                  <div className='text-muted-foreground mt-1 text-xs'>
+                                    {t(
+                                      'Enter the SenseNova username and password for usage queries. Credentials are stored encrypted; leave a field blank to keep the existing value.'
+                                    )}
+                                  </div>
+                                </div>
+                                <FormField
+                                  control={form.control}
+                                  name='sensenova_username'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('SenseNova username')}</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='text'
+                                          autoComplete='username'
+                                          placeholder={t('SenseNova username')}
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='sensenova_password'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('SenseNova password')}</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='password'
+                                          autoComplete='new-password'
+                                          placeholder={t(
+                                            'Leave blank to keep existing credential'
+                                          )}
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
                             )}
 
                             <ChannelAuthSection>

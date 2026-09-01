@@ -59,6 +59,7 @@ import {
   getCodexUsage,
   getCommandCodeUsage,
   getOpenCodeGoUsage,
+  getSenseNovaUsage,
   getVolcCodingPlanUsage,
   updateChannelBalance,
 } from '../api'
@@ -67,6 +68,7 @@ import {
   CHANNEL_TYPE_CODEX,
   CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_OPENCODE_GO,
+  CHANNEL_TYPE_SENSENOVA,
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
 import {
@@ -111,6 +113,10 @@ import {
   VolcCodingPlanUsageDialog,
   type VolcCodingPlanUsageResponse,
 } from './dialogs/volc-codingplan-usage-dialog'
+import {
+  SenseNovaUsageDialog,
+  type SenseNovaUsageResponse,
+} from './dialogs/sensenova-usage-dialog'
 import { NumericSpinnerInput } from './numeric-spinner-input'
 
 function parseIonetMeta(otherInfo: string | null | undefined): null | {
@@ -375,6 +381,9 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const [commandCodeUsageOpen, setCommandCodeUsageOpen] = useState(false)
   const [commandCodeUsageResponse, setCommandCodeUsageResponse] =
     useState<CommandCodeUsageResponse | null>(null)
+  const [senseNovaUsageOpen, setSenseNovaUsageOpen] = useState(false)
+  const [senseNovaUsageResponse, setSenseNovaUsageResponse] =
+    useState<SenseNovaUsageResponse | null>(null)
   const currencyLabel = getCurrencyLabel()
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
@@ -386,9 +395,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding'
   const isOpenCodeGo = channel.type === CHANNEL_TYPE_OPENCODE_GO
   const isCommandCode = channel.type === CHANNEL_TYPE_COMMANDCODE
+  const isSenseNova = channel.type === CHANNEL_TYPE_SENSENOVA
 
   const isUsageDialogType =
-    isCodex || isVolcCodingPlan || isOpenCodeGo || isCommandCode
+    isCodex || isVolcCodingPlan || isOpenCodeGo || isCommandCode || isSenseNova
 
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const balanceFormatOptions = {
@@ -558,6 +568,26 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
   }
 
+  const fetchSenseNovaUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getSenseNovaUsage(channel.id)
+      setSenseNovaUsageResponse(res)
+      if (openDialog) {
+        setSenseNovaUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleClickUpdate = async () => {
     if (isCodex) {
       await fetchCodexUsage()
@@ -573,6 +603,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
     if (isCommandCode) {
       await fetchCommandCodeUsage()
+      return
+    }
+    if (isSenseNova) {
+      await fetchSenseNovaUsage()
       return
     }
 
@@ -627,6 +661,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     remainingTooltipLabel = t('Click to view OpenCode Go usage')
   } else if (isCommandCode) {
     remainingTooltipLabel = t('Click to view Command Code usage')
+  } else if (isSenseNova) {
+    remainingTooltipLabel = t('Click to view SenseNova usage')
   }
   let remainingBadgeVariant: StatusBadgeProps['variant'] = variant
   if (isUsageDialogType) {
@@ -712,6 +748,15 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelId={channel.id}
         response={commandCodeUsageResponse}
         onRefresh={() => fetchCommandCodeUsage(false)}
+        isRefreshing={isUpdating}
+      />
+      <SenseNovaUsageDialog
+        open={senseNovaUsageOpen}
+        onOpenChange={setSenseNovaUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        response={senseNovaUsageResponse}
+        onRefresh={() => fetchSenseNovaUsage(false)}
         isRefreshing={isUpdating}
       />
       {rawBalanceResponse !== null && (

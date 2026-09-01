@@ -24,6 +24,7 @@ For commercial licensing, please contact support@quantumnous.com
 export const CHANNEL_TYPE_NEW_API = 60
 export const CHANNEL_TYPE_OPENCODE_GO = 99
 export const CHANNEL_TYPE_COMMANDCODE = 98
+export const CHANNEL_TYPE_SENSENOVA = 97
 export const CHANNEL_TYPE_CODEX = 57
 
 export const CHANNEL_TYPE_TASK_PLUGIN = 61
@@ -87,6 +88,7 @@ export const CHANNEL_TYPES = {
   59: 'Sub2API',
   60: 'New API',
   61: 'Task Plugin',
+  97: 'SenseNova',
   98: 'CommandCode',
   99: 'OpenCode Go',
 } as const
@@ -94,7 +96,7 @@ export const CHANNEL_TYPES = {
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
   1, 14, 33, 24, 43, 3, 41, 48, 60, 58, 61, 42, 34, 20, 4, 40, 27, 25, 17, 26,
   15, 46, 23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 59, 22, 21,
-  44, 2, 5, 36, 50, 51, 52, 53, 54, 55, 56, 98, 99,
+  44, 2, 5, 36, 50, 51, 52, 53, 54, 55, 56, 97, 98, 99,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {

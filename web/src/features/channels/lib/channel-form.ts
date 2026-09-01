@@ -23,6 +23,7 @@ import {
   CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_NEW_API,
   CHANNEL_TYPE_OPENCODE_GO,
+  CHANNEL_TYPE_SENSENOVA,
   CHANNEL_TYPE_TASK_PLUGIN,
   CHANNEL_STATUS,
   ERROR_MESSAGES,
@@ -299,6 +300,9 @@ export const channelFormSchema = z
     opencode_auth_cookie: z.string().optional(),
     // Command Code specific settings (stored in settings JSON)
     commandcode_cookie: z.string().optional(),
+    // SenseNova usage query credentials (stored in settings JSON)
+    sensenova_username: z.string().optional(),
+    sensenova_password: z.string().optional(),
     // Multi-key options (not sent to backend directly)
     multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
     multi_key_type: z.enum(['random', 'polling']).optional(),
@@ -539,6 +543,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   opencode_workspace_id: '',
   opencode_auth_cookie: '',
   commandcode_cookie: '',
+  sensenova_username: '',
+  sensenova_password: '',
 }
 
 // ============================================================================
@@ -713,6 +719,10 @@ export function transformChannelToFormDefaults(
     opencode_workspace_id: opencodeWorkspaceId,
     opencode_auth_cookie: opencodeAuthCookie,
     commandcode_cookie: commandCodeCookie,
+    // SenseNova credentials are intentionally never populated from the API.
+    // The backend stores them encrypted and does not return them for editing.
+    sensenova_username: '',
+    sensenova_password: '',
   }
 }
 
@@ -927,6 +937,26 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     }
   } else if ('commandcode_cookie' in settingsObj) {
     delete settingsObj.commandcode_cookie
+  }
+
+  // SenseNova (type 97) usage query credentials. The backend stores these
+  // encrypted and treats missing/empty fields as "keep existing", so an empty
+  // input keeps the configured value. These credentials therefore cannot be
+  // cleared from this form; omit the field entirely instead of overwriting it.
+  if (formData.type === CHANNEL_TYPE_SENSENOVA) {
+    if (formData.sensenova_username?.trim()) {
+      settingsObj.sensenova_username = formData.sensenova_username.trim()
+    } else {
+      delete settingsObj.sensenova_username
+    }
+    if (formData.sensenova_password) {
+      settingsObj.sensenova_password = formData.sensenova_password
+    } else {
+      delete settingsObj.sensenova_password
+    }
+  } else {
+    delete settingsObj.sensenova_username
+    delete settingsObj.sensenova_password
   }
 
   const modelProxyRules = parseModelProxyRules(formData.model_proxy_rules)

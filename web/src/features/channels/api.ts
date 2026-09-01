@@ -508,6 +508,47 @@ export async function getCommandCodeUsage(
 }
 
 // ============================================================================
+// SenseNova (type 97) Usage Operations
+// ============================================================================
+
+export type SenseNovaUsageWindow = {
+  limit?: number
+  used?: number
+  remaining?: number
+  reset_at?: string | null
+}
+
+export type SenseNovaUsagePool = {
+  pool_type?: string
+  name?: string
+  model_ids?: string[]
+  window_5h?: SenseNovaUsageWindow | null
+  window_7d?: SenseNovaUsageWindow | null
+  grant_balance?: number
+  nearest_grant_expiry?: string | null
+  nearest_grant_expiring_balance?: number
+}
+
+export type SenseNovaUsageResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    plan?: { id?: string; name?: string }
+    pools?: SenseNovaUsagePool[]
+  }
+}
+
+export async function getSenseNovaUsage(
+  channelId: number
+): Promise<SenseNovaUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/sensenova/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+// ============================================================================
 // Multi-Key Management
 // ============================================================================
 
