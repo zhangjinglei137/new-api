@@ -475,6 +475,39 @@ export async function getOpenCodeGoUsage(
 }
 
 // ============================================================================
+// Command Code (type 98) Usage Operations
+// ============================================================================
+
+export type CommandCodeWindow = {
+  period?: 'session' | 'weekly' | 'monthly' | 'topup'
+  status?: string
+  used_percent?: number
+  remaining_percent?: number
+  used?: number
+  limit?: number
+  reset_at?: string | null
+  metered?: boolean
+}
+
+export type CommandCodeUsageResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    windows?: CommandCodeWindow[]
+  }
+}
+
+export async function getCommandCodeUsage(
+  channelId: number
+): Promise<CommandCodeUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/commandcode/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+// ============================================================================
 // Multi-Key Management
 // ============================================================================
 

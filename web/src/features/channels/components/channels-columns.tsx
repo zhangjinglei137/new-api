@@ -55,10 +55,17 @@ import {
 import { formatTimestampToDate } from '@/lib/format'
 import { truncateText } from '@/lib/utils'
 
-import { getCodexUsage, getOpenCodeGoUsage, getVolcCodingPlanUsage, updateChannelBalance } from '../api'
+import {
+  getCodexUsage,
+  getCommandCodeUsage,
+  getOpenCodeGoUsage,
+  getVolcCodingPlanUsage,
+  updateChannelBalance,
+} from '../api'
 import {
   CHANNEL_STATUS_CONFIG,
   CHANNEL_TYPE_CODEX,
+  CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_OPENCODE_GO,
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
@@ -92,6 +99,10 @@ import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './dialogs/codex-usage-dialog'
+import {
+  CommandCodeUsageDialog,
+  type CommandCodeUsageResponse,
+} from './dialogs/commandcode-usage-dialog'
 import {
   OpenCodeGoUsageDialog,
   type OpenCodeGoUsageResponse,
@@ -361,6 +372,9 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const [openCodeGoUsageOpen, setOpenCodeGoUsageOpen] = useState(false)
   const [openCodeGoUsageResponse, setOpenCodeGoUsageResponse] =
     useState<OpenCodeGoUsageResponse | null>(null)
+  const [commandCodeUsageOpen, setCommandCodeUsageOpen] = useState(false)
+  const [commandCodeUsageResponse, setCommandCodeUsageResponse] =
+    useState<CommandCodeUsageResponse | null>(null)
   const currencyLabel = getCurrencyLabel()
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
@@ -371,8 +385,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     channel.type === 45 &&
     parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding'
   const isOpenCodeGo = channel.type === CHANNEL_TYPE_OPENCODE_GO
+  const isCommandCode = channel.type === CHANNEL_TYPE_COMMANDCODE
 
-  const isUsageDialogType = isCodex || isVolcCodingPlan || isOpenCodeGo
+  const isUsageDialogType =
+    isCodex || isVolcCodingPlan || isOpenCodeGo || isCommandCode
 
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const balanceFormatOptions = {
@@ -519,6 +535,29 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
   }
 
+  const fetchCommandCodeUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getCommandCodeUsage(channel.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setCommandCodeUsageResponse(res)
+      if (openDialog) {
+        setCommandCodeUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleClickUpdate = async () => {
     if (isCodex) {
       await fetchCodexUsage()
@@ -530,6 +569,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
     if (isOpenCodeGo) {
       await fetchOpenCodeGoUsage()
+      return
+    }
+    if (isCommandCode) {
+      await fetchCommandCodeUsage()
       return
     }
 
@@ -582,6 +625,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     remainingTooltipLabel = t('Click to view Coding Plan usage')
   } else if (isOpenCodeGo) {
     remainingTooltipLabel = t('Click to view OpenCode Go usage')
+  } else if (isCommandCode) {
+    remainingTooltipLabel = t('Click to view Command Code usage')
   }
   let remainingBadgeVariant: StatusBadgeProps['variant'] = variant
   if (isUsageDialogType) {
@@ -658,6 +703,15 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelId={channel.id}
         response={openCodeGoUsageResponse}
         onRefresh={() => fetchOpenCodeGoUsage(false)}
+        isRefreshing={isUpdating}
+      />
+      <CommandCodeUsageDialog
+        open={commandCodeUsageOpen}
+        onOpenChange={setCommandCodeUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        response={commandCodeUsageResponse}
+        onRefresh={() => fetchCommandCodeUsage(false)}
         isRefreshing={isUpdating}
       />
       {rawBalanceResponse !== null && (

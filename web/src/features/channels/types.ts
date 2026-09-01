@@ -111,6 +111,7 @@ export interface ChannelOtherSettings {
   advanced_custom?: AdvancedCustomConfig
   opencode_workspace_id?: string
   opencode_auth_cookie?: string
+  commandcode_cookie?: string
   model_proxy_rules?: { models?: string[]; proxy?: string }[]
   // Coding Plan access profile for VolcEngine(45) / ZhipuV4(26) / Moonshot(25).
   endpoint_profile?: 'coding' | 'coding-intl' | string

@@ -20,6 +20,7 @@ import { z } from 'zod'
 
 import {
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
+  CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_NEW_API,
   CHANNEL_TYPE_OPENCODE_GO,
   CHANNEL_TYPE_TASK_PLUGIN,
@@ -296,6 +297,8 @@ export const channelFormSchema = z
     // OpenCode Go specific settings (stored in settings JSON)
     opencode_workspace_id: z.string().optional(),
     opencode_auth_cookie: z.string().optional(),
+    // Command Code specific settings (stored in settings JSON)
+    commandcode_cookie: z.string().optional(),
     // Multi-key options (not sent to backend directly)
     multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
     multi_key_type: z.enum(['random', 'polling']).optional(),
@@ -535,6 +538,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   model_proxy_rules: [],
   opencode_workspace_id: '',
   opencode_auth_cookie: '',
+  commandcode_cookie: '',
 }
 
 // ============================================================================
@@ -605,6 +609,7 @@ export function transformChannelToFormDefaults(
   let modelProxyRules: ModelProxyRuleFormValue[] = []
   let opencodeWorkspaceId = ''
   let opencodeAuthCookie = ''
+  let commandCodeCookie = ''
 
   if (channel.settings) {
     try {
@@ -651,6 +656,7 @@ export function transformChannelToFormDefaults(
       }
       opencodeWorkspaceId = parsed.opencode_workspace_id || ''
       opencodeAuthCookie = parsed.opencode_auth_cookie || ''
+      commandCodeCookie = parsed.commandcode_cookie || ''
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -706,6 +712,7 @@ export function transformChannelToFormDefaults(
     model_proxy_rules: modelProxyRules,
     opencode_workspace_id: opencodeWorkspaceId,
     opencode_auth_cookie: opencodeAuthCookie,
+    commandcode_cookie: commandCodeCookie,
   }
 }
 
@@ -907,6 +914,19 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     if ('opencode_auth_cookie' in settingsObj) {
       delete settingsObj.opencode_auth_cookie
     }
+  }
+
+  // Command Code (type 98) usage query cookie. The backend never returns the
+  // stored cookie, so an empty input keeps the existing value. Omit the field
+  // entirely instead of overwriting it, and only write it for type 98.
+  if (formData.type === CHANNEL_TYPE_COMMANDCODE) {
+    if (formData.commandcode_cookie) {
+      settingsObj.commandcode_cookie = formData.commandcode_cookie
+    } else {
+      delete settingsObj.commandcode_cookie
+    }
+  } else if ('commandcode_cookie' in settingsObj) {
+    delete settingsObj.commandcode_cookie
   }
 
   const modelProxyRules = parseModelProxyRules(formData.model_proxy_rules)

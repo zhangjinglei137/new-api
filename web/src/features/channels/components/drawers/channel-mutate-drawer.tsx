@@ -146,6 +146,7 @@ import {
   ADD_MODE_OPTIONS,
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
   CHANNEL_STATUS_LABELS,
+  CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_OPENCODE_GO,
   CHANNEL_TYPE_OPTIONS,
   CHANNEL_TYPE_TASK_PLUGIN,
@@ -317,6 +318,7 @@ const SENSITIVE_FORM_FIELDS = [
   'model_proxy_rules',
   'opencode_workspace_id',
   'opencode_auth_cookie',
+  'commandcode_cookie',
 ] satisfies (keyof ChannelFormValues)[]
 
 function readAdvancedSettingsPreference(): boolean {
@@ -370,7 +372,8 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
         (rule) => rule.models?.trim() || rule.proxy?.trim()
       )) ||
     values.opencode_workspace_id?.trim() ||
-    values.opencode_auth_cookie?.trim()
+    values.opencode_auth_cookie?.trim() ||
+    values.commandcode_cookie?.trim()
   )
 }
 
@@ -3620,6 +3623,36 @@ export function ChannelMutateDrawer({
                                   )}
                                 />
                               </>
+                            )}
+
+                            {currentType === CHANNEL_TYPE_COMMANDCODE && (
+                              <FormField
+                                control={form.control}
+                                name='commandcode_cookie'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('Usage query cookie')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type='password'
+                                        placeholder={t(
+                                          'Leave blank to keep existing credential'
+                                        )}
+                                        autoComplete='off'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t(
+                                        'Cookie of the Command Code (command.code) login session used to query usage. Leave blank to keep the existing credential; update manually after expiry.'
+                                      )}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             )}
 
                             <ChannelAuthSection>
