@@ -36,72 +36,154 @@ function renderDialog(response: VolcCodingPlanUsageResponse | null) {
   )
 }
 
-describe('VolcCodingPlanUsageDialog', () => {
-  test('shows remaining and used percent when usage data is present', () => {
-    renderDialog({
-      success: true,
-      data: {
-        status: 'ok',
+const THREE_WINDOW_RESPONSE: VolcCodingPlanUsageResponse = {
+  success: true,
+  data: {
+    status: 'Running',
+    // Intentionally out of order: the dialog must render session → weekly → monthly.
+    windows: [
+      {
         period: 'monthly',
-        remaining_percent: 62.5,
-        used_percent: 37.5,
-        reset_at: '2026-09-01T00:00:00Z',
-        reset_in_sec: 3600,
+        used_percent: 75,
+        remaining_percent: 25,
+        reset_at: '2026-10-01T00:00:00Z',
+        reset_in_sec: 99999,
       },
-    })
+      {
+        period: 'session',
+        used_percent: 12.5,
+        remaining_percent: 87.5,
+        reset_at: '2026-09-01T00:00:00Z',
+        reset_in_sec: 12345,
+      },
+      {
+        period: 'weekly',
+        used_percent: 50,
+        remaining_percent: 50,
+        reset_at: '2026-09-07T00:00:00Z',
+        reset_in_sec: 45678,
+      },
+    ],
+  },
+}
+
+describe('VolcCodingPlanUsageDialog', () => {
+  test('renders all three windows in fixed order with two-decimal percentages', () => {
+    renderDialog(THREE_WINDOW_RESPONSE)
 
     expect(
       screen.getByText('VolcEngine Coding Plan Usage')
     ).toBeInTheDocument()
-    expect(screen.getByText('62.5%')).toBeInTheDocument()
-    expect(screen.getByText('37.5%')).toBeInTheDocument()
-    // The reset time is formatted instead of shown as the raw ISO string.
+
+    const titles = screen
+      .getAllByText(/Last 5 hours|Weekly|Monthly/)
+      .map((el) => el.textContent)
+    expect(titles).toStrictEqual(['Last 5 hours', 'Weekly', 'Monthly'])
+
+    // Two-decimal formatting for used percentages (big number + Used row).
+    expect(screen.getAllByText('12.50%')).toHaveLength(2)
+    expect(screen.getAllByText('50.00%')).toHaveLength(2)
+    expect(screen.getAllByText('75.00%')).toHaveLength(2)
+    // Remaining percentages are no longer surfaced.
+    expect(screen.queryByText('87.50%')).not.toBeInTheDocument()
+    expect(screen.queryByText('25.00%')).not.toBeInTheDocument()
+
+    // Reset times are formatted instead of shown as the raw ISO strings.
+    expect(screen.queryByText('2026-10-01T00:00:00Z')).not.toBeInTheDocument()
     expect(screen.queryByText('2026-09-01T00:00:00Z')).not.toBeInTheDocument()
+
     // Raw JSON panel is available once usage data exists.
     expect(
       screen.getByText('Show raw upstream response')
     ).toBeInTheDocument()
   })
 
-  test('shows a dash instead of 0% when remaining percent is missing', () => {
+  test('renders a single card when only one window is present', () => {
     renderDialog({
       success: true,
       data: {
         status: 'ok',
-        period: 'monthly',
+        windows: [
+          {
+            period: 'monthly',
+            used_percent: 75,
+            remaining_percent: 25,
+          },
+        ],
       },
     })
 
-    expect(screen.queryByText('0%')).not.toBeInTheDocument()
+    expect(screen.getByText('Monthly')).toBeInTheDocument()
+    expect(screen.getAllByText('75.00%')).toHaveLength(2)
+    expect(screen.queryByText('Last 5 hours')).not.toBeInTheDocument()
+    expect(screen.queryByText('Weekly')).not.toBeInTheDocument()
+  })
+
+  test('shows a dash instead of 0% when window percentages are missing', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [{ period: 'session' }],
+      },
+    })
+
+    expect(screen.getByText('Last 5 hours')).toBeInTheDocument()
+    expect(screen.queryByText('0.00%')).not.toBeInTheDocument()
     expect(screen.getAllByText('-').length).toBeGreaterThan(0)
-    // Raw JSON panel is available while usage data exists.
+  })
+
+  test('clamps out-of-range used percentages into [0, 100]', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [
+          {
+            period: 'session',
+            used_percent: 250,
+          },
+          {
+            period: 'weekly',
+            used_percent: -10,
+          },
+        ],
+      },
+    })
+
+    expect(screen.getAllByText('100.00%')).toHaveLength(2)
+    expect(screen.queryByText('250.00%')).not.toBeInTheDocument()
+    // Negative used percent clamps to 0 and stays visible.
+    expect(screen.getAllByText('0.00%')).toHaveLength(2)
+  })
+
+  test('shows a degraded message plus raw panel when windows are empty', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [],
+      },
+    })
+
+    expect(screen.getByText('Unable to identify usage data')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'The upstream response did not include recognizable usage windows.'
+      )
+    ).toBeInTheDocument()
     expect(
       screen.getByText('Show raw upstream response')
     ).toBeInTheDocument()
   })
 
-  test('omits the raw JSON panel when the response carries no usage data', () => {
+  test('shows a degraded message plus raw panel when data is missing', () => {
     renderDialog({ success: true })
 
+    expect(screen.getByText('Unable to identify usage data')).toBeInTheDocument()
     expect(
-      screen.queryByText('Show raw upstream response')
-    ).not.toBeInTheDocument()
-  })
-
-  test('clamps out-of-range remaining percent into [0, 100]', () => {
-    renderDialog({
-      success: true,
-      data: {
-        status: 'ok',
-        period: 'monthly',
-        remaining_percent: 250,
-        used_percent: -10,
-      },
-    })
-
-    expect(screen.getByText('100%')).toBeInTheDocument()
-    expect(screen.queryByText('250%')).not.toBeInTheDocument()
-    expect(screen.queryByText('-10%')).not.toBeInTheDocument()
+      screen.getByText('Show raw upstream response')
+    ).toBeInTheDocument()
   })
 
   test('guides the admin to configure credentials when none are set', () => {
@@ -144,12 +226,24 @@ describe('VolcCodingPlanUsageDialog', () => {
     expect(screen.getByText('upstream exploded')).toBeInTheDocument()
   })
 
+  test('omits the raw JSON panel when the query failed', () => {
+    renderDialog({
+      success: false,
+      error_code: 'fetch_failed',
+      message: 'upstream exploded',
+    })
+
+    expect(
+      screen.queryByText('Show raw upstream response')
+    ).not.toBeInTheDocument()
+  })
+
   test('shows a refresh button when a refresh handler is provided', () => {
     render(
       <VolcCodingPlanUsageDialog
         open
         onOpenChange={() => undefined}
-        response={{ success: true, data: { status: 'ok', period: 'monthly' } }}
+        response={THREE_WINDOW_RESPONSE}
         onRefresh={() => undefined}
       />
     )

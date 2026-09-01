@@ -21,12 +21,10 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
-import { StatusBadge } from '@/components/status-badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Card,
-  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -45,6 +43,7 @@ import { cn } from '@/lib/utils'
 import type {
   VolcCodingPlanUsageErrorCode,
   VolcCodingPlanUsageResponse,
+  VolcCodingPlanWindow,
 } from '../../api'
 
 export type { VolcCodingPlanUsageResponse } from '../../api'
@@ -59,6 +58,9 @@ type VolcCodingPlanUsageDialogProps = {
   isRefreshing?: boolean
 }
 
+const WINDOW_ORDER = ['session', 'weekly', 'monthly'] as const
+type WindowPeriod = (typeof WINDOW_ORDER)[number]
+
 /**
  * Clamp a percentage to [0, 100]. Returns null when the value is missing or
  * invalid so the UI can show "-" instead of pretending the failure is 0%.
@@ -66,6 +68,11 @@ type VolcCodingPlanUsageDialogProps = {
 function clampPercent(value: unknown): number | null {
   const v = Number(value)
   return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : null
+}
+
+/** Always render percentages with two decimal places. */
+function formatPercent(value: number): string {
+  return value.toFixed(2)
 }
 
 function formatResetsAt(value: unknown): string {
@@ -76,17 +83,18 @@ function formatResetsAt(value: unknown): string {
   return d.isValid() ? formatDateTimeStr(d.toDate()) : '-'
 }
 
-function getRemainingVariant(percent: number): 'success' | 'warning' | 'danger' {
-  if (percent >= 50) {
-    return 'success'
+/** A higher used percentage is more alarming. */
+function getUsedVariant(percent: number): 'success' | 'warning' | 'danger' {
+  if (percent >= 80) {
+    return 'danger'
   }
-  if (percent >= 20) {
+  if (percent >= 60) {
     return 'warning'
   }
-  return 'danger'
+  return 'success'
 }
 
-const remainingVariantTextClass: Record<
+const usedVariantTextClass: Record<
   'success' | 'warning' | 'danger',
   string
 > = {
@@ -95,13 +103,93 @@ const remainingVariantTextClass: Record<
   danger: 'text-destructive',
 }
 
-const remainingVariantProgressClass: Record<
+const usedVariantProgressClass: Record<
   'success' | 'warning' | 'danger',
   string
 > = {
   success: 'bg-success',
   warning: 'bg-warning',
   danger: 'bg-destructive',
+}
+
+function getWindowTitle(
+  period: WindowPeriod,
+  t: (key: string) => string
+): string {
+  if (period === 'session') {
+    return t('Last 5 hours')
+  }
+  if (period === 'weekly') {
+    return t('Weekly')
+  }
+  return t('Monthly')
+}
+
+type UsageWindowCardProps = {
+  title: string
+  window: VolcCodingPlanWindow
+}
+
+function UsageWindowCard(props: UsageWindowCardProps) {
+  const { t } = useTranslation()
+  const usedPercent = clampPercent(props.window.used_percent)
+  const usedVariant = usedPercent === null ? null : getUsedVariant(usedPercent)
+  const resetsAt = formatResetsAt(props.window.reset_at)
+
+  return (
+    <Card size='sm' className='bg-muted/30 gap-0 py-0'>
+      <CardHeader className='p-4 pb-2'>
+        <CardTitle className='text-muted-foreground text-xs font-medium'>
+          {props.title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className='p-4 pt-0'>
+        <div className='flex items-start justify-between gap-3'>
+          <div
+            className={cn(
+              'text-3xl leading-none font-bold tabular-nums',
+              usedPercent !== null && usedVariant
+                ? usedVariantTextClass[usedVariant]
+                : 'text-muted-foreground'
+            )}
+          >
+            {usedPercent !== null ? `${formatPercent(usedPercent)}%` : '-'}
+          </div>
+        </div>
+        {usedPercent !== null ? (
+          <Progress
+            value={usedPercent}
+            aria-label={`${props.title}: ${formatPercent(usedPercent)}%`}
+            className='mt-3'
+          >
+            <ProgressIndicator
+              className={
+                usedVariant ? usedVariantProgressClass[usedVariant] : undefined
+              }
+            />
+          </Progress>
+        ) : (
+          <div className='text-muted-foreground mt-3 text-sm'>-</div>
+        )}
+        <div className='mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2'>
+          <div className='min-w-0'>
+            <div className='text-muted-foreground text-[11px]'>
+              {t('Used:')}
+            </div>
+            <div className='tabular-nums'>
+              {usedPercent !== null ? `${formatPercent(usedPercent)}%` : '-'}
+            </div>
+          </div>
+          <div className='min-w-0 sm:text-right'>
+            <div className='text-muted-foreground text-[11px]'>
+              {t('Resets at:')}
+            </div>
+            <div className='tabular-nums'>{resetsAt}</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 type UsageErrorCopy = {
@@ -142,18 +230,13 @@ export function VolcCodingPlanUsageDialog(
   const { t } = useTranslation()
   const [showRawJson, setShowRawJson] = useState(false)
 
-  const remainingPercent = clampPercent(props.response?.data?.remaining_percent)
-  const usedPercent = clampPercent(props.response?.data?.used_percent)
-  const remainingVariant =
-    remainingPercent === null
-      ? null
-      : getRemainingVariant(remainingPercent)
-  const resetsAt = formatResetsAt(props.response?.data?.reset_at)
+  // Render windows in a fixed order (session → weekly → monthly), only those
+  // present in the response. Unknown periods are ignored.
+  const windows = WINDOW_ORDER.map(
+    (period) => props.response?.data?.windows?.find((w) => w?.period === period)
+  ).filter((w): w is VolcCodingPlanWindow => Boolean(w))
 
-  const hasUsageData =
-    props.response?.data != null &&
-    typeof props.response.data === 'object' &&
-    Object.keys(props.response.data).length > 0
+  const hasUsageData = windows.length > 0
 
   const errorCopy =
     props.response?.success === false
@@ -164,9 +247,17 @@ export function VolcCodingPlanUsageDialog(
         )
       : null
 
+  const showDegraded =
+    props.response != null &&
+    props.response.success !== false &&
+    !hasUsageData
+
   const rawJsonText = props.response
     ? JSON.stringify(props.response, null, 2)
     : ''
+  const showRawPanel = Boolean(
+    props.response && props.response.success !== false && rawJsonText
+  )
 
   return (
     <Dialog
@@ -194,83 +285,46 @@ export function VolcCodingPlanUsageDialog(
           </Alert>
         )}
 
-        <Card size='sm' className='bg-muted/30 gap-0 py-0'>
-          <CardHeader className='p-4 pb-2'>
-            <CardTitle className='text-muted-foreground text-xs font-medium'>
-              {t('Monthly remaining')}
-            </CardTitle>
-            {props.onRefresh ? (
-              <CardAction>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
-                  onClick={props.onRefresh}
-                  disabled={Boolean(props.isRefreshing)}
-                >
-                  <RefreshCw data-icon='inline-start' />
-                  {t('Refresh usage')}
-                </Button>
-              </CardAction>
-            ) : null}
-          </CardHeader>
-          <CardContent className='p-4 pt-0'>
-            <div className='flex items-start justify-between gap-3'>
-              <div
-                className={cn(
-                  'text-3xl leading-none font-bold tabular-nums',
-                  remainingPercent !== null && remainingVariant
-                    ? remainingVariantTextClass[remainingVariant]
-                    : 'text-muted-foreground'
-                )}
-              >
-                {remainingPercent !== null ? `${remainingPercent}%` : '-'}
-              </div>
-              {remainingPercent !== null && remainingVariant ? (
-                <StatusBadge
-                  label={t('Monthly')}
-                  variant={remainingVariant}
-                  copyable={false}
-                />
-              ) : null}
-            </div>
-            {remainingPercent !== null ? (
-              <Progress
-                value={remainingPercent}
-                aria-label={`${t('Monthly remaining')}: ${remainingPercent}%`}
-                className='mt-3'
-              >
-                <ProgressIndicator
-                  className={
-                    remainingVariant
-                      ? remainingVariantProgressClass[remainingVariant]
-                      : undefined
-                  }
-                />
-              </Progress>
-            ) : (
-              <div className='text-muted-foreground mt-3 text-sm'>-</div>
-            )}
-            <div className='mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2'>
-              <div className='min-w-0'>
-                <div className='text-muted-foreground text-[11px]'>
-                  {t('Used:')}
-                </div>
-                <div className='tabular-nums'>
-                  {usedPercent !== null ? `${usedPercent}%` : '-'}
-                </div>
-              </div>
-              <div className='min-w-0 sm:text-right'>
-                <div className='text-muted-foreground text-[11px]'>
-                  {t('Resets at:')}
-                </div>
-                <div className='tabular-nums'>{resetsAt}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {showDegraded && (
+          <Alert>
+            <AlertTriangle />
+            <AlertTitle>{t('Unable to identify usage data')}</AlertTitle>
+            <AlertDescription>
+              {t(
+                'The upstream response did not include recognizable usage windows.'
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
-        {props.response && hasUsageData && rawJsonText ? (
+        {props.onRefresh ? (
+          <div className='flex justify-end'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={props.onRefresh}
+              disabled={Boolean(props.isRefreshing)}
+            >
+              <RefreshCw data-icon='inline-start' />
+              {t('Refresh usage')}
+            </Button>
+          </div>
+        ) : null}
+
+        {hasUsageData ? (
+          <div className='flex flex-col gap-3'>
+            {windows.map((window) => (
+              <UsageWindowCard
+                key={window.period}
+                title={getWindowTitle(window.period, t)}
+                window={window}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {showRawPanel ? (
           <Collapsible
             open={showRawJson}
             onOpenChange={setShowRawJson}

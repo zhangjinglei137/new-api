@@ -381,13 +381,17 @@ export async function resetCodexUsage(
 // VolcEngine Coding Plan & OpenCode Go Usage Operations
 // ============================================================================
 
-export type VolcCodingPlanUsageData = {
-  status?: string
-  period?: string
-  remaining_percent?: number
+export type VolcCodingPlanWindow = {
+  period: 'session' | 'weekly' | 'monthly'
   used_percent?: number
+  remaining_percent?: number
   reset_at?: string | null
   reset_in_sec?: number
+}
+
+export type VolcCodingPlanUsageData = {
+  status?: string
+  windows?: VolcCodingPlanWindow[]
 }
 
 export type VolcCodingPlanUsageErrorCode =
@@ -414,12 +418,15 @@ export type VolcCodingPlanCredentialsResponse = {
   }
 }
 
-export type OpenCodeGoUsageData = {
-  usage_percent?: number
+export type OpenCodeGoWindow = {
+  period: 'session' | 'weekly' | 'monthly'
+  used_percent?: number
   remaining_percent?: number
-  balance?: number
   reset_in_sec?: number
-  monthly_cap_usd?: number
+}
+
+export type OpenCodeGoUsageData = {
+  windows?: OpenCodeGoWindow[]
 }
 
 export type OpenCodeGoUsageResponse = {
