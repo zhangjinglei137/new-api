@@ -238,3 +238,77 @@ func TestParseOpenCodeGoBalancePage(t *testing.T) {
 		assert.InDelta(t, 0.0, balance, 1e-9)
 	})
 }
+
+func TestParseOpenCodeGoUsagePage(t *testing.T) {
+	tests := []struct {
+		name            string
+		html            string
+		wantUsage       float64
+		wantRemaining   float64
+		wantBalance     float64
+		wantResetInSec  int64
+		wantErrContains string
+	}{
+		{
+			name:           "current page float percent + resetInSec",
+			html:           openCodeGoBalancePageFixture,
+			wantUsage:      65.8,
+			wantRemaining:  34.2,
+			wantBalance:    30.52,
+			wantResetInSec: 1615573,
+		},
+		{
+			name:           "legacy page integer percent",
+			html:           openCodeGoLegacyBalancePageFixture,
+			wantUsage:      40,
+			wantRemaining:  60,
+			wantBalance:    41,
+			wantResetInSec: 86400,
+		},
+		{
+			name:           "missing rewards still returns usage",
+			html:           `{monthlyUsage:$R[0]={status:"ok",resetInSec:1615573,usagePercent:65.8}};`,
+			wantUsage:      65.8,
+			wantRemaining:  34.2,
+			wantBalance:    20.52,
+			wantResetInSec: 1615573,
+		},
+		{
+			name:           "usage percent clamped to 100",
+			html:           `{monthlyUsage:$R[0]={status:"ok",resetInSec:1615573,usagePercent:123.7}};`,
+			wantUsage:      100,
+			wantRemaining:  0,
+			wantBalance:    0,
+			wantResetInSec: 1615573,
+		},
+		{
+			name:           "usage percent clamped to 0",
+			html:           `{monthlyUsage:$R[0]={status:"ok",resetInSec:123,usagePercent:-5.2}};`,
+			wantUsage:      0,
+			wantRemaining:  100,
+			wantBalance:    60,
+			wantResetInSec: 123,
+		},
+		{
+			name:            "missing usage data",
+			html:            "<html>no usage data</html>",
+			wantErrContains: "无法从 opencode 页面解析用量数据",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info, err := parseOpenCodeGoUsagePage(tt.html)
+			if tt.wantErrContains != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErrContains)
+				return
+			}
+			require.NoError(t, err)
+			assert.InDelta(t, tt.wantUsage, info.UsagePercent, 1e-9)
+			assert.InDelta(t, tt.wantRemaining, info.RemainingPercent, 1e-9)
+			assert.InDelta(t, tt.wantBalance, info.Balance, 1e-9)
+			assert.Equal(t, tt.wantResetInSec, info.ResetInSec)
+			assert.InDelta(t, openCodeGoMonthlyCapUSD, info.MonthlyCapUSD, 1e-9)
+		})
+	}
+}
