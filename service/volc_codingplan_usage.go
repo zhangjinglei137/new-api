@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -30,27 +31,26 @@ func RegionFromVolcBaseURL(baseURL string) (string, bool) {
 	}
 }
 
-// VolcCodingPlanUsageInfo 是火山方舟 Coding Plan 用量解析结果。
-type VolcCodingPlanUsageInfo struct {
-	Status           string
-	Period           string
-	UsedPercent      float64
-	RemainingPercent float64
-	ResetAt          string
+// VolcCodingPlanWindow 是火山方舟 Coding Plan 单个时间窗口的用量数据。
+type VolcCodingPlanWindow struct {
+	Period           string  // "session" | "weekly" | "monthly"
+	UsedPercent      float64 // 已用%（0-100，两位小数）
+	RemainingPercent float64 // 100-UsedPercent（clamp 0-100，两位小数）
+	ResetAt          string  // RFC3339 UTC
 	ResetInSec       int64
 }
 
-type volcCodingPlanWindow struct {
-	level          string
-	percent        float64
-	cap            float64
-	resetTimestamp int64
+// VolcCodingPlanUsageInfo 是火山方舟 Coding Plan 用量解析结果。
+type VolcCodingPlanUsageInfo struct {
+	Status  string
+	Windows []VolcCodingPlanWindow
 }
 
-// ParseVolcCodingPlanUsage 解析 GetCodingPlanUsage 响应。优先取 Level==monthly
-// 窗口，其次 weekly、session；remaining = clamp((Cap-Percent)/Cap*100,0,100)，
-// Cap 缺省 100。ResetTimestamp 秒级(<1e12)或毫秒(>=1e12)自动判断。
-// 解析不出任何窗口时返回错误。
+// ParseVolcCodingPlanUsage 解析 GetCodingPlanUsage 响应，返回全部时间窗口
+// （session / weekly / monthly），顺序固定为 session -> weekly -> monthly，
+// 缺失的窗口不出现。Level（含别名回退）无法归一化为上述三者之一的条目被跳过。
+// 百分比统一四舍五入到两位小数；ResetTimestamp 秒级(<1e12)或毫秒(>=1e12)
+// 自动判断。解析不出任何窗口时返回错误。
 func ParseVolcCodingPlanUsage(body []byte) (*VolcCodingPlanUsageInfo, error) {
 	var raw map[string]any
 	if err := common.Unmarshal(body, &raw); err != nil {
@@ -61,61 +61,73 @@ func ParseVolcCodingPlanUsage(body []byte) (*VolcCodingPlanUsageInfo, error) {
 		return nil, fmt.Errorf("missing Result in response")
 	}
 
-	windows := volcJSONMapSlice(result, "QuotaUsage", "Usages", "Details")
-	if len(windows) == 0 {
+	entries := volcJSONMapSlice(result, "QuotaUsage", "Usages", "Details")
+	if len(entries) == 0 {
 		return nil, fmt.Errorf("no usage windows found")
 	}
-	best := pickVolcCodingPlanWindow(windows)
-	if best == nil {
+
+	info := &VolcCodingPlanUsageInfo{Status: volcJSONString(result, "Status")}
+	byPeriod := make(map[string]VolcCodingPlanWindow, len(entries))
+	for _, entry := range entries {
+		period := volcCodingPlanPeriod(entry)
+		if period == "" {
+			continue
+		}
+		used := volcRoundPercent(volcJSONFloat(entry, "Percent", "UsedPercent", "UsagePercent"))
+		remaining := 100 - used
+		if remaining < 0 {
+			remaining = 0
+		}
+		if remaining > 100 {
+			remaining = 100
+		}
+		remaining = volcRoundPercent(remaining)
+
+		window := VolcCodingPlanWindow{
+			Period:           period,
+			UsedPercent:      used,
+			RemainingPercent: remaining,
+		}
+		if reset := volcJSONInt64(entry, "ResetTimestamp", "ResetTime"); reset > 0 {
+			if reset >= 1e12 {
+				reset /= 1000
+			}
+			window.ResetAt = time.Unix(reset, 0).UTC().Format(time.RFC3339)
+			resetIn := reset - time.Now().Unix()
+			if resetIn < 0 {
+				resetIn = 0
+			}
+			window.ResetInSec = resetIn
+		}
+		byPeriod[period] = window
+	}
+
+	if len(byPeriod) == 0 {
 		return nil, fmt.Errorf("no usable usage window found")
 	}
-
-	remaining := (best.cap - best.percent) / best.cap * 100
-	if remaining < 0 {
-		remaining = 0
-	}
-	if remaining > 100 {
-		remaining = 100
-	}
-
-	info := &VolcCodingPlanUsageInfo{
-		Status:           volcJSONString(result, "Status"),
-		Period:           best.level,
-		UsedPercent:      best.percent,
-		RemainingPercent: remaining,
-	}
-	if best.resetTimestamp > 0 {
-		info.ResetAt = time.Unix(best.resetTimestamp, 0).UTC().Format(time.RFC3339)
-		resetIn := best.resetTimestamp - time.Now().Unix()
-		if resetIn < 0 {
-			resetIn = 0
+	for _, period := range []string{"session", "weekly", "monthly"} {
+		if window, ok := byPeriod[period]; ok {
+			info.Windows = append(info.Windows, window)
 		}
-		info.ResetInSec = resetIn
 	}
 	return info, nil
 }
 
-func pickVolcCodingPlanWindow(windows []map[string]any) *volcCodingPlanWindow {
-	priority := map[string]int{"monthly": 3, "weekly": 2, "session": 1}
-	var best *volcCodingPlanWindow
-	for _, window := range windows {
-		candidate := &volcCodingPlanWindow{
-			level:          volcJSONString(window, "Level", "Type", "Period", "Label", "Window"),
-			percent:        volcJSONFloat(window, "Percent", "UsedPercent", "UsagePercent"),
-			cap:            volcJSONFloat(window, "Cap"),
-			resetTimestamp: volcJSONInt64(window, "ResetTimestamp", "ResetTime"),
-		}
-		if candidate.cap == 0 {
-			candidate.cap = 100
-		}
-		if candidate.resetTimestamp >= 1e12 {
-			candidate.resetTimestamp /= 1000
-		}
-		if best == nil || priority[strings.ToLower(candidate.level)] > priority[strings.ToLower(best.level)] {
-			best = candidate
-		}
+// volcCodingPlanPeriod 将窗口条目中的 Level（含别名回退）归一化为
+// session/weekly/monthly；未识别返回空串。
+func volcCodingPlanPeriod(entry map[string]any) string {
+	level := strings.ToLower(strings.TrimSpace(volcJSONString(entry, "Level", "Type", "Period", "Label", "Window")))
+	switch level {
+	case "session", "weekly", "monthly":
+		return level
+	default:
+		return ""
 	}
-	return best
+}
+
+// volcRoundPercent 将百分比四舍五入到两位小数。
+func volcRoundPercent(v float64) float64 {
+	return math.Round(v*100) / 100
 }
 
 func volcJSONMapSlice(m map[string]any, keys ...string) []map[string]any {

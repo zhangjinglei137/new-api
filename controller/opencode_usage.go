@@ -14,7 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetOpenCodeGoUsage 返回 opencode 渠道的月度用量信息（已用%/剩余%/余额/重置倒计时）。
+// GetOpenCodeGoUsage 返回 opencode 渠道的用量信息（按时间窗口：
+// 5 小时 / 每周 / 每月，各含已用%/剩余%/重置倒计时）。
 // 响应绝不含 cookie 等敏感凭证。
 func GetOpenCodeGoUsage(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -46,11 +47,14 @@ func GetOpenCodeGoUsage(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	common.ApiSuccess(c, gin.H{
-		"usage_percent":     info.UsagePercent,
-		"remaining_percent": info.RemainingPercent,
-		"balance":           info.Balance,
-		"reset_in_sec":      info.ResetInSec,
-		"monthly_cap_usd":   info.MonthlyCapUSD,
-	})
+	windows := make([]gin.H, 0, len(info.Windows))
+	for _, w := range info.Windows {
+		windows = append(windows, gin.H{
+			"period":            w.Period,
+			"used_percent":      w.UsedPercent,
+			"remaining_percent": w.RemainingPercent,
+			"reset_in_sec":      w.ResetInSec,
+		})
+	}
+	common.ApiSuccess(c, gin.H{"windows": windows})
 }

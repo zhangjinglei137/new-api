@@ -27,13 +27,20 @@ func TestParseVolcCodingPlanUsageStandardResponse(t *testing.T) {
 	info, err := ParseVolcCodingPlanUsage(body)
 	require.NoError(t, err)
 	assert.Equal(t, "Running", info.Status)
-	// 优先选择 monthly 窗口
-	assert.Equal(t, "monthly", info.Period)
-	assert.Equal(t, float64(30), info.UsedPercent)
-	assert.Equal(t, float64(70), info.RemainingPercent)
-	assert.Equal(t, resetAt.UTC().Format(time.RFC3339), info.ResetAt)
+	require.Len(t, info.Windows, 3)
+	// 全部窗口返回，顺序固定为 session -> weekly -> monthly
+	assert.Equal(t, "session", info.Windows[0].Period)
+	assert.Equal(t, float64(50), info.Windows[0].UsedPercent)
+	assert.Equal(t, float64(50), info.Windows[0].RemainingPercent)
+	assert.Equal(t, "weekly", info.Windows[1].Period)
+	assert.Equal(t, float64(20), info.Windows[1].UsedPercent)
+	assert.Equal(t, float64(80), info.Windows[1].RemainingPercent)
+	assert.Equal(t, "monthly", info.Windows[2].Period)
+	assert.Equal(t, float64(30), info.Windows[2].UsedPercent)
+	assert.Equal(t, float64(70), info.Windows[2].RemainingPercent)
+	assert.Equal(t, resetAt.UTC().Format(time.RFC3339), info.Windows[2].ResetAt)
 	// 解析发生在 resetAt 之前，remaining 为 resetAt 与 now 的差值（上限 3 小时）
-	assert.InDelta(t, 3*3600, info.ResetInSec, 60)
+	assert.InDelta(t, 3*3600, info.Windows[2].ResetInSec, 60)
 }
 
 func TestParseVolcCodingPlanUsageAliasResponse(t *testing.T) {
@@ -50,39 +57,68 @@ func TestParseVolcCodingPlanUsageAliasResponse(t *testing.T) {
 	info, err := ParseVolcCodingPlanUsage(body)
 	require.NoError(t, err)
 	assert.Equal(t, "Active", info.Status)
-	assert.Equal(t, "monthly", info.Period)
-	assert.Equal(t, float64(10), info.UsedPercent)
-	assert.Equal(t, float64(90), info.RemainingPercent)
+	require.Len(t, info.Windows, 1)
+	assert.Equal(t, "monthly", info.Windows[0].Period)
+	assert.Equal(t, float64(10), info.Windows[0].UsedPercent)
+	assert.Equal(t, float64(90), info.Windows[0].RemainingPercent)
 }
 
-func TestParseVolcCodingPlanUsagePrefersMonthlyOverWeekly(t *testing.T) {
+func TestParseVolcCodingPlanUsageOnlyMonthly(t *testing.T) {
+	// 缺失的窗口不出现，不补默认
+	body := []byte(`{"Result": {"QuotaUsage": [{"Level": "monthly", "Percent": 25}]}}`)
+
+	info, err := ParseVolcCodingPlanUsage(body)
+	require.NoError(t, err)
+	require.Len(t, info.Windows, 1)
+	assert.Equal(t, "monthly", info.Windows[0].Period)
+	assert.Equal(t, float64(25), info.Windows[0].UsedPercent)
+	assert.Equal(t, float64(75), info.Windows[0].RemainingPercent)
+}
+
+func TestParseVolcCodingPlanUsageSkipsUnknownLevel(t *testing.T) {
+	// 未识别 Level 条目被跳过，不影响其余窗口
 	body := []byte(`{
-		"Result": {
-			"QuotaUsage": [
-				{"Level": "weekly", "Percent": 80},
-				{"Level": "session", "Percent": 99},
-				{"Level": "monthly", "Percent": 25}
-			]
-		}
+		"Result": {"QuotaUsage": [
+			{"Level": "daily", "Percent": 90},
+			{"Level": "yearly", "Percent": 5},
+			{"Level": "", "Percent": 50},
+			{"Level": "weekly", "Percent": 40}
+		]}
 	}`)
 
 	info, err := ParseVolcCodingPlanUsage(body)
 	require.NoError(t, err)
-	assert.Equal(t, "monthly", info.Period)
-	assert.Equal(t, float64(25), info.UsedPercent)
-	assert.Equal(t, float64(75), info.RemainingPercent)
+	require.Len(t, info.Windows, 1)
+	assert.Equal(t, "weekly", info.Windows[0].Period)
+	assert.Equal(t, float64(40), info.Windows[0].UsedPercent)
+	assert.Equal(t, float64(60), info.Windows[0].RemainingPercent)
 }
 
-func TestParseVolcCodingPlanUsageFallsBackToWeeklyWhenNoMonthly(t *testing.T) {
+func TestParseVolcCodingPlanUsageAllUnknownLevelsReturnsError(t *testing.T) {
+	body := []byte(`{"Result": {"QuotaUsage": [{"Level": "daily", "Percent": 90}]}}`)
+
+	_, err := ParseVolcCodingPlanUsage(body)
+	require.Error(t, err)
+}
+
+func TestParseVolcCodingPlanUsageRoundsPercentToTwoDecimals(t *testing.T) {
 	body := []byte(`{
-		"Result": {"QuotaUsage": [{"Level": "session", "Percent": 60}, {"Level": "weekly", "Percent": 40}]}
+		"Result": {"QuotaUsage": [
+			{"Level": "session", "Percent": 33.33333},
+			{"Level": "weekly", "Percent": 66.66666},
+			{"Level": "monthly", "Percent": 12.34567}
+		]}
 	}`)
 
 	info, err := ParseVolcCodingPlanUsage(body)
 	require.NoError(t, err)
-	assert.Equal(t, "weekly", info.Period)
-	assert.Equal(t, float64(40), info.UsedPercent)
-	assert.Equal(t, float64(60), info.RemainingPercent)
+	require.Len(t, info.Windows, 3)
+	assert.Equal(t, 33.33, info.Windows[0].UsedPercent)
+	assert.Equal(t, 66.67, info.Windows[0].RemainingPercent)
+	assert.Equal(t, 66.67, info.Windows[1].UsedPercent)
+	assert.Equal(t, 33.33, info.Windows[1].RemainingPercent)
+	assert.Equal(t, 12.35, info.Windows[2].UsedPercent)
+	assert.Equal(t, 87.65, info.Windows[2].RemainingPercent)
 }
 
 func TestParseVolcCodingPlanUsageClampsRemaining(t *testing.T) {
@@ -98,19 +134,13 @@ func TestParseVolcCodingPlanUsageClampsRemaining(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body := []byte(`{"Result": {"QuotaUsage": [{"Level": "monthly", "Percent": ` +
-				strconv.FormatFloat(tc.percent, 'f', -1, 64) + `, "Cap": 100}]}}`)
+				strconv.FormatFloat(tc.percent, 'f', -1, 64) + `}]}}`)
 			info, err := ParseVolcCodingPlanUsage(body)
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantRemaining, info.RemainingPercent)
+			require.Len(t, info.Windows, 1)
+			assert.Equal(t, tc.wantRemaining, info.Windows[0].RemainingPercent)
 		})
 	}
-}
-
-func TestParseVolcCodingPlanUsageMissingCapDefaultsTo100(t *testing.T) {
-	body := []byte(`{"Result": {"QuotaUsage": [{"Level": "monthly", "Percent": 30}]}}`)
-	info, err := ParseVolcCodingPlanUsage(body)
-	require.NoError(t, err)
-	assert.Equal(t, float64(70), info.RemainingPercent)
 }
 
 func TestParseVolcCodingPlanUsageResetTimestampMilliseconds(t *testing.T) {
@@ -120,8 +150,9 @@ func TestParseVolcCodingPlanUsageResetTimestampMilliseconds(t *testing.T) {
 		strconv.FormatInt(resetMs, 10) + `}]}}`)
 	info, err := ParseVolcCodingPlanUsage(body)
 	require.NoError(t, err)
-	assert.Equal(t, int64(7200), info.ResetInSec)
-	assert.Equal(t, time.Unix(resetMs/1000, 0).UTC().Format(time.RFC3339), info.ResetAt)
+	require.Len(t, info.Windows, 1)
+	assert.Equal(t, int64(7200), info.Windows[0].ResetInSec)
+	assert.Equal(t, time.Unix(resetMs/1000, 0).UTC().Format(time.RFC3339), info.Windows[0].ResetAt)
 }
 
 func TestParseVolcCodingPlanUsageNoWindowsReturnsError(t *testing.T) {

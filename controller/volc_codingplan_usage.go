@@ -107,18 +107,25 @@ func GetVolcCodingPlanUsage(c *gin.Context) {
 		return
 	}
 
+	windows := make([]gin.H, 0, len(info.Windows))
+	for _, w := range info.Windows {
+		windows = append(windows, gin.H{
+			"period":            w.Period,
+			"used_percent":      w.UsedPercent,
+			"remaining_percent": w.RemainingPercent,
+			"reset_at":          w.ResetAt,
+			"reset_in_sec":      w.ResetInSec,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":         true,
 		"message":         "",
 		"upstream_status": 200,
 		"error_code":      "",
 		"data": gin.H{
-			"status":             info.Status,
-			"period":             info.Period,
-			"remaining_percent":  info.RemainingPercent,
-			"used_percent":       info.UsedPercent,
-			"reset_at":           info.ResetAt,
-			"reset_in_sec":       info.ResetInSec,
+			"status":  info.Status,
+			"windows": windows,
 		},
 	})
 }

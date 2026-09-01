@@ -8,20 +8,30 @@ import (
 	"github.com/QuantumNous/new-api/model"
 )
 
-// openCodeGoMonthlyResetRe 捕获月度用量重置倒计时（秒）。锚定在 monthlyUsage 段内，
-// 避免误匹配页面中滚动/周用量的 resetInSec。
-var openCodeGoMonthlyResetRe = regexp.MustCompile(`monthlyUsage:\$R\[\d+\]=\{status:"[^"]*",resetInSec:(\d+)`)
+// 三个时间窗口的正则。opencode 工作区页面每个窗口独立成段
+// （rollingUsage / weeklyUsage / monthlyUsage），字段顺序为
+// resetInSec 在前、usagePercent 在后。命名加 Usage 前缀以区别于
+// opencodego_balance.go 中不捕获 resetInSec 的 openCodeGoMonthlyUsageRe。
+var (
+	openCodeGoUsageRollingRe = regexp.MustCompile(`rollingUsage:\$R\[\d+\]=\{status:"[^"]*",resetInSec:(\d+),usagePercent:(-?[\d.]+)`)
+	openCodeGoUsageWeeklyRe  = regexp.MustCompile(`weeklyUsage:\$R\[\d+\]=\{status:"[^"]*",resetInSec:(\d+),usagePercent:(-?[\d.]+)`)
+	openCodeGoUsageMonthlyRe = regexp.MustCompile(`monthlyUsage:\$R\[\d+\]=\{status:"[^"]*",resetInSec:(\d+),usagePercent:(-?[\d.]+)`)
+)
 
-// OpenCodeGoUsageInfo 是 opencode 月度用量信息。
-type OpenCodeGoUsageInfo struct {
-	UsagePercent     float64 // 已用% (0-100)
-	RemainingPercent float64 // 100-UsagePercent, clamp 0-100
-	Balance          float64 // 美元（复用余额计算）
+// OpenCodeGoWindow 是 opencode 单个时间窗口的用量数据。
+type OpenCodeGoWindow struct {
+	Period           string  // "session" | "weekly" | "monthly"
+	UsedPercent      float64 // 已用%（0-100）
+	RemainingPercent float64 // 100-UsedPercent, clamp 0-100
 	ResetInSec       int64   // 重置倒计时秒
-	MonthlyCapUSD    float64
 }
 
-// FetchOpenCodeGoUsage 抓取 opencode 工作区页面并解析月度用量信息。
+// OpenCodeGoUsageInfo 是 opencode 工作区用量解析结果。
+type OpenCodeGoUsageInfo struct {
+	Windows []OpenCodeGoWindow
+}
+
+// FetchOpenCodeGoUsage 抓取 opencode 工作区页面并解析用量信息。
 func FetchOpenCodeGoUsage(channel *model.Channel) (*OpenCodeGoUsageInfo, error) {
 	body, err := fetchOpenCodeGoPage(channel)
 	if err != nil {
@@ -30,48 +40,50 @@ func FetchOpenCodeGoUsage(channel *model.Channel) (*OpenCodeGoUsageInfo, error) 
 	return parseOpenCodeGoUsagePage(body)
 }
 
-// parseOpenCodeGoUsagePage 从 opencode 工作区页面 HTML 中解析月度用量信息。
+// parseOpenCodeGoUsagePage 从 opencode 工作区页面 HTML 中解析用量信息。
+// 依次匹配 rollingUsage（5 小时窗口）/ weeklyUsage / monthlyUsage 段，
+// 存在的窗口按 session -> weekly -> monthly 顺序返回，缺失的窗口不出现；
+// 旧页面只有 monthlyUsage 时仅返回该窗口。没有任何窗口时返回错误。
 func parseOpenCodeGoUsagePage(html string) (*OpenCodeGoUsageInfo, error) {
-	monthlyMatch := openCodeGoMonthlyUsageRe.FindStringSubmatch(html)
-	if monthlyMatch == nil {
-		return nil, fmt.Errorf("无法从 opencode 页面解析用量数据，请检查 Workspace ID 与 Cookie 是否有效")
-	}
-	usagePercent, err := strconv.ParseFloat(monthlyMatch[1], 64)
-	if err != nil {
-		return nil, fmt.Errorf("无法从 opencode 页面解析用量数据: %w", err)
-	}
-	if usagePercent < 0 {
-		usagePercent = 0
-	}
-	if usagePercent > 100 {
-		usagePercent = 100
-	}
-
-	remaining := 100 - usagePercent
-	if remaining < 0 {
-		remaining = 0
-	}
-	if remaining > 100 {
-		remaining = 100
-	}
-
-	var resetInSec int64
-	if resetMatch := openCodeGoMonthlyResetRe.FindStringSubmatch(html); resetMatch != nil {
-		if parsed, err := strconv.ParseInt(resetMatch[1], 10, 64); err == nil {
-			resetInSec = parsed
+	windows := make([]OpenCodeGoWindow, 0, 3)
+	for _, entry := range []struct {
+		period  string
+		pattern *regexp.Regexp
+	}{
+		{period: "session", pattern: openCodeGoUsageRollingRe},
+		{period: "weekly", pattern: openCodeGoUsageWeeklyRe},
+		{period: "monthly", pattern: openCodeGoUsageMonthlyRe},
+	} {
+		if window, ok := parseOpenCodeGoWindow(html, entry.period, entry.pattern); ok {
+			windows = append(windows, window)
 		}
 	}
-
-	balance, err := parseOpenCodeGoBalancePage(html)
-	if err != nil {
-		return nil, err
+	if len(windows) == 0 {
+		return nil, fmt.Errorf("无法从 opencode 页面解析用量数据，请检查 Workspace ID 与 Cookie 是否有效")
 	}
+	return &OpenCodeGoUsageInfo{Windows: windows}, nil
+}
 
-	return &OpenCodeGoUsageInfo{
-		UsagePercent:     usagePercent,
+// parseOpenCodeGoWindow 解析单个时间窗口段；未匹配或字段解析失败时返回 ok=false。
+func parseOpenCodeGoWindow(html, period string, pattern *regexp.Regexp) (OpenCodeGoWindow, bool) {
+	match := pattern.FindStringSubmatch(html)
+	if match == nil {
+		return OpenCodeGoWindow{}, false
+	}
+	usedPercent, err := strconv.ParseFloat(match[2], 64)
+	if err != nil {
+		return OpenCodeGoWindow{}, false
+	}
+	usedPercent = max(0.0, min(100.0, usedPercent))
+	remaining := max(0.0, min(100.0, 100-usedPercent))
+	resetInSec, err := strconv.ParseInt(match[1], 10, 64)
+	if err != nil {
+		return OpenCodeGoWindow{}, false
+	}
+	return OpenCodeGoWindow{
+		Period:           period,
+		UsedPercent:      usedPercent,
 		RemainingPercent: remaining,
-		Balance:          balance,
 		ResetInSec:       resetInSec,
-		MonthlyCapUSD:    openCodeGoMonthlyCapUSD,
-	}, nil
+	}, true
 }
