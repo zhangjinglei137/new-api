@@ -19,6 +19,9 @@ For commercial licensing, please contact support@quantumnous.com
 import { render, screen } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 
+import dayjs from '@/lib/dayjs'
+import { formatDateTimeStr } from '@/lib/format'
+
 import {
   OpenCodeGoUsageDialog,
   type OpenCodeGoUsageResponse,
@@ -43,21 +46,27 @@ const THREE_WINDOW_RESPONSE: OpenCodeGoUsageResponse = {
     windows: [
       {
         period: 'monthly',
+        status: 'ok',
         used_percent: 65.8,
         remaining_percent: 34.2,
         reset_in_sec: 1615573,
+        reset_at: '2026-09-13T06:06:01.287Z',
       },
       {
         period: 'session',
+        status: 'ok',
         used_percent: 23.6,
         remaining_percent: 76.4,
         reset_in_sec: 3811,
+        reset_at: '2026-09-01T16:27:38.287Z',
       },
       {
         period: 'weekly',
+        status: 'ok',
         used_percent: 81.2,
         remaining_percent: 18.8,
         reset_in_sec: 397146,
+        reset_at: '2026-09-07T00:00:00.287Z',
       },
     ],
   },
@@ -82,11 +91,21 @@ describe('OpenCodeGoUsageDialog', () => {
     expect(screen.queryByText('76.40%')).not.toBeInTheDocument()
   })
 
-  test('renders the reset countdown for each window', () => {
+  test('renders the reset time as a concrete timestamp for each window', () => {
     renderDialog(THREE_WINDOW_RESPONSE)
 
-    // 3811s = 1h 3m 31s, rendered as "1h 3m".
-    expect(screen.getByText('1h 3m')).toBeInTheDocument()
+    // reset_at is formatted as a concrete YYYY-MM-DD HH:mm:ss timestamp in the
+    // local timezone (same formatting as the dialog), not the raw ISO string
+    // and not a countdown.
+    const windows = THREE_WINDOW_RESPONSE.data?.windows ?? []
+    for (const w of windows) {
+      const expected = formatDateTimeStr(dayjs(w.reset_at).toDate())
+      expect(screen.getByText(expected)).toBeInTheDocument()
+    }
+    expect(
+      screen.queryByText('2026-09-13T06:06:01.287Z')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Resets in:')).not.toBeInTheDocument()
   })
 
   test('does not show any balance', () => {
@@ -104,6 +123,51 @@ describe('OpenCodeGoUsageDialog', () => {
     })
 
     expect(screen.getByText('Last 5 hours')).toBeInTheDocument()
+    expect(screen.queryByText('0.00%')).not.toBeInTheDocument()
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0)
+  })
+
+  test('shows a dash instead of 0% when the backend reports -1 sentinel values', () => {
+    renderDialog({
+      success: true,
+      data: {
+        windows: [
+          {
+            period: 'session',
+            used_percent: -1,
+            remaining_percent: -1,
+            reset_in_sec: 3811,
+            reset_at: '2026-09-01T16:27:38.287Z',
+          },
+        ],
+      },
+    })
+
+    expect(screen.getByText('Last 5 hours')).toBeInTheDocument()
+    expect(screen.queryByText('0.00%')).not.toBeInTheDocument()
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0)
+  })
+
+  test('shows a status badge and hides misleading percentages when status is not ok', () => {
+    renderDialog({
+      success: true,
+      data: {
+        windows: [
+          {
+            period: 'session',
+            status: 'rate_limited',
+            used_percent: 0,
+            remaining_percent: 0,
+            reset_in_sec: 3811,
+            reset_at: '2026-09-01T16:27:38.287Z',
+          },
+        ],
+      },
+    })
+
+    // The non-ok status is surfaced as a neutral badge on the card title.
+    expect(screen.getByText('Status: rate_limited')).toBeInTheDocument()
+    // Percentages must not be presented as a healthy 0% — treated as missing.
     expect(screen.queryByText('0.00%')).not.toBeInTheDocument()
     expect(screen.getAllByText('-').length).toBeGreaterThan(0)
   })

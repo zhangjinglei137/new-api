@@ -36,6 +36,8 @@ import {
 } from '@/components/ui/collapsible'
 import { Progress, ProgressIndicator } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import dayjs from '@/lib/dayjs'
+import { formatDateTimeStr } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import type { OpenCodeGoUsageResponse, OpenCodeGoWindow } from '../../api'
@@ -56,12 +58,16 @@ const WINDOW_ORDER = ['session', 'weekly', 'monthly'] as const
 type WindowPeriod = (typeof WINDOW_ORDER)[number]
 
 /**
- * Clamp a percentage to [0, 100]. Returns null when the value is missing or
- * invalid so the UI can show "-" instead of pretending the failure is 0%.
+ * Clamp a percentage to [0, 100]. Returns null when the value is missing,
+ * invalid, or the -1 sentinel the backend uses for "no meaningful value", so
+ * the UI can show "-" instead of pretending the failure is 0%.
  */
 function clampPercent(value: unknown): number | null {
   const v = Number(value)
-  return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : null
+  if (!Number.isFinite(v) || v === -1) {
+    return null
+  }
+  return Math.max(0, Math.min(100, v))
 }
 
 /** Always render percentages with two decimal places. */
@@ -69,27 +75,12 @@ function formatPercent(value: number): string {
   return value.toFixed(2)
 }
 
-function formatDurationSeconds(
-  seconds: unknown,
-  t: (key: string) => string
-): string {
-  const s = Number(seconds)
-  if (!Number.isFinite(s) || s <= 0) {
+function formatResetsAt(value: unknown): string {
+  if (typeof value !== 'string' || value.trim() === '') {
     return '-'
   }
-
-  const total = Math.floor(s)
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const secs = total % 60
-
-  if (hours > 0) {
-    return `${hours}${t('h')} ${minutes}${t('m')}`
-  }
-  if (minutes > 0) {
-    return `${minutes}${t('m')} ${secs}${t('s')}`
-  }
-  return `${secs}${t('s')}`
+  const d = dayjs(value)
+  return d.isValid() ? formatDateTimeStr(d.toDate()) : '-'
 }
 
 /** A higher used percentage is more alarming. */
@@ -141,16 +132,27 @@ type UsageWindowCardProps = {
 
 function UsageWindowCard(props: UsageWindowCardProps) {
   const { t } = useTranslation()
-  const usedPercent = clampPercent(props.window.used_percent)
+  const status = props.window.status?.trim()
+  // A non-ok status (e.g. rate_limited / paused) means the window has no
+  // meaningful usage numbers; treat the percentages as missing so the UI does
+  // not imply a healthy 0%.
+  const isHealthy = !status || status === 'ok'
+  const usedPercent = isHealthy ? clampPercent(props.window.used_percent) : null
   const usedVariant =
     usedPercent === null ? null : getUsedVariant(usedPercent)
-  const resetsIn = formatDurationSeconds(props.window.reset_in_sec, t)
+  const resetsAt = formatResetsAt(props.window.reset_at)
 
   return (
     <Card size='sm' className='bg-muted/30 gap-0 py-0'>
       <CardHeader className='p-4 pb-2'>
-        <CardTitle className='text-muted-foreground text-xs font-medium'>
-          {props.title}
+        <CardTitle className='text-muted-foreground flex items-center justify-between gap-2 text-xs font-medium'>
+          <span>{props.title}</span>
+          {!isHealthy ? (
+            <span className='bg-muted text-muted-foreground rounded border px-1.5 py-0.5 text-[10px] font-normal normal-case'>
+              {t('Status: ')}
+              {status}
+            </span>
+          ) : null}
         </CardTitle>
       </CardHeader>
       <CardContent className='p-4 pt-0'>
@@ -192,9 +194,9 @@ function UsageWindowCard(props: UsageWindowCardProps) {
           </div>
           <div className='min-w-0 sm:text-right'>
             <div className='text-muted-foreground text-[11px]'>
-              {t('Resets in:')}
+              {t('Resets at:')}
             </div>
-            <div className='tabular-nums'>{resetsIn}</div>
+            <div className='tabular-nums'>{resetsAt}</div>
           </div>
         </div>
       </CardContent>

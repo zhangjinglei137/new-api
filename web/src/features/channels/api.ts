@@ -423,6 +423,8 @@ export type OpenCodeGoWindow = {
   used_percent?: number
   remaining_percent?: number
   reset_in_sec?: number
+  status?: string
+  reset_at?: string | null
 }
 
 export type OpenCodeGoUsageData = {
