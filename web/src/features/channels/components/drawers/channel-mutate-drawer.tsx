@@ -140,6 +140,7 @@ import {
   getPrefillGroups,
   getTaskPluginOptions,
   refreshCodexCredential,
+  updateVolcCodingPlanCredentials,
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
@@ -682,6 +683,12 @@ export function ChannelMutateDrawer({
   const [doubaoAccessMode, setDoubaoAccessMode] = useState<
     'standard' | 'coding' | 'custom'
   >('standard')
+  const [volcCsrfToken, setVolcCsrfToken] = useState('')
+  const [volcCookie, setVolcCookie] = useState('')
+  const [isSavingVolcCredentials, setIsSavingVolcCredentials] = useState(false)
+  const [isClearingVolcCredential, setIsClearingVolcCredential] = useState<
+    'csrf' | 'cookie' | null
+  >(null)
 
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
@@ -1552,6 +1559,66 @@ export function ChannelMutateDrawer({
       setIsCodexCredentialRefreshing(false)
     }
   }, [channelId, queryClient, t])
+
+  const handleSaveVolcCodingPlanCredentials = useCallback(async () => {
+    if (!channelId) return
+    const csrfToken = volcCsrfToken.trim()
+    const cookie = volcCookie.trim()
+    if (!csrfToken && !cookie) {
+      toast.error(t('Enter at least one credential to save'))
+      return
+    }
+    setIsSavingVolcCredentials(true)
+    try {
+      const res = await updateVolcCodingPlanCredentials(channelId, {
+        csrf_token: csrfToken || undefined,
+        cookie: cookie || undefined,
+      })
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to save credentials'))
+      }
+      toast.success(t('Credentials saved'))
+      setVolcCsrfToken('')
+      setVolcCookie('')
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to save credentials')
+      )
+    } finally {
+      setIsSavingVolcCredentials(false)
+    }
+  }, [channelId, volcCsrfToken, volcCookie, t])
+
+  const handleClearVolcCodingPlanCredential = useCallback(
+    async (kind: 'csrf' | 'cookie') => {
+      if (!channelId) return
+      setIsClearingVolcCredential(kind)
+      try {
+        const res = await updateVolcCodingPlanCredentials(
+          channelId,
+          kind === 'csrf' ? { clear_csrf: true } : { clear_cookie: true }
+        )
+        if (!res.success) {
+          throw new Error(res.message || t('Failed to clear credential'))
+        }
+        toast.success(t('Credential cleared'))
+        if (kind === 'csrf') {
+          setVolcCsrfToken('')
+        } else {
+          setVolcCookie('')
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : t('Failed to clear credential')
+        )
+      } finally {
+        setIsClearingVolcCredential(null)
+      }
+    },
+    [channelId, t]
+  )
 
   // Unified function to update models
   const updateModels = useCallback(
@@ -3070,6 +3137,145 @@ export function ChannelMutateDrawer({
                                         )}
                                       </AlertDescription>
                                     </Alert>
+                                    {isEditing && channelId && (
+                                      <div className='border-border/60 flex flex-col gap-3 rounded-lg border p-4'>
+                                        <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                                          <div>
+                                            <div className='text-sm font-medium'>
+                                              {t('Usage query credentials')}
+                                            </div>
+                                            <div className='text-muted-foreground text-xs'>
+                                              {t(
+                                                'Credentials for querying the Coding Plan monthly usage. Leave blank to keep the existing credential.'
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className='flex flex-col gap-2'>
+                                          <div className='flex items-end gap-2'>
+                                            <div className='flex-1'>
+                                              <label
+                                                htmlFor='volc-csrf-token'
+                                                className='mb-1 block text-xs font-medium'
+                                              >
+                                                {t('CSRF token')}
+                                              </label>
+                                              <Input
+                                                id='volc-csrf-token'
+                                                type='password'
+                                                value={volcCsrfToken}
+                                                onChange={(e) =>
+                                                  setVolcCsrfToken(
+                                                    e.target.value
+                                                  )
+                                                }
+                                                placeholder={t(
+                                                  'Leave blank to keep existing credential'
+                                                )}
+                                                autoComplete='off'
+                                              />
+                                            </div>
+                                            <Button
+                                              type='button'
+                                              variant='outline'
+                                              size='sm'
+                                              onClick={() =>
+                                                void handleClearVolcCodingPlanCredential(
+                                                  'csrf'
+                                                )
+                                              }
+                                              disabled={
+                                                isClearingVolcCredential ===
+                                                  'csrf' ||
+                                                isSavingVolcCredentials
+                                              }
+                                            >
+                                              {isClearingVolcCredential ===
+                                              'csrf' ? (
+                                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                              ) : (
+                                                <Eraser className='mr-2 h-4 w-4' />
+                                              )}
+                                              {t('Clear')}
+                                            </Button>
+                                          </div>
+                                          <div className='flex items-end gap-2'>
+                                            <div className='flex-1'>
+                                              <label
+                                                htmlFor='volc-session-cookie'
+                                                className='mb-1 block text-xs font-medium'
+                                              >
+                                                {t('Session cookie')}
+                                              </label>
+                                              <Input
+                                                id='volc-session-cookie'
+                                                type='password'
+                                                value={volcCookie}
+                                                onChange={(e) =>
+                                                  setVolcCookie(e.target.value)
+                                                }
+                                                placeholder={t(
+                                                  'Leave blank to keep existing credential'
+                                                )}
+                                                autoComplete='off'
+                                              />
+                                            </div>
+                                            <Button
+                                              type='button'
+                                              variant='outline'
+                                              size='sm'
+                                              onClick={() =>
+                                                void handleClearVolcCodingPlanCredential(
+                                                  'cookie'
+                                                )
+                                              }
+                                              disabled={
+                                                isClearingVolcCredential ===
+                                                  'cookie' ||
+                                                isSavingVolcCredentials
+                                              }
+                                            >
+                                              {isClearingVolcCredential ===
+                                              'cookie' ? (
+                                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                              ) : (
+                                                <Eraser className='mr-2 h-4 w-4' />
+                                              )}
+                                              {t('Clear')}
+                                            </Button>
+                                          </div>
+                                        </div>
+                                        <Button
+                                          type='button'
+                                          variant='outline'
+                                          size='sm'
+                                          className='w-fit'
+                                          onClick={() =>
+                                            void handleSaveVolcCodingPlanCredentials()
+                                          }
+                                          disabled={
+                                            isSavingVolcCredentials ||
+                                            isClearingVolcCredential !== null
+                                          }
+                                        >
+                                          {isSavingVolcCredentials ? (
+                                            <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                          ) : (
+                                            <KeyRound className='mr-2 h-4 w-4' />
+                                          )}
+                                          {isSavingVolcCredentials
+                                            ? t('Saving...')
+                                            : t('Save credentials')}
+                                        </Button>
+                                        <Alert className='border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50'>
+                                          <AlertDescription>
+                                            {t(
+                                              'These credentials are only used for the Coding Plan usage query and are stored encrypted. When the Cookie expires, log in to your VolcEngine account again and paste the new Cookie here. Personal use only — do not share your credentials.'
+                                            )}
+                                          </AlertDescription>
+                                        </Alert>
+                                      </div>
+                                    )}
                                   </>
                                 )}
 
@@ -3181,12 +3387,14 @@ export function ChannelMutateDrawer({
                                           : []),
                                       ]}
                                       onValueChange={(value) => {
-                                        const mode =
-                                          value === 'coding-intl'
-                                            ? 'coding-intl'
-                                            : value === 'coding'
-                                              ? 'coding'
-                                              : 'standard'
+                                        let mode: 'coding-intl' | 'coding' | 'standard'
+                                        if (value === 'coding-intl') {
+                                          mode = 'coding-intl'
+                                        } else if (value === 'coding') {
+                                          mode = 'coding'
+                                        } else {
+                                          mode = 'standard'
+                                        }
                                         if (mode === 'standard') {
                                           field.onChange('')
                                           if (currentType === 26) {
@@ -3393,11 +3601,18 @@ export function ChannelMutateDrawer({
                                     <FormItem>
                                       <FormLabel>{t('Auth Cookie')}</FormLabel>
                                       <FormControl>
-                                        <Input {...field} />
+                                        <Input
+                                          type='password'
+                                          placeholder={t(
+                                            'Leave blank to keep existing credential'
+                                          )}
+                                          autoComplete='off'
+                                          {...field}
+                                        />
                                       </FormControl>
                                       <FormDescription>
                                         {t(
-                                          'Auth cookie of the opencode.ai login session (valid for about 30 days, update manually after expiry)'
+                                          'Auth cookie of the opencode.ai login session (valid for about 30 days). Leave blank to keep the existing credential; update manually after expiry.'
                                         )}
                                       </FormDescription>
                                       <FormMessage />

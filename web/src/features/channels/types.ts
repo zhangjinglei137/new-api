@@ -112,6 +112,12 @@ export interface ChannelOtherSettings {
   opencode_workspace_id?: string
   opencode_auth_cookie?: string
   model_proxy_rules?: { models?: string[]; proxy?: string }[]
+  // Coding Plan access profile for VolcEngine(45) / ZhipuV4(26) / Moonshot(25).
+  endpoint_profile?: 'coding' | 'coding-intl' | string
+  // VolcEngine Coding Plan usage query credentials (stored encrypted on the
+  // backend, never returned to the frontend — type-only fields).
+  volc_coding_plan_csrf_token?: string
+  volc_coding_plan_cookie?: string
 }
 
 export interface AdvancedCustomConfig {

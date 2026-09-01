@@ -893,7 +893,13 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
 
   if (formData.type === CHANNEL_TYPE_OPENCODE_GO) {
     settingsObj.opencode_workspace_id = formData.opencode_workspace_id || ''
-    settingsObj.opencode_auth_cookie = formData.opencode_auth_cookie || ''
+    // The backend never returns the stored cookie, so an empty input keeps the
+    // existing value. Omit the field entirely instead of overwriting it.
+    if (formData.opencode_auth_cookie) {
+      settingsObj.opencode_auth_cookie = formData.opencode_auth_cookie
+    } else {
+      delete settingsObj.opencode_auth_cookie
+    }
   } else {
     if ('opencode_workspace_id' in settingsObj) {
       delete settingsObj.opencode_workspace_id

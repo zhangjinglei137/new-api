@@ -223,6 +223,15 @@ describe('OpenCode Go channel', () => {
     expect('advanced_custom' in settings).toBe(false)
   })
 
+  test('omits an empty auth cookie so the backend keeps the stored value', () => {
+    const payload = transformFormDataToCreatePayload(
+      opencodeForm({ opencode_auth_cookie: '' })
+    )
+    const settings = JSON.parse(payload.channel.settings as string)
+    expect('opencode_auth_cookie' in settings).toBe(false)
+    expect(settings.opencode_workspace_id).toBe('wrk_test')
+  })
+
   test('rejects type 61 without an advanced_custom config', () => {
     const result = channelFormSchema.safeParse(opencodeForm({ type: 99, advanced_custom: '' }))
     expect(result.success).toBe(false)

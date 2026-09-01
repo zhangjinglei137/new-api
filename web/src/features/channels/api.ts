@@ -378,6 +378,94 @@ export async function resetCodexUsage(
 }
 
 // ============================================================================
+// VolcEngine Coding Plan & OpenCode Go Usage Operations
+// ============================================================================
+
+export type VolcCodingPlanUsageData = {
+  status?: string
+  period?: string
+  remaining_percent?: number
+  used_percent?: number
+  reset_at?: string | null
+  reset_in_sec?: number
+}
+
+export type VolcCodingPlanUsageErrorCode =
+  | 'credentials_not_configured'
+  | 'credentials_expired'
+  | 'unsupported_region'
+  | 'fetch_failed'
+  | 'usage_schema_unknown'
+
+export type VolcCodingPlanUsageResponse = {
+  success: boolean
+  message?: string
+  upstream_status?: number
+  error_code?: VolcCodingPlanUsageErrorCode
+  data?: VolcCodingPlanUsageData
+}
+
+export type VolcCodingPlanCredentialsResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    csrf_token_configured: boolean
+    cookie_configured: boolean
+  }
+}
+
+export type OpenCodeGoUsageData = {
+  usage_percent?: number
+  remaining_percent?: number
+  balance?: number
+  reset_in_sec?: number
+  monthly_cap_usd?: number
+}
+
+export type OpenCodeGoUsageResponse = {
+  success: boolean
+  message?: string
+  data?: OpenCodeGoUsageData
+}
+
+export async function getVolcCodingPlanUsage(
+  channelId: number
+): Promise<VolcCodingPlanUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/volc/codingplan/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+export async function updateVolcCodingPlanCredentials(
+  channelId: number,
+  payload: {
+    csrf_token?: string
+    cookie?: string
+    clear_csrf?: boolean
+    clear_cookie?: boolean
+  }
+): Promise<VolcCodingPlanCredentialsResponse> {
+  const res = await api.patch(
+    `/api/channel/${channelId}/volc/codingplan/credentials`,
+    payload,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function getOpenCodeGoUsage(
+  channelId: number
+): Promise<OpenCodeGoUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/opencode/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+// ============================================================================
 // Multi-Key Management
 // ============================================================================
 

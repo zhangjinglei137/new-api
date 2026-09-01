@@ -33,13 +33,21 @@ import { IconBadge } from '@/components/ui/icon-badge'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatTimestampToDate } from '@/lib/format'
 
-import { getCodexUsage, updateChannelBalance } from '../../api'
-import { channelsQueryKeys } from '../../lib'
+import { getCodexUsage, getOpenCodeGoUsage, getVolcCodingPlanUsage, updateChannelBalance } from '../../api'
+import { channelsQueryKeys, parseChannelOtherSettings } from '../../lib'
 import { useChannels } from '../channels-provider'
 import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './codex-usage-dialog'
+import {
+  OpenCodeGoUsageDialog,
+  type OpenCodeGoUsageResponse,
+} from './opencode-usage-dialog'
+import {
+  VolcCodingPlanUsageDialog,
+  type VolcCodingPlanUsageResponse,
+} from './volc-codingplan-usage-dialog'
 
 type BalanceQueryDialogProps = {
   initialRawResponse?: string
@@ -61,8 +69,16 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
   )
   const [codexUsageResponse, setCodexUsageResponse] =
     useState<CodexUsageDialogData | null>(null)
+  const [volcCodingPlanUsageResponse, setVolcCodingPlanUsageResponse] =
+    useState<VolcCodingPlanUsageResponse | null>(null)
+  const [openCodeGoUsageResponse, setOpenCodeGoUsageResponse] =
+    useState<OpenCodeGoUsageResponse | null>(null)
 
   const isCodex = currentRow?.type === 57
+  const isVolcCodingPlan =
+    currentRow?.type === 45 &&
+    parseChannelOtherSettings(currentRow.settings).endpoint_profile === 'coding'
+  const isOpenCodeGo = currentRow?.type === 99
 
   const handleQueryCodexUsage = async () => {
     const row = currentRow
@@ -83,12 +99,55 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
     }
   }
 
+  const handleQueryVolcCodingPlanUsage = async () => {
+    const row = currentRow
+    if (!row) return
+    setIsQuerying(true)
+    try {
+      const res = await getVolcCodingPlanUsage(row.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setVolcCodingPlanUsageResponse(res)
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsQuerying(false)
+    }
+  }
+
+  const handleQueryOpenCodeGoUsage = async () => {
+    const row = currentRow
+    if (!row) return
+    setIsQuerying(true)
+    try {
+      const res = await getOpenCodeGoUsage(row.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setOpenCodeGoUsageResponse(res)
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsQuerying(false)
+    }
+  }
+
   useEffect(() => {
-    if (!isCodex) return
     if (!props.open) return
-    handleQueryCodexUsage()
+    if (isCodex) {
+      handleQueryCodexUsage()
+    } else if (isVolcCodingPlan) {
+      handleQueryVolcCodingPlanUsage()
+    } else if (isOpenCodeGo) {
+      handleQueryOpenCodeGoUsage()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.open, isCodex])
+  }, [props.open, isCodex, isVolcCodingPlan, isOpenCodeGo])
 
   if (!currentRow) return null
 
@@ -135,6 +194,8 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
     setBalanceUpdatedTime(null)
     setRawResponse(null)
     setCodexUsageResponse(null)
+    setVolcCodingPlanUsageResponse(null)
+    setOpenCodeGoUsageResponse(null)
     props.onOpenChange(false)
   }
 
@@ -161,6 +222,38 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
         channelId={currentRow.id}
         response={codexUsageResponse}
         onRefresh={handleQueryCodexUsage}
+        isRefreshing={isQuerying}
+      />
+    )
+  }
+
+  if (isVolcCodingPlan) {
+    return (
+      <VolcCodingPlanUsageDialog
+        open={props.open}
+        onOpenChange={(v) => {
+          if (!v) handleClose()
+        }}
+        channelName={currentRow.name}
+        channelId={currentRow.id}
+        response={volcCodingPlanUsageResponse}
+        onRefresh={handleQueryVolcCodingPlanUsage}
+        isRefreshing={isQuerying}
+      />
+    )
+  }
+
+  if (isOpenCodeGo) {
+    return (
+      <OpenCodeGoUsageDialog
+        open={props.open}
+        onOpenChange={(v) => {
+          if (!v) handleClose()
+        }}
+        channelName={currentRow.name}
+        channelId={currentRow.id}
+        response={openCodeGoUsageResponse}
+        onRefresh={handleQueryOpenCodeGoUsage}
         isRefreshing={isQuerying}
       />
     )

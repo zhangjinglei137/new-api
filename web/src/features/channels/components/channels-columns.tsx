@@ -55,8 +55,13 @@ import {
 import { formatTimestampToDate } from '@/lib/format'
 import { truncateText } from '@/lib/utils'
 
-import { getCodexUsage, updateChannelBalance } from '../api'
-import { CHANNEL_STATUS_CONFIG, MODEL_FETCHABLE_TYPES } from '../constants'
+import { getCodexUsage, getOpenCodeGoUsage, getVolcCodingPlanUsage, updateChannelBalance } from '../api'
+import {
+  CHANNEL_STATUS_CONFIG,
+  CHANNEL_TYPE_CODEX,
+  CHANNEL_TYPE_OPENCODE_GO,
+  MODEL_FETCHABLE_TYPES,
+} from '../constants'
 import {
   formatRelativeTime,
   formatResponseTime,
@@ -65,6 +70,7 @@ import {
   getChannelTypeLabel,
   getResponseTimeConfig,
   isMultiKeyChannel,
+  parseChannelOtherSettings,
   parseModelsList,
   parseGroupsList,
   parseChannelSettings,
@@ -86,6 +92,14 @@ import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './dialogs/codex-usage-dialog'
+import {
+  OpenCodeGoUsageDialog,
+  type OpenCodeGoUsageResponse,
+} from './dialogs/opencode-usage-dialog'
+import {
+  VolcCodingPlanUsageDialog,
+  type VolcCodingPlanUsageResponse,
+} from './dialogs/volc-codingplan-usage-dialog'
 import { NumericSpinnerInput } from './numeric-spinner-input'
 
 function parseIonetMeta(otherInfo: string | null | undefined): null | {
@@ -341,10 +355,22 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const [codexUsageOpen, setCodexUsageOpen] = useState(false)
   const [codexUsageResponse, setCodexUsageResponse] =
     useState<CodexUsageDialogData | null>(null)
+  const [volcCodingPlanUsageOpen, setVolcCodingPlanUsageOpen] = useState(false)
+  const [volcCodingPlanUsageResponse, setVolcCodingPlanUsageResponse] =
+    useState<VolcCodingPlanUsageResponse | null>(null)
+  const [openCodeGoUsageOpen, setOpenCodeGoUsageOpen] = useState(false)
+  const [openCodeGoUsageResponse, setOpenCodeGoUsageResponse] =
+    useState<OpenCodeGoUsageResponse | null>(null)
   const currencyLabel = getCurrencyLabel()
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
     tokenSuffix && value !== '-' ? `${value}${tokenSuffix}` : value
+
+  const isCodex = channel.type === CHANNEL_TYPE_CODEX
+  const isVolcCodingPlan =
+    channel.type === 45 &&
+    parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding'
+  const isOpenCodeGo = channel.type === CHANNEL_TYPE_OPENCODE_GO
 
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const balanceFormatOptions = {
@@ -422,30 +448,94 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   // Regular channel row: show used and remaining with click to update
   const variant = getBalanceVariant(balance)
 
+  const fetchCodexUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getCodexUsage(channel.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setCodexUsageResponse(res)
+      if (openDialog) {
+        setCodexUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const fetchVolcCodingPlanUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getVolcCodingPlanUsage(channel.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setVolcCodingPlanUsageResponse(res)
+      if (openDialog) {
+        setVolcCodingPlanUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const fetchOpenCodeGoUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getOpenCodeGoUsage(channel.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setOpenCodeGoUsageResponse(res)
+      if (openDialog) {
+        setOpenCodeGoUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleClickUpdate = async () => {
+    if (isCodex) {
+      await fetchCodexUsage()
+      return
+    }
+    if (isVolcCodingPlan) {
+      await fetchVolcCodingPlanUsage()
+      return
+    }
+    if (isOpenCodeGo) {
+      await fetchOpenCodeGoUsage()
+      return
+    }
+
     if (isUpdating) {
       return
     }
 
     setIsUpdating(true)
-    if (channel.type === 57) {
-      try {
-        const res = await getCodexUsage(channel.id)
-        if (!res.success) {
-          throw new Error(res.message || t('Failed to fetch usage'))
-        }
-        setCodexUsageResponse(res)
-        setCodexUsageOpen(true)
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t('Failed to fetch usage')
-        )
-      } finally {
-        setIsUpdating(false)
-      }
-      return
-    }
-
     try {
       const response = await updateChannelBalance(channel.id)
       if (response.success && response.balance !== undefined) {
@@ -478,21 +568,29 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   let remainingBadgeLabel = sensitiveVisible ? remainingDisplay : SENSITIVE_MASK
   if (sensitiveVisible && isUpdating) {
     remainingBadgeLabel = t('Updating...')
-  } else if (sensitiveVisible && channel.type === 57) {
+  } else if (sensitiveVisible && isCodex) {
     remainingBadgeLabel = t('Account Info')
+  } else if (sensitiveVisible && isVolcCodingPlan) {
+    remainingBadgeLabel = t('Coding Plan')
   }
   let remainingTooltipLabel = remainingLabel
   if (!sensitiveVisible) {
     remainingTooltipLabel = maskedRemainingLabel
-  } else if (channel.type === 57) {
+  } else if (isCodex) {
     remainingTooltipLabel = t('Click to view Codex usage')
+  } else if (isVolcCodingPlan) {
+    remainingTooltipLabel = t('Click to view Coding Plan usage')
+  } else if (isOpenCodeGo) {
+    remainingTooltipLabel = t('Click to view OpenCode Go usage')
   }
   let remainingBadgeVariant: StatusBadgeProps['variant'] = variant
-  if (channel.type === 57) {
+  if (isCodex || isVolcCodingPlan) {
     remainingBadgeVariant = 'info'
   } else if (isUpdating) {
     remainingBadgeVariant = 'neutral'
   }
+
+  const isUsageDialogType = isCodex || isVolcCodingPlan || isOpenCodeGo
 
   return (
     <TooltipProvider>
@@ -530,7 +628,7 @@ export function BalanceCell({ channel }: { channel: Channel }) {
           />
           <TooltipContent>
             <p>{remainingTooltipLabel}</p>
-            {channel.type !== 57 && <p>{t('Click to update balance')}</p>}
+            {!isUsageDialogType && <p>{t('Click to update balance')}</p>}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -543,27 +641,25 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelDisplayName={sensitiveVisible ? undefined : SENSITIVE_MASK}
         channelDisplayId={sensitiveVisible ? undefined : SENSITIVE_MASK}
         response={codexUsageResponse}
-        onRefresh={async () => {
-          if (isUpdating) {
-            return
-          }
-          setIsUpdating(true)
-          try {
-            const res = await getCodexUsage(channel.id)
-            if (!res.success) {
-              throw new Error(res.message || t('Failed to fetch usage'))
-            }
-            setCodexUsageResponse(res)
-          } catch (error) {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : t('Failed to fetch usage')
-            )
-          } finally {
-            setIsUpdating(false)
-          }
-        }}
+        onRefresh={() => fetchCodexUsage(false)}
+        isRefreshing={isUpdating}
+      />
+      <VolcCodingPlanUsageDialog
+        open={volcCodingPlanUsageOpen}
+        onOpenChange={setVolcCodingPlanUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        response={volcCodingPlanUsageResponse}
+        onRefresh={() => fetchVolcCodingPlanUsage(false)}
+        isRefreshing={isUpdating}
+      />
+      <OpenCodeGoUsageDialog
+        open={openCodeGoUsageOpen}
+        onOpenChange={setOpenCodeGoUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        response={openCodeGoUsageResponse}
+        onRefresh={() => fetchOpenCodeGoUsage(false)}
         isRefreshing={isUpdating}
       />
       {rawBalanceResponse !== null && (
