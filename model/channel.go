@@ -1156,6 +1156,33 @@ func (channel *Channel) SetOtherSettings(setting dto.ChannelOtherSettings) {
 	channel.OtherSettings = string(settingBytes)
 }
 
+// MaskSensitiveOtherSettings 移除 settings JSON 中的敏感字段（密文也不外泄），
+// 供列表/详情序列化前调用。解析失败时静默跳过，不破坏其它 settings 字段。
+func (channel *Channel) MaskSensitiveOtherSettings() {
+	if channel == nil || channel.OtherSettings == "" {
+		return
+	}
+	var settings map[string]any
+	if err := common.UnmarshalJsonStr(channel.OtherSettings, &settings); err != nil {
+		return
+	}
+	changed := false
+	for _, key := range []string{"volc_coding_plan_csrf_token", "volc_coding_plan_cookie", "opencode_auth_cookie"} {
+		if _, ok := settings[key]; ok {
+			delete(settings, key)
+			changed = true
+		}
+	}
+	if !changed {
+		return
+	}
+	encoded, err := common.Marshal(settings)
+	if err != nil {
+		return
+	}
+	channel.OtherSettings = string(encoded)
+}
+
 func (channel *Channel) GetParamOverride() map[string]interface{} {
 	paramOverride := make(map[string]interface{})
 	if channel.ParamOverride != nil && *channel.ParamOverride != "" {

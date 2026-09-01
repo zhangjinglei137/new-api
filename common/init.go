@@ -62,6 +62,10 @@ func InitEnv() {
 	} else {
 		CryptoSecret = SessionSecret
 	}
+	if os.Getenv("CRYPTO_SECRET") == "" && os.Getenv("SESSION_SECRET") == "" {
+		log.Println("WARNING: CRYPTO_SECRET and SESSION_SECRET are both unset, a random secret is generated at each startup. Persisted encrypted credentials (e.g. VolcEngine Coding Plan Cookie, opencode Cookie) cannot be decrypted after a restart. Please set the CRYPTO_SECRET or SESSION_SECRET environment variable.")
+		log.Println("警告：CRYPTO_SECRET 与 SESSION_SECRET 均未设置，将使用随机默认值；持久化的加密凭证（如火山方舟 Coding Plan Cookie、opencode Cookie）在服务重启后将无法解密，请设置 CRYPTO_SECRET 或 SESSION_SECRET 环境变量。")
+	}
 	if err := InitSessionCookieSettings(); err != nil {
 		log.Fatal(err)
 	}

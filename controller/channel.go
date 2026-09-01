@@ -70,6 +70,7 @@ func clearChannelInfo(channel *model.Channel) {
 		channel.ChannelInfo.MultiKeyDisabledReason = nil
 		channel.ChannelInfo.MultiKeyDisabledTime = nil
 	}
+	channel.MaskSensitiveOtherSettings()
 }
 
 func applyChannelStatusFilter(query *gorm.DB, statusFilter int) *gorm.DB {
@@ -651,6 +652,18 @@ func AddChannel(c *gin.Context) {
 		return
 	}
 
+	// 新建渠道时对敏感 settings 字段做与 UpdateChannel 一致的处理：
+	// opencode_auth_cookie 非空明文加密后写入；volc_coding_plan_* 仅走独立 PATCH
+	// 接口，创建请求中的值一律忽略。
+	if addChannelRequest.Channel.OtherSettings != "" {
+		merged, err := mergeSensitiveOtherSettings(addChannelRequest.Channel.OtherSettings, "")
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		addChannelRequest.Channel.OtherSettings = merged
+	}
+
 	addChannelRequest.Channel.CreatedTime = common.GetTimestamp()
 	keys := make([]string, 0)
 	switch addChannelRequest.Mode {
@@ -962,6 +975,58 @@ type ChannelStatusRequest struct {
 	Status int `json:"status"`
 }
 
+// mergeSensitiveOtherSettings 合并普通渠道编辑请求（PUT）携带的 settings 与
+// DB 原值，防止前端误写敏感凭证字段：
+//   - volc_coding_plan_csrf_token / volc_coding_plan_cookie 由独立 PATCH 接口管理，
+//     请求中的值一律忽略，保留 DB 原密文（未配置则移除）。
+//   - opencode_auth_cookie 请求中为非空新明文时加密后写入；缺失/为空则保留 DB
+//     原值（含历史明文，原样保留）。
+func mergeSensitiveOtherSettings(requestSettings, originSettings string) (string, error) {
+	merged := map[string]any{}
+	if requestSettings != "" {
+		if err := common.UnmarshalJsonStr(requestSettings, &merged); err != nil {
+			return "", err
+		}
+	}
+	origin := map[string]any{}
+	if originSettings != "" {
+		if err := common.UnmarshalJsonStr(originSettings, &origin); err != nil {
+			return "", err
+		}
+	}
+
+	for _, key := range []string{"volc_coding_plan_csrf_token", "volc_coding_plan_cookie"} {
+		if value, ok := origin[key]; ok {
+			merged[key] = value
+		} else {
+			delete(merged, key)
+		}
+	}
+
+	const opencodeKey = "opencode_auth_cookie"
+	if raw, ok := merged[opencodeKey]; ok {
+		if value, ok := raw.(string); ok && strings.TrimSpace(value) != "" {
+			encrypted, err := common.EncryptSecret(value)
+			if err != nil {
+				return "", err
+			}
+			merged[opencodeKey] = encrypted
+		} else if value, ok := origin[opencodeKey]; ok {
+			merged[opencodeKey] = value
+		} else {
+			delete(merged, opencodeKey)
+		}
+	} else if value, ok := origin[opencodeKey]; ok {
+		merged[opencodeKey] = value
+	}
+
+	encoded, err := common.Marshal(merged)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
 type ChannelStatusBatchRequest struct {
 	Ids    []int `json:"ids"`
 	Status int   `json:"status"`
@@ -1116,6 +1181,16 @@ func UpdateChannel(c *gin.Context) {
 		case "replace":
 			// 覆盖模式：直接使用新密钥（默认行为，不需要特殊处理）
 		}
+	}
+	// 敏感 settings 字段合并：volc_coding_plan_* 由独立 PATCH 接口管理，普通 PUT
+	// 一律保留 DB 原值；opencode_auth_cookie 新明文加密后写入，缺失则保留原值。
+	if _, settingsProvided := requestData["settings"]; settingsProvided {
+		merged, err := mergeSensitiveOtherSettings(channel.OtherSettings, originChannel.OtherSettings)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		channel.OtherSettings = merged
 	}
 	err = channel.Update()
 	if err != nil {

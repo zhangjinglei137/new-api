@@ -148,6 +148,10 @@ type ChannelOtherSettings struct {
 	OpenCodeAuthCookie  string           `json:"opencode_auth_cookie,omitempty"`
 	// EndpointProfile 标识渠道使用的特殊套餐端点（如 Coding Plan）。取值 "coding"/"coding-intl"/空。
 	EndpointProfile string `json:"endpoint_profile,omitempty"`
+	// VolcCodingPlanCsrfToken 为 AES-GCM 加密后的火山方舟 Coding Plan 控制台 x-csrf-token。
+	VolcCodingPlanCsrfToken string `json:"volc_coding_plan_csrf_token,omitempty"`
+	// VolcCodingPlanCookie 为 AES-GCM 加密后的火山方舟 Coding Plan 控制台整段 Cookie。
+	VolcCodingPlanCookie string `json:"volc_coding_plan_cookie,omitempty"`
 }
 
 // ResolveProxy returns the proxy URL to use for the given model.
