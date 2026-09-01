@@ -186,11 +186,11 @@ describe('VolcCodingPlanUsageDialog', () => {
     ).toBeInTheDocument()
   })
 
-  test('guides the admin to configure credentials when none are set', () => {
+  test('passes through the backend message when credentials are not configured', () => {
     renderDialog({
       success: false,
       error_code: 'credentials_not_configured',
-      message: 'credentials missing',
+      message: 'OpenAPI Access Key / Secret Access Key 未配置，请在渠道设置中更新凭证',
     })
 
     expect(
@@ -198,20 +198,26 @@ describe('VolcCodingPlanUsageDialog', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Configure the CSRF token and session cookie in the channel settings before querying usage.'
+        'OpenAPI Access Key / Secret Access Key 未配置，请在渠道设置中更新凭证'
       )
     ).toBeInTheDocument()
   })
 
-  test('guides the admin to refresh the session when credentials expired', () => {
+  test('passes through the backend message when credentials expired', () => {
     renderDialog({
       success: false,
       error_code: 'credentials_expired',
-      message: 'session expired upstream',
+      message:
+        '火山 OpenAPI Access Key / Secret Access Key 无效或已被禁用，请在渠道设置中更新凭证',
     })
 
     expect(
-      screen.getByText('Session expired, please update Cookie and CSRF token')
+      screen.getByText('Usage credentials not configured')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '火山 OpenAPI Access Key / Secret Access Key 无效或已被禁用，请在渠道设置中更新凭证'
+      )
     ).toBeInTheDocument()
   })
 

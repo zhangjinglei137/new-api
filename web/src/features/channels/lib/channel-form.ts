@@ -303,6 +303,10 @@ export const channelFormSchema = z
     // SenseNova usage query credentials (stored in settings JSON)
     sensenova_username: z.string().optional(),
     sensenova_password: z.string().optional(),
+    // VolcEngine Coding Plan usage query credentials (stored in settings JSON,
+    // encrypted on the backend — type-only fields on the channel payload)
+    volc_coding_plan_access_key_id: z.string().optional(),
+    volc_coding_plan_secret_access_key: z.string().optional(),
     // Multi-key options (not sent to backend directly)
     multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
     multi_key_type: z.enum(['random', 'polling']).optional(),
@@ -545,6 +549,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   commandcode_cookie: '',
   sensenova_username: '',
   sensenova_password: '',
+  volc_coding_plan_access_key_id: '',
+  volc_coding_plan_secret_access_key: '',
 }
 
 // ============================================================================
@@ -723,6 +729,10 @@ export function transformChannelToFormDefaults(
     // The backend stores them encrypted and does not return them for editing.
     sensenova_username: '',
     sensenova_password: '',
+    // VolcEngine Coding Plan credentials are intentionally never populated
+    // from the API for the same reason (encrypted storage).
+    volc_coding_plan_access_key_id: '',
+    volc_coding_plan_secret_access_key: '',
   }
 }
 
@@ -957,6 +967,28 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
   } else {
     delete settingsObj.sensenova_username
     delete settingsObj.sensenova_password
+  }
+
+  // VolcEngine (type 45) Coding Plan usage query credentials. The backend
+  // stores these encrypted and treats missing/empty fields as "keep existing",
+  // so an empty input keeps the configured value. Omit the field entirely
+  // instead of overwriting it.
+  if (formData.type === 45) {
+    if (formData.volc_coding_plan_access_key_id?.trim()) {
+      settingsObj.volc_coding_plan_access_key_id =
+        formData.volc_coding_plan_access_key_id.trim()
+    } else {
+      delete settingsObj.volc_coding_plan_access_key_id
+    }
+    if (formData.volc_coding_plan_secret_access_key?.trim()) {
+      settingsObj.volc_coding_plan_secret_access_key =
+        formData.volc_coding_plan_secret_access_key.trim()
+    } else {
+      delete settingsObj.volc_coding_plan_secret_access_key
+    }
+  } else {
+    delete settingsObj.volc_coding_plan_access_key_id
+    delete settingsObj.volc_coding_plan_secret_access_key
   }
 
   const modelProxyRules = parseModelProxyRules(formData.model_proxy_rules)

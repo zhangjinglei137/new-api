@@ -409,17 +409,6 @@ export type VolcCodingPlanUsageResponse = {
   data?: VolcCodingPlanUsageData
 }
 
-export type VolcCodingPlanCredentialsResponse = {
-  success: boolean
-  message?: string
-  data?: {
-    csrf_token_configured: boolean
-    cookie_configured: boolean
-    access_key_id_configured: boolean
-    secret_access_key_configured: boolean
-  }
-}
-
 export type OpenCodeGoWindow = {
   period: 'session' | 'weekly' | 'monthly'
   used_percent?: number
@@ -445,27 +434,6 @@ export async function getVolcCodingPlanUsage(
   const res = await api.get(
     `/api/channel/${channelId}/volc/codingplan/usage`,
     channelActionConfig({ disableDuplicate: true })
-  )
-  return res.data
-}
-
-export async function updateVolcCodingPlanCredentials(
-  channelId: number,
-  payload: {
-    csrf_token?: string
-    cookie?: string
-    clear_csrf?: boolean
-    clear_cookie?: boolean
-    access_key_id?: string
-    secret_access_key?: string
-    clear_access_key_id?: boolean
-    clear_secret_access_key?: boolean
-  }
-): Promise<VolcCodingPlanCredentialsResponse> {
-  const res = await api.patch(
-    `/api/channel/${channelId}/volc/codingplan/credentials`,
-    payload,
-    channelActionConfig()
   )
   return res.data
 }

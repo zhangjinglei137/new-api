@@ -181,10 +181,6 @@ import {
   findMissingModelsInMapping,
   validateModelMappingJson,
   hasAdvancedSettingsErrors,
-  hasVolcCodingPlanCredential,
-  saveVolcCodingPlanCredentials,
-  clearVolcCodingPlanCredential,
-  type VolcCodingPlanCredentialKey,
 } from '../../lib'
 import {
   collectInvalidStatusCodeEntries,
@@ -325,6 +321,8 @@ const SENSITIVE_FORM_FIELDS = [
   'commandcode_cookie',
   'sensenova_username',
   'sensenova_password',
+  'volc_coding_plan_access_key_id',
+  'volc_coding_plan_secret_access_key',
 ] satisfies (keyof ChannelFormValues)[]
 
 function readAdvancedSettingsPreference(): boolean {
@@ -694,14 +692,6 @@ export function ChannelMutateDrawer({
   const [doubaoAccessMode, setDoubaoAccessMode] = useState<
     'standard' | 'coding' | 'custom'
   >('standard')
-  const [volcCsrfToken, setVolcCsrfToken] = useState('')
-  const [volcCookie, setVolcCookie] = useState('')
-  const [volcAccessKeyId, setVolcAccessKeyId] = useState('')
-  const [volcSecretAccessKey, setVolcSecretAccessKey] = useState('')
-  const [isSavingVolcCredentials, setIsSavingVolcCredentials] = useState(false)
-  const [isClearingVolcCredential, setIsClearingVolcCredential] = useState<
-    VolcCodingPlanCredentialKey | null
-  >(null)
 
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
@@ -1579,82 +1569,6 @@ export function ChannelMutateDrawer({
       setIsCodexCredentialRefreshing(false)
     }
   }, [channelId, queryClient, t])
-
-  const handleSaveVolcCodingPlanCredentials = useCallback(async () => {
-    if (!channelId) return
-    const inputs = {
-      csrfToken: volcCsrfToken,
-      cookie: volcCookie,
-      accessKeyId: volcAccessKeyId,
-      secretAccessKey: volcSecretAccessKey,
-    }
-    if (!hasVolcCodingPlanCredential(inputs)) {
-      toast.error(t('Enter at least one credential to save'))
-      return
-    }
-    setIsSavingVolcCredentials(true)
-    try {
-      const res = await saveVolcCodingPlanCredentials(channelId, inputs)
-      if (!res.success) {
-        throw new Error(res.message || t('Failed to save credentials'))
-      }
-      toast.success(t('Credentials saved'))
-      setVolcCsrfToken('')
-      setVolcCookie('')
-      setVolcAccessKeyId('')
-      setVolcSecretAccessKey('')
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('Failed to save credentials')
-      )
-    } finally {
-      setIsSavingVolcCredentials(false)
-    }
-  }, [
-    channelId,
-    volcCsrfToken,
-    volcCookie,
-    volcAccessKeyId,
-    volcSecretAccessKey,
-    t,
-  ])
-
-  const handleClearVolcCodingPlanCredential = useCallback(
-    async (kind: VolcCodingPlanCredentialKey) => {
-      if (!channelId) return
-      setIsClearingVolcCredential(kind)
-      try {
-        const res = await clearVolcCodingPlanCredential(channelId, kind)
-        if (!res.success) {
-          throw new Error(res.message || t('Failed to clear credential'))
-        }
-        toast.success(t('Credential cleared'))
-        switch (kind) {
-          case 'csrf':
-            setVolcCsrfToken('')
-            break
-          case 'cookie':
-            setVolcCookie('')
-            break
-          case 'access_key_id':
-            setVolcAccessKeyId('')
-            break
-          case 'secret_access_key':
-            setVolcSecretAccessKey('')
-            break
-        }
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t('Failed to clear credential')
-        )
-      } finally {
-        setIsClearingVolcCredential(null)
-      }
-    },
-    [channelId, t]
-  )
 
   // Unified function to update models
   const updateModels = useCallback(
@@ -3148,264 +3062,67 @@ export function ChannelMutateDrawer({
                                       <FormControl>
                                         <Input
                                           readOnly
-                                          value={t(
-                                            'Endpoints: OpenAI compatible {{openaiEndpoint}} · Anthropic {{anthropicEndpoint}}',
-                                            {
-                                              openaiEndpoint:
-                                                'https://ark.cn-beijing.volces.com/api/coding/v3',
-                                              anthropicEndpoint:
-                                                'https://ark.cn-beijing.volces.com/api/coding',
-                                            }
-                                          )}
+                                          value='https://ark.cn-beijing.volces.com/api/coding'
                                           className='font-mono'
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        {t(
-                                          'VolcEngine Coding Plan subscription (OpenAI / Anthropic compatible endpoints)'
-                                        )}
-                                      </FormDescription>
                                     </FormItem>
-                                    <Alert>
-                                      <AlertDescription>
-                                        {t(
-                                          'Enter the Coding Plan logical model name (deepseek-v3.2 / doubao-seed-code / kimi-k2.5 / ark-code-latest). Do not use online inference Model IDs with date suffixes.'
-                                        )}
-                                      </AlertDescription>
-                                    </Alert>
-                                    {isEditing && channelId && (
-                                      <div className='border-border/60 flex flex-col gap-3 rounded-lg border p-4'>
-                                        <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
-                                          <div>
-                                            <div className='text-sm font-medium'>
-                                              {t('Usage query credentials')}
-                                            </div>
-                                            <div className='text-muted-foreground text-xs'>
-                                              {t(
-                                                'Credentials for querying the Coding Plan monthly usage. Leave blank to keep the existing credential.'
-                                              )}
-                                            </div>
+                                    <div className='border-border/60 flex flex-col gap-3 rounded-lg border p-4'>
+                                        <div>
+                                          <div className='text-sm font-medium'>
+                                            {t('Coding Plan usage credentials')}
                                           </div>
-                                        </div>
-                                        <div className='flex flex-col gap-2'>
-                                          <div className='flex items-end gap-2'>
-                                            <div className='flex-1'>
-                                              <label
-                                                htmlFor='volc-csrf-token'
-                                                className='mb-1 block text-xs font-medium'
-                                              >
-                                                {t('CSRF token')}
-                                              </label>
-                                              <Input
-                                                id='volc-csrf-token'
-                                                type='password'
-                                                value={volcCsrfToken}
-                                                onChange={(e) =>
-                                                  setVolcCsrfToken(
-                                                    e.target.value
-                                                  )
-                                                }
-                                                placeholder={t(
-                                                  'Leave blank to keep existing credential'
-                                                )}
-                                                autoComplete='off'
-                                              />
-                                            </div>
-                                            <Button
-                                              type='button'
-                                              variant='outline'
-                                              size='sm'
-                                              onClick={() =>
-                                                void handleClearVolcCodingPlanCredential(
-                                                  'csrf'
-                                                )
-                                              }
-                                              disabled={
-                                                isClearingVolcCredential ===
-                                                  'csrf' ||
-                                                isSavingVolcCredentials
-                                              }
-                                            >
-                                              {isClearingVolcCredential ===
-                                              'csrf' ? (
-                                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                                              ) : (
-                                                <Eraser className='mr-2 h-4 w-4' />
-                                              )}
-                                              {t('Clear')}
-                                            </Button>
-                                          </div>
-                                          <div className='flex items-end gap-2'>
-                                            <div className='flex-1'>
-                                              <label
-                                                htmlFor='volc-session-cookie'
-                                                className='mb-1 block text-xs font-medium'
-                                              >
-                                                {t('Session cookie')}
-                                              </label>
-                                              <Input
-                                                id='volc-session-cookie'
-                                                type='password'
-                                                value={volcCookie}
-                                                onChange={(e) =>
-                                                  setVolcCookie(e.target.value)
-                                                }
-                                                placeholder={t(
-                                                  'Leave blank to keep existing credential'
-                                                )}
-                                                autoComplete='off'
-                                              />
-                                            </div>
-                                            <Button
-                                              type='button'
-                                              variant='outline'
-                                              size='sm'
-                                              onClick={() =>
-                                                void handleClearVolcCodingPlanCredential(
-                                                  'cookie'
-                                                )
-                                              }
-                                              disabled={
-                                                isClearingVolcCredential ===
-                                                  'cookie' ||
-                                                isSavingVolcCredentials
-                                              }
-                                            >
-                                              {isClearingVolcCredential ===
-                                              'cookie' ? (
-                                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                                              ) : (
-                                                <Eraser className='mr-2 h-4 w-4' />
-                                              )}
-                                              {t('Clear')}
-                                            </Button>
-                                          </div>
-                                          <div className='flex items-end gap-2'>
-                                            <div className='flex-1'>
-                                              <label
-                                                htmlFor='volc-access-key-id'
-                                                className='mb-1 block text-xs font-medium'
-                                              >
-                                                {t('Access Key ID')}
-                                              </label>
-                                              <Input
-                                                id='volc-access-key-id'
-                                                type='password'
-                                                value={volcAccessKeyId}
-                                                onChange={(e) =>
-                                                  setVolcAccessKeyId(
-                                                    e.target.value
-                                                  )
-                                                }
-                                                placeholder={t(
-                                                  'Leave blank to keep existing credential'
-                                                )}
-                                                autoComplete='off'
-                                              />
-                                            </div>
-                                            <Button
-                                              type='button'
-                                              variant='outline'
-                                              size='sm'
-                                              onClick={() =>
-                                                void handleClearVolcCodingPlanCredential(
-                                                  'access_key_id'
-                                                )
-                                              }
-                                              disabled={
-                                                isClearingVolcCredential ===
-                                                  'access_key_id' ||
-                                                isSavingVolcCredentials
-                                              }
-                                            >
-                                              {isClearingVolcCredential ===
-                                              'access_key_id' ? (
-                                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                                              ) : (
-                                                <Eraser className='mr-2 h-4 w-4' />
-                                              )}
-                                              {t('Clear')}
-                                            </Button>
-                                          </div>
-                                          <div className='flex items-end gap-2'>
-                                            <div className='flex-1'>
-                                              <label
-                                                htmlFor='volc-secret-access-key'
-                                                className='mb-1 block text-xs font-medium'
-                                              >
-                                                {t('Secret Access Key')}
-                                              </label>
-                                              <Input
-                                                id='volc-secret-access-key'
-                                                type='password'
-                                                value={volcSecretAccessKey}
-                                                onChange={(e) =>
-                                                  setVolcSecretAccessKey(
-                                                    e.target.value
-                                                  )
-                                                }
-                                                placeholder={t(
-                                                  'Leave blank to keep existing credential'
-                                                )}
-                                                autoComplete='off'
-                                              />
-                                            </div>
-                                            <Button
-                                              type='button'
-                                              variant='outline'
-                                              size='sm'
-                                              onClick={() =>
-                                                void handleClearVolcCodingPlanCredential(
-                                                  'secret_access_key'
-                                                )
-                                              }
-                                              disabled={
-                                                isClearingVolcCredential ===
-                                                  'secret_access_key' ||
-                                                isSavingVolcCredentials
-                                              }
-                                            >
-                                              {isClearingVolcCredential ===
-                                              'secret_access_key' ? (
-                                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                                              ) : (
-                                                <Eraser className='mr-2 h-4 w-4' />
-                                              )}
-                                              {t('Clear')}
-                                            </Button>
-                                          </div>
-                                        </div>
-                                        <Button
-                                          type='button'
-                                          variant='outline'
-                                          size='sm'
-                                          className='w-fit'
-                                          onClick={() =>
-                                            void handleSaveVolcCodingPlanCredentials()
-                                          }
-                                          disabled={
-                                            isSavingVolcCredentials ||
-                                            isClearingVolcCredential !== null
-                                          }
-                                        >
-                                          {isSavingVolcCredentials ? (
-                                            <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                                          ) : (
-                                            <KeyRound className='mr-2 h-4 w-4' />
-                                          )}
-                                          {isSavingVolcCredentials
-                                            ? t('Saving...')
-                                            : t('Save credentials')}
-                                        </Button>
-                                        <Alert className='border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50'>
-                                          <AlertDescription>
+                                          <div className='text-muted-foreground text-xs'>
                                             {t(
-                                              'These credentials are only used for the Coding Plan usage query and are stored encrypted. When the Cookie expires, log in to your VolcEngine account again and paste the new Cookie here. Personal use only — do not share your credentials.'
+                                              'These credentials are only used for the Coding Plan usage query and are stored encrypted. Get your Access Key ID and Secret Access Key at https://console.volcengine.com/iam/keymanage. Personal use only — do not share your credentials.'
                                             )}
-                                          </AlertDescription>
-                                        </Alert>
+                                          </div>
+                                        </div>
+                                        <FormField
+                                          control={form.control}
+                                          name='volc_coding_plan_access_key_id'
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>
+                                                {t('Access Key ID')}
+                                              </FormLabel>
+                                              <FormControl>
+                                                <Input
+                                                  type='password'
+                                                  placeholder={t(
+                                                    'Leave blank to keep existing credential'
+                                                  )}
+                                                  autoComplete='off'
+                                                  {...field}
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                        <FormField
+                                          control={form.control}
+                                          name='volc_coding_plan_secret_access_key'
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>
+                                                {t('Secret Access Key')}
+                                              </FormLabel>
+                                              <FormControl>
+                                                <Input
+                                                  type='password'
+                                                  placeholder={t(
+                                                    'Leave blank to keep existing credential'
+                                                  )}
+                                                  autoComplete='off'
+                                                  {...field}
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
                                       </div>
-                                    )}
                                   </>
                                 )}
 

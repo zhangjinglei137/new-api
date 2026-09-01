@@ -133,11 +133,13 @@ type UsageWindowCardProps = {
 function UsageWindowCard(props: UsageWindowCardProps) {
   const { t } = useTranslation()
   const status = props.window.status?.trim()
-  // A non-ok status (e.g. rate_limited / paused) means the window has no
-  // meaningful usage numbers; treat the percentages as missing so the UI does
-  // not imply a healthy 0%.
+  // A non-ok status (e.g. rate_limited / paused) is surfaced as a badge on the
+  // card title, but it does not invalidate the usage numbers: the upstream
+  // still reports meaningful percentages (e.g. 100% used when rate limited).
+  // Only a missing value or the -1 sentinel should render "-" (clampPercent
+  // handles both).
   const isHealthy = !status || status === 'ok'
-  const usedPercent = isHealthy ? clampPercent(props.window.used_percent) : null
+  const usedPercent = clampPercent(props.window.used_percent)
   const usedVariant =
     usedPercent === null ? null : getUsedVariant(usedPercent)
   const resetsAt = formatResetsAt(props.window.reset_at)

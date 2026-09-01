@@ -119,8 +119,6 @@ export interface ChannelOtherSettings {
   endpoint_profile?: 'coding' | 'coding-intl' | string
   // VolcEngine Coding Plan usage query credentials (stored encrypted on the
   // backend, never returned to the frontend — type-only fields).
-  volc_coding_plan_csrf_token?: string
-  volc_coding_plan_cookie?: string
   volc_coding_plan_access_key_id?: string
   volc_coding_plan_secret_access_key?: string
 }

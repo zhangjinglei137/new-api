@@ -148,7 +148,7 @@ describe('OpenCodeGoUsageDialog', () => {
     expect(screen.getAllByText('-').length).toBeGreaterThan(0)
   })
 
-  test('shows a status badge and hides misleading percentages when status is not ok', () => {
+  test('shows the status badge and still displays real percentages when status is not ok', () => {
     renderDialog({
       success: true,
       data: {
@@ -156,7 +156,7 @@ describe('OpenCodeGoUsageDialog', () => {
           {
             period: 'session',
             status: 'rate_limited',
-            used_percent: 0,
+            used_percent: 100,
             remaining_percent: 0,
             reset_in_sec: 3811,
             reset_at: '2026-09-01T16:27:38.287Z',
@@ -167,7 +167,30 @@ describe('OpenCodeGoUsageDialog', () => {
 
     // The non-ok status is surfaced as a neutral badge on the card title.
     expect(screen.getByText('Status: rate_limited')).toBeInTheDocument()
-    // Percentages must not be presented as a healthy 0% — treated as missing.
+    // A rate-limited window still reports meaningful usage: 100% used is shown
+    // as a real number (big figure + Used row), not hidden behind "-".
+    expect(screen.getAllByText('100.00%')).toHaveLength(2)
+    expect(screen.queryByText('-')).not.toBeInTheDocument()
+  })
+
+  test('still shows a dash when a non-ok window has the -1 sentinel', () => {
+    renderDialog({
+      success: true,
+      data: {
+        windows: [
+          {
+            period: 'session',
+            status: 'rate_limited',
+            used_percent: -1,
+            remaining_percent: -1,
+            reset_in_sec: 3811,
+            reset_at: '2026-09-01T16:27:38.287Z',
+          },
+        ],
+      },
+    })
+
+    expect(screen.getByText('Status: rate_limited')).toBeInTheDocument()
     expect(screen.queryByText('0.00%')).not.toBeInTheDocument()
     expect(screen.getAllByText('-').length).toBeGreaterThan(0)
   })

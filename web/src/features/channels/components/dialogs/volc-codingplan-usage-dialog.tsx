@@ -202,20 +202,17 @@ function getUsageErrorCopy(
   message: string | undefined,
   t: (key: string) => string
 ): UsageErrorCopy {
-  if (errorCode === 'credentials_not_configured') {
+  // Credential failures now use AK/SK only: the backend already returns an
+  // accurate message ("OpenAPI Access Key / Secret Access Key ..."). Surface
+  // that message directly instead of overriding it with legacy CSRF/cookie
+  // copy. Other error codes keep the generic fallback with the message.
+  if (
+    errorCode === 'credentials_not_configured' ||
+    errorCode === 'credentials_expired'
+  ) {
     return {
       title: t('Usage credentials not configured'),
-      body: t(
-        'Configure the CSRF token and session cookie in the channel settings before querying usage.'
-      ),
-    }
-  }
-  if (errorCode === 'credentials_expired') {
-    return {
-      title: t('Session expired, please update Cookie and CSRF token'),
-      body: t(
-        'Re-login to your VolcEngine account and paste the fresh Cookie and CSRF token in the channel settings.'
-      ),
+      body: message?.trim() || t('Failed to fetch usage'),
     }
   }
   return {
