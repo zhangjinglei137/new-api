@@ -593,25 +593,23 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   return (
     <TooltipProvider>
       <div className='-ml-1.5 flex items-center gap-1'>
-        {!isOpenCodeGo && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <StatusBadge
-                  label={sensitiveVisible ? usedDisplay : SENSITIVE_MASK}
-                  variant='neutral'
-                  size='sm'
-                  copyable={false}
-                  showDot={false}
-                  className='cursor-help'
-                />
-              }
-            />
-            <TooltipContent>
-              <p>{sensitiveVisible ? usedLabel : maskedUsedLabel}</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <StatusBadge
+                label={sensitiveVisible ? usedDisplay : SENSITIVE_MASK}
+                variant='neutral'
+                size='sm'
+                copyable={false}
+                showDot={false}
+                className='cursor-help'
+              />
+            }
+          />
+          <TooltipContent>
+            <p>{sensitiveVisible ? usedLabel : maskedUsedLabel}</p>
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={
