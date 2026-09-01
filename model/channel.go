@@ -628,8 +628,8 @@ func (channel *Channel) UpdateBalance(balance float64) {
 // 且不复用 UpdateBalance(0)（那会连带覆盖 balance_updated_time）。
 func (channel *Channel) ResetBalanceAndUsedQuota() error {
 	err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(map[string]interface{}{
-		"balance":     0,
-		"used_quota":  0,
+		"balance":    0,
+		"used_quota": 0,
 	}).Error
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to reset balance and used quota: channel_id=%d, error=%v", channel.Id, err))
@@ -1167,7 +1167,7 @@ func (channel *Channel) MaskSensitiveOtherSettings() {
 		return
 	}
 	changed := false
-	for _, key := range []string{"volc_coding_plan_csrf_token", "volc_coding_plan_cookie", "opencode_auth_cookie", "commandcode_cookie", "sensenova_username", "sensenova_password"} {
+	for _, key := range []string{"volc_coding_plan_csrf_token", "volc_coding_plan_cookie", "volc_coding_plan_access_key_id", "volc_coding_plan_secret_access_key", "opencode_auth_cookie", "commandcode_cookie", "sensenova_username", "sensenova_password"} {
 		if _, ok := settings[key]; ok {
 			delete(settings, key)
 			changed = true

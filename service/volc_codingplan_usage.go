@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math"
@@ -16,6 +19,18 @@ import (
 // volcCodingPlanUsageURLFmt 火山方舟 Coding Plan 用量查询接口。
 // region 取值如 cn-beijing / ap-southeast。
 const volcCodingPlanUsageURLFmt = "https://console.volcengine.com/api/top/ark/%s/2024-01-01/GetCodingPlanUsage"
+
+// volcCodingPlanOpenAPIURLFmt 火山方舟 OpenAPI 通用端点（AK/SK V4 签名认证路径）。
+// Action/Region 通过 %s 填入，Version 固定为 2024-01-01。
+const volcCodingPlanOpenAPIURLFmt = "https://open.volcengineapi.com/?Action=%s&Region=%s&Version=2024-01-01"
+
+// 火山方舟 OpenAPI V4 签名固定参数（与 AWS SigV4 有致命差异：SignedHeaders
+// 不按字母序、SK 不加 "AWS4" 前缀，参考 cc-switch 生产实现）。
+const (
+	volcOpenAPIHost         = "open.volcengineapi.com"
+	volcOpenAPIContentType  = "application/json; charset=utf-8"
+	volcOpenAPISignedHeader = "host;x-date;x-content-sha256;content-type"
+)
 
 // RegionFromVolcBaseURL 将火山方舟渠道 base_url 映射为控制台 region。
 // 未知 base_url 返回 false，不做猜测。
@@ -226,6 +241,87 @@ func FetchVolcCodingPlanUsage(ctx context.Context, client *http.Client, region, 
 	req.Header.Set("Cookie", cookie)
 	req.Header.Set("Origin", "https://console.volcengine.com")
 	req.Header.Set("Referer", fmt.Sprintf("https://console.volcengine.com/ark/region:%s/subscription/coding-plan", region))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, err
+	}
+	return resp.StatusCode, body, nil
+}
+
+// signVolcOpenAPIV4 为火山方舟 OpenAPI（open.volcengineapi.com）请求生成 V4
+// 签名三件套 Authorization / X-Date / X-Content-Sha256。与 AWS SigV4 不同：
+// canonical headers 顺序固定（host/x-date/x-content-sha256/content-type，不按
+// 字母序）、SK 派生密钥不加 "AWS4" 前缀、算法串为 HMAC-SHA256。仅用于空 body
+// 的 POST 请求（x-content-sha256 为固定空哈希）。now 参数化便于测试。
+func signVolcOpenAPIV4(accessKeyID, secretAccessKey, region, action string, now time.Time) (authorization, xDate, xContentSha256 string) {
+	xDate = now.UTC().Format("20060102T150405Z")
+	shortDate := now.UTC().Format("20060102")
+	emptyBodyHash := sha256.Sum256(nil)
+	xContentSha256 = hex.EncodeToString(emptyBodyHash[:])
+
+	canonicalQuery := "Action=" + action + "&Region=" + region + "&Version=2024-01-01"
+	canonicalHeaders := "host:" + volcOpenAPIHost +
+		"\nx-date:" + xDate +
+		"\nx-content-sha256:" + xContentSha256 +
+		"\ncontent-type:" + volcOpenAPIContentType + "\n"
+	canonicalRequest := "POST\n/\n" + canonicalQuery + "\n" + canonicalHeaders + "\n" +
+		volcOpenAPISignedHeader + "\n" + xContentSha256
+	canonicalHash := sha256.Sum256([]byte(canonicalRequest))
+	scope := shortDate + "/" + region + "/ark/request"
+	stringToSign := "HMAC-SHA256\n" + xDate + "\n" + scope + "\n" + hex.EncodeToString(canonicalHash[:])
+
+	sign := func(key []byte, value string) []byte {
+		mac := hmac.New(sha256.New, key)
+		_, _ = mac.Write([]byte(value))
+		return mac.Sum(nil)
+	}
+	signingKey := sign(sign(sign([]byte(secretAccessKey), shortDate), region), "ark")
+	signingKey = sign(signingKey, "request")
+	signature := hex.EncodeToString(sign(signingKey, stringToSign))
+
+	authorization = "HMAC-SHA256 Credential=" + accessKeyID + "/" + scope +
+		", SignedHeaders=" + volcOpenAPISignedHeader + ", Signature=" + signature
+	return authorization, xDate, xContentSha256
+}
+
+// FetchVolcCodingPlanUsageByAkSk 通过火山方舟 OpenAPI（AK/SK V4 签名认证）查询
+// Coding Plan 用量。入参非空校验；POST 空 body，请求响应 body 原样返回。
+func FetchVolcCodingPlanUsageByAkSk(ctx context.Context, client *http.Client, region, accessKeyID, secretAccessKey string) (statusCode int, body []byte, err error) {
+	if client == nil {
+		return 0, nil, fmt.Errorf("nil http client")
+	}
+	region = strings.TrimSpace(region)
+	accessKeyID = strings.TrimSpace(accessKeyID)
+	secretAccessKey = strings.TrimSpace(secretAccessKey)
+	if region == "" {
+		return 0, nil, fmt.Errorf("empty region")
+	}
+	if accessKeyID == "" {
+		return 0, nil, fmt.Errorf("empty access key id")
+	}
+	if secretAccessKey == "" {
+		return 0, nil, fmt.Errorf("empty secret access key")
+	}
+
+	action := "GetCodingPlanUsage"
+	// 先签名后构造请求，避免签名时引入额外动态字段。
+	authorization, xDate, xContentSha256 := signVolcOpenAPIV4(accessKeyID, secretAccessKey, region, action, time.Now())
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf(volcCodingPlanOpenAPIURLFmt, action, region), nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Authorization", authorization)
+	req.Header.Set("X-Date", xDate)
+	req.Header.Set("X-Content-Sha256", xContentSha256)
+	req.Header.Set("Content-Type", volcOpenAPIContentType)
 
 	resp, err := client.Do(req)
 	if err != nil {

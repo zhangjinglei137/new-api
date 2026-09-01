@@ -160,6 +160,13 @@ type ChannelOtherSettings struct {
 	VolcCodingPlanCsrfToken string `json:"volc_coding_plan_csrf_token,omitempty"`
 	// VolcCodingPlanCookie 为 AES-GCM 加密后的火山方舟 Coding Plan 控制台整段 Cookie。
 	VolcCodingPlanCookie string `json:"volc_coding_plan_cookie,omitempty"`
+	// VolcCodingPlanAccessKeyId 为 AES-GCM 加密后的火山方舟 Coding Plan OpenAPI
+	// Access Key ID（AK）。AK 明文可读但统一走加密路径（与 sensenova_username
+	// 一致掩码处理，避免任何明文外泄）。
+	VolcCodingPlanAccessKeyId string `json:"volc_coding_plan_access_key_id,omitempty"`
+	// VolcCodingPlanSecretAccessKey 为 AES-GCM 加密后的火山方舟 Coding Plan
+	// OpenAPI Secret Access Key（SK）。SK 必须只存密文，绝不明文入库。
+	VolcCodingPlanSecretAccessKey string `json:"volc_coding_plan_secret_access_key,omitempty"`
 }
 
 // ResolveProxy returns the proxy URL to use for the given model.
