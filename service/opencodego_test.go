@@ -1,9 +1,11 @@
 package service
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -239,69 +241,80 @@ func TestParseOpenCodeGoBalancePage(t *testing.T) {
 	})
 }
 
-func TestParseOpenCodeGoUsagePage(t *testing.T) {
+func TestParseOpenCodeGoUsage(t *testing.T) {
+	futureReset := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
 	tests := []struct {
 		name            string
-		html            string
+		body            string
 		wantWindows     []OpenCodeGoWindow
 		wantErrContains string
 	}{
 		{
-			name: "current page returns three windows in fixed order",
-			html: openCodeGoBalancePageFixture,
+			name: "three windows in fixed order",
+			body: fmt.Sprintf(`{"usage":{"rolling":{"status":"ok","percent":4,"resetsAt":%q},"weekly":{"status":"ok","percent":3,"resetsAt":%q},"monthly":{"status":"ok","percent":1,"resetsAt":%q}}}`, futureReset, futureReset, futureReset),
 			wantWindows: []OpenCodeGoWindow{
-				{Period: "session", UsedPercent: 23.6, RemainingPercent: 76.4, ResetInSec: 3811},
-				{Period: "weekly", UsedPercent: 81.2, RemainingPercent: 18.8, ResetInSec: 397146},
-				{Period: "monthly", UsedPercent: 65.8, RemainingPercent: 34.2, ResetInSec: 1615573},
-			},
-		},
-		{
-			name: "legacy page returns single monthly window",
-			html: openCodeGoLegacyBalancePageFixture,
-			wantWindows: []OpenCodeGoWindow{
-				{Period: "monthly", UsedPercent: 40, RemainingPercent: 60, ResetInSec: 86400},
-			},
-		},
-		{
-			name: "page order does not change returned window order",
-			html: `{monthlyUsage:$R[5]={status:"ok",resetInSec:1,usagePercent:10},weeklyUsage:$R[4]={status:"ok",resetInSec:2,usagePercent:20},rollingUsage:$R[3]={status:"ok",resetInSec:3,usagePercent:30}};`,
-			wantWindows: []OpenCodeGoWindow{
-				{Period: "session", UsedPercent: 30, RemainingPercent: 70, ResetInSec: 3},
-				{Period: "weekly", UsedPercent: 20, RemainingPercent: 80, ResetInSec: 2},
-				{Period: "monthly", UsedPercent: 10, RemainingPercent: 90, ResetInSec: 1},
+				{Period: "session", Status: "ok", UsedPercent: 4, RemainingPercent: 96, ResetAt: futureReset},
+				{Period: "weekly", Status: "ok", UsedPercent: 3, RemainingPercent: 97, ResetAt: futureReset},
+				{Period: "monthly", Status: "ok", UsedPercent: 1, RemainingPercent: 99, ResetAt: futureReset},
 			},
 		},
 		{
 			name: "missing weekly window still returns others",
-			html: `{rollingUsage:$R[0]={status:"ok",resetInSec:100,usagePercent:50}};{monthlyUsage:$R[1]={status:"ok",resetInSec:200,usagePercent:70}};`,
+			body: fmt.Sprintf(`{"usage":{"rolling":{"status":"ok","percent":50,"resetsAt":%q},"monthly":{"status":"ok","percent":70,"resetsAt":%q}}}`, futureReset, futureReset),
 			wantWindows: []OpenCodeGoWindow{
-				{Period: "session", UsedPercent: 50, RemainingPercent: 50, ResetInSec: 100},
-				{Period: "monthly", UsedPercent: 70, RemainingPercent: 30, ResetInSec: 200},
+				{Period: "session", Status: "ok", UsedPercent: 50, RemainingPercent: 50, ResetAt: futureReset},
+				{Period: "monthly", Status: "ok", UsedPercent: 70, RemainingPercent: 30, ResetAt: futureReset},
 			},
 		},
 		{
-			name: "usage percent clamped to 100",
-			html: `{monthlyUsage:$R[0]={status:"ok",resetInSec:1615573,usagePercent:123.7}};`,
+			name: "non-ok status still returned with valid percent",
+			body: fmt.Sprintf(`{"usage":{"weekly":{"status":"degraded","percent":80,"resetsAt":%q}}}`, futureReset),
 			wantWindows: []OpenCodeGoWindow{
-				{Period: "monthly", UsedPercent: 100, RemainingPercent: 0, ResetInSec: 1615573},
+				{Period: "weekly", Status: "degraded", UsedPercent: 80, RemainingPercent: 20, ResetAt: futureReset},
 			},
 		},
 		{
-			name: "usage percent clamped to 0",
-			html: `{monthlyUsage:$R[0]={status:"ok",resetInSec:123,usagePercent:-5.2}};`,
+			name: "non-numeric percent uses -1 sentinel",
+			body: fmt.Sprintf(`{"usage":{"monthly":{"status":"ok","percent":"abc","resetsAt":%q}}}`, futureReset),
 			wantWindows: []OpenCodeGoWindow{
-				{Period: "monthly", UsedPercent: 0, RemainingPercent: 100, ResetInSec: 123},
+				{Period: "monthly", Status: "ok", UsedPercent: -1, RemainingPercent: -1, ResetAt: futureReset},
 			},
 		},
 		{
-			name:            "missing usage data",
-			html:            "<html>no usage data</html>",
-			wantErrContains: "无法从 opencode 页面解析用量数据",
+			name: "missing percent uses -1 sentinel",
+			body: `{"usage":{"monthly":{"status":"ok","resetsAt":"2026-09-13T06:06:01.287Z"}}}`,
+			wantWindows: []OpenCodeGoWindow{
+				{Period: "monthly", Status: "ok", UsedPercent: -1, RemainingPercent: -1, ResetAt: "2026-09-13T06:06:01.287Z"},
+			},
+		},
+		{
+			name: "percent clamped to 100",
+			body: fmt.Sprintf(`{"usage":{"weekly":{"status":"ok","percent":123.7,"resetsAt":%q}}}`, futureReset),
+			wantWindows: []OpenCodeGoWindow{
+				{Period: "weekly", Status: "ok", UsedPercent: 100, RemainingPercent: 0, ResetAt: futureReset},
+			},
+		},
+		{
+			name: "alias fallback for window key and field names",
+			body: fmt.Sprintf(`{"usage":{"rolling_usage":{"status":"ok","usage_percent":12,"reset_at":%q}}}`, futureReset),
+			wantWindows: []OpenCodeGoWindow{
+				{Period: "session", Status: "ok", UsedPercent: 12, RemainingPercent: 88, ResetAt: futureReset},
+			},
+		},
+		{
+			name:            "no windows errors",
+			body:            `{"usage":{}}`,
+			wantErrContains: "未返回任何用量窗口",
+		},
+		{
+			name:            "invalid json errors",
+			body:            `{not json`,
+			wantErrContains: "无法解析 opencode usage api 响应",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info, err := parseOpenCodeGoUsagePage(tt.html)
+			info, err := parseOpenCodeGoUsage([]byte(tt.body))
 			if tt.wantErrContains != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErrContains)
@@ -312,9 +325,16 @@ func TestParseOpenCodeGoUsagePage(t *testing.T) {
 			for i, want := range tt.wantWindows {
 				got := info.Windows[i]
 				assert.Equal(t, want.Period, got.Period, "window %d period", i)
+				assert.Equal(t, want.Status, got.Status, "window %d status", i)
 				assert.InDelta(t, want.UsedPercent, got.UsedPercent, 1e-9, "window %d used", i)
 				assert.InDelta(t, want.RemainingPercent, got.RemainingPercent, 1e-9, "window %d remaining", i)
-				assert.Equal(t, want.ResetInSec, got.ResetInSec, "window %d reset", i)
+				assert.Equal(t, want.ResetAt, got.ResetAt, "window %d reset_at", i)
+				if want.ResetAt != "" {
+					// resetInSec 应约等于 now 到 resetAt 的剩余秒数（宽松断言避免 flaky）
+					resetAt, err := time.Parse(time.RFC3339, want.ResetAt)
+					require.NoError(t, err, "window %d reset_at parse", i)
+					assert.InDelta(t, resetAt.Unix()-time.Now().Unix(), got.ResetInSec, 5, "window %d reset_in_sec", i)
+				}
 			}
 		})
 	}

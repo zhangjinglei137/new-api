@@ -46,12 +46,12 @@ func TestGetOpenCodeGoUsageRejectsNonOpenCodeGoChannel(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), `"channel type is not OpenCodeGo"`)
 }
 
-func TestGetOpenCodeGoUsageRejectsMissingCredentials(t *testing.T) {
+func TestGetOpenCodeGoUsageRejectsMissingKey(t *testing.T) {
 	setupOpenCodeGoUsageControllerTest(t)
-	channel := model.Channel{Type: constant.ChannelTypeOpenCodeGo, Status: common.ChannelStatusEnabled, Name: "opencode-go", Key: "k", Models: "gpt-5.6-luna", Group: "default"}
+	channel := model.Channel{Type: constant.ChannelTypeOpenCodeGo, Status: common.ChannelStatusEnabled, Name: "opencode-go", Key: "", Models: "gpt-5.6-luna", Group: "default"}
 	require.NoError(t, channel.Insert())
 
 	recorder := callGetOpenCodeGoUsage(t, channel.Id)
 	assert.Contains(t, recorder.Body.String(), `"success":false`)
-	assert.Contains(t, recorder.Body.String(), `"opencode workspace id / cookie 未配置"`)
+	assert.Contains(t, recorder.Body.String(), `"opencode api key 未配置"`)
 }

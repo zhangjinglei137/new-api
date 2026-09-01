@@ -15,8 +15,8 @@ import (
 )
 
 // GetOpenCodeGoUsage 返回 opencode 渠道的用量信息（按时间窗口：
-// 5 小时 / 每周 / 每月，各含已用%/剩余%/重置倒计时）。
-// 响应绝不含 cookie 等敏感凭证。
+// session / 每周 / 每月，各含已用%/剩余%/重置时刻）。
+// 仅依赖渠道 API Key 调用官方 usage API，响应绝不含 cookie 等敏感凭证。
 func GetOpenCodeGoUsage(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -36,9 +36,9 @@ func GetOpenCodeGoUsage(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "channel type is not OpenCodeGo"})
 		return
 	}
-	settings := ch.GetOtherSettings()
-	if strings.TrimSpace(settings.OpenCodeWorkspaceId) == "" || strings.TrimSpace(settings.OpenCodeAuthCookie) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "opencode workspace id / cookie 未配置"})
+	keys := ch.GetKeys()
+	if len(keys) == 0 || strings.TrimSpace(keys[0]) == "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "opencode api key 未配置"})
 		return
 	}
 	info, err := service.FetchOpenCodeGoUsage(ch)
@@ -51,9 +51,11 @@ func GetOpenCodeGoUsage(c *gin.Context) {
 	for _, w := range info.Windows {
 		windows = append(windows, gin.H{
 			"period":            w.Period,
+			"status":            w.Status,
 			"used_percent":      w.UsedPercent,
 			"remaining_percent": w.RemainingPercent,
 			"reset_in_sec":      w.ResetInSec,
+			"reset_at":          w.ResetAt,
 		})
 	}
 	common.ApiSuccess(c, gin.H{"windows": windows})
