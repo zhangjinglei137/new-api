@@ -372,6 +372,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding'
   const isOpenCodeGo = channel.type === CHANNEL_TYPE_OPENCODE_GO
 
+  const isUsageDialogType = isCodex || isVolcCodingPlan || isOpenCodeGo
+
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const balanceFormatOptions = {
     digitsLarge: 2,
@@ -568,10 +570,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   let remainingBadgeLabel = sensitiveVisible ? remainingDisplay : SENSITIVE_MASK
   if (sensitiveVisible && isUpdating) {
     remainingBadgeLabel = t('Updating...')
-  } else if (sensitiveVisible && isCodex) {
-    remainingBadgeLabel = t('Account Info')
-  } else if (sensitiveVisible && isVolcCodingPlan) {
-    remainingBadgeLabel = t('Coding Plan')
+  } else if (sensitiveVisible && isUsageDialogType) {
+    remainingBadgeLabel = isCodex ? t('Account Info') : t('Coding Plan')
   }
   let remainingTooltipLabel = remainingLabel
   if (!sensitiveVisible) {
@@ -584,34 +584,34 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     remainingTooltipLabel = t('Click to view OpenCode Go usage')
   }
   let remainingBadgeVariant: StatusBadgeProps['variant'] = variant
-  if (isCodex || isVolcCodingPlan) {
+  if (isUsageDialogType) {
     remainingBadgeVariant = 'info'
   } else if (isUpdating) {
     remainingBadgeVariant = 'neutral'
   }
 
-  const isUsageDialogType = isCodex || isVolcCodingPlan || isOpenCodeGo
-
   return (
     <TooltipProvider>
       <div className='-ml-1.5 flex items-center gap-1'>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <StatusBadge
-                label={sensitiveVisible ? usedDisplay : SENSITIVE_MASK}
-                variant='neutral'
-                size='sm'
-                copyable={false}
-                showDot={false}
-                className='cursor-help'
-              />
-            }
-          />
-          <TooltipContent>
-            <p>{sensitiveVisible ? usedLabel : maskedUsedLabel}</p>
-          </TooltipContent>
-        </Tooltip>
+        {!isOpenCodeGo && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <StatusBadge
+                  label={sensitiveVisible ? usedDisplay : SENSITIVE_MASK}
+                  variant='neutral'
+                  size='sm'
+                  copyable={false}
+                  showDot={false}
+                  className='cursor-help'
+                />
+              }
+            />
+            <TooltipContent>
+              <p>{sensitiveVisible ? usedLabel : maskedUsedLabel}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={
