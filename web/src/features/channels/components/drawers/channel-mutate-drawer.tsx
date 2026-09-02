@@ -1626,6 +1626,7 @@ export function ChannelMutateDrawer({
       advanced_custom: form.getValues('advanced_custom'),
       header_override: form.getValues('header_override'),
       proxy: form.getValues('proxy'),
+      endpoint_profile: form.getValues('endpoint_profile'),
     })
     if (response.success && response.data) {
       return response.data

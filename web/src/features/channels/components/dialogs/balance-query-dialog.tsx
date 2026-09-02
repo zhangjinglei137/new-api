@@ -33,7 +33,7 @@ import { IconBadge } from '@/components/ui/icon-badge'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatTimestampToDate } from '@/lib/format'
 
-import { getCodexUsage, getOpenCodeGoUsage, getVolcCodingPlanUsage, updateChannelBalance } from '../../api'
+import { getCodexUsage, getMoonshotCodingPlanUsage, getOpenCodeGoUsage, getVolcCodingPlanUsage, updateChannelBalance } from '../../api'
 import { channelsQueryKeys, parseChannelOtherSettings } from '../../lib'
 import { useChannels } from '../channels-provider'
 import {
@@ -44,6 +44,10 @@ import {
   OpenCodeGoUsageDialog,
   type OpenCodeGoUsageResponse,
 } from './opencode-usage-dialog'
+import {
+  MoonshotCodingPlanUsageDialog,
+  type MoonshotCodingPlanUsageResponse,
+} from './moonshot-codingplan-usage-dialog'
 import {
   VolcCodingPlanUsageDialog,
   type VolcCodingPlanUsageResponse,
@@ -71,12 +75,17 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
     useState<CodexUsageDialogData | null>(null)
   const [volcCodingPlanUsageResponse, setVolcCodingPlanUsageResponse] =
     useState<VolcCodingPlanUsageResponse | null>(null)
+  const [moonshotCodingPlanUsageResponse, setMoonshotCodingPlanUsageResponse] =
+    useState<MoonshotCodingPlanUsageResponse | null>(null)
   const [openCodeGoUsageResponse, setOpenCodeGoUsageResponse] =
     useState<OpenCodeGoUsageResponse | null>(null)
 
   const isCodex = currentRow?.type === 57
   const isVolcCodingPlan =
     currentRow?.type === 45 &&
+    parseChannelOtherSettings(currentRow.settings).endpoint_profile === 'coding'
+  const isMoonshotCodingPlan =
+    currentRow?.type === 25 &&
     parseChannelOtherSettings(currentRow.settings).endpoint_profile === 'coding'
   const isOpenCodeGo = currentRow?.type === 99
 
@@ -118,6 +127,25 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
     }
   }
 
+  const handleQueryMoonshotCodingPlanUsage = async () => {
+    const row = currentRow
+    if (!row) return
+    setIsQuerying(true)
+    try {
+      const res = await getMoonshotCodingPlanUsage(row.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setMoonshotCodingPlanUsageResponse(res)
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsQuerying(false)
+    }
+  }
+
   const handleQueryOpenCodeGoUsage = async () => {
     const row = currentRow
     if (!row) return
@@ -143,11 +171,13 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
       handleQueryCodexUsage()
     } else if (isVolcCodingPlan) {
       handleQueryVolcCodingPlanUsage()
+    } else if (isMoonshotCodingPlan) {
+      handleQueryMoonshotCodingPlanUsage()
     } else if (isOpenCodeGo) {
       handleQueryOpenCodeGoUsage()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.open, isCodex, isVolcCodingPlan, isOpenCodeGo])
+  }, [props.open, isCodex, isVolcCodingPlan, isMoonshotCodingPlan, isOpenCodeGo])
 
   if (!currentRow) return null
 
@@ -195,6 +225,7 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
     setRawResponse(null)
     setCodexUsageResponse(null)
     setVolcCodingPlanUsageResponse(null)
+    setMoonshotCodingPlanUsageResponse(null)
     setOpenCodeGoUsageResponse(null)
     props.onOpenChange(false)
   }
@@ -238,6 +269,22 @@ export function BalanceQueryDialog(props: BalanceQueryDialogProps) {
         channelId={currentRow.id}
         response={volcCodingPlanUsageResponse}
         onRefresh={handleQueryVolcCodingPlanUsage}
+        isRefreshing={isQuerying}
+      />
+    )
+  }
+
+  if (isMoonshotCodingPlan) {
+    return (
+      <MoonshotCodingPlanUsageDialog
+        open={props.open}
+        onOpenChange={(v) => {
+          if (!v) handleClose()
+        }}
+        channelName={currentRow.name}
+        channelId={currentRow.id}
+        response={moonshotCodingPlanUsageResponse}
+        onRefresh={handleQueryMoonshotCodingPlanUsage}
         isRefreshing={isQuerying}
       />
     )

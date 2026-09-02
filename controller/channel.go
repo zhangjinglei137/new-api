@@ -1301,13 +1301,14 @@ func equalStringPtr(a, b *string) bool {
 }
 
 type fetchModelsRequest struct {
-	ChannelID      int     `json:"channel_id"`
-	BaseURL        *string `json:"base_url"`
-	Type           int     `json:"type"`
-	Key            string  `json:"key"`
-	AdvancedCustom *string `json:"advanced_custom"`
-	HeaderOverride *string `json:"header_override"`
-	Proxy          *string `json:"proxy"`
+	ChannelID       int     `json:"channel_id"`
+	BaseURL         *string `json:"base_url"`
+	Type            int     `json:"type"`
+	Key             string  `json:"key"`
+	AdvancedCustom  *string `json:"advanced_custom"`
+	HeaderOverride  *string `json:"header_override"`
+	Proxy           *string `json:"proxy"`
+	EndpointProfile *string `json:"endpoint_profile"`
 }
 
 func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Channel, error) {
@@ -1434,6 +1435,11 @@ func FetchModels(c *gin.Context) {
 			Type:    req.Type,
 			Key:     key,
 			BaseURL: &baseURL,
+		}
+		if req.EndpointProfile != nil && *req.EndpointProfile != "" {
+			settings := channel.GetOtherSettings()
+			settings.EndpointProfile = *req.EndpointProfile
+			channel.SetOtherSettings(settings)
 		}
 	}
 

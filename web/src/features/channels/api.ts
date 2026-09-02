@@ -438,6 +438,41 @@ export async function getVolcCodingPlanUsage(
   return res.data
 }
 
+// ============================================================================
+// Moonshot (type 25) Coding Plan Usage Operations
+// ============================================================================
+
+export type MoonshotCodingPlanWindow = {
+  period: 'session' | 'weekly'
+  used_percent?: number
+  remaining_percent?: number
+  reset_at?: string | null
+  reset_in_sec?: number
+}
+
+export type MoonshotCodingPlanUsageData = {
+  status?: string
+  windows?: MoonshotCodingPlanWindow[]
+}
+
+export type MoonshotCodingPlanUsageResponse = {
+  success: boolean
+  message?: string
+  upstream_status?: number
+  error_code?: string
+  data?: MoonshotCodingPlanUsageData
+}
+
+export async function getMoonshotCodingPlanUsage(
+  channelId: number
+): Promise<MoonshotCodingPlanUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/moonshot/codingplan/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
 export async function getOpenCodeGoUsage(
   channelId: number
 ): Promise<OpenCodeGoUsageResponse> {
@@ -703,6 +738,7 @@ export async function fetchModels(data: {
   advanced_custom?: string
   header_override?: string
   proxy?: string
+  endpoint_profile?: string
 }): Promise<FetchModelsResponse> {
   const res = await api.post(
     '/api/channel/fetch_models',

@@ -66,6 +66,7 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/:id/codex/usage/reset-credits", permission: authz.ChannelRead, handler: controller.GetCodexChannelRateLimitResetCredits},
 	{method: http.MethodPost, path: "/:id/codex/usage/reset", permission: authz.ChannelOperate, handler: controller.ResetCodexChannelUsage},
 	{method: http.MethodGet, path: "/:id/volc/codingplan/usage", permission: authz.ChannelRead, handler: controller.GetVolcCodingPlanUsage},
+	{method: http.MethodGet, path: "/:id/moonshot/codingplan/usage", permission: authz.ChannelRead, handler: controller.GetMoonshotCodingPlanUsage},
 	{method: http.MethodGet, path: "/:id/opencode/usage", permission: authz.ChannelRead, handler: controller.GetOpenCodeGoUsage},
 	{method: http.MethodGet, path: "/:id/commandcode/usage", permission: authz.ChannelRead, handler: controller.GetCommandCodeUsage},
 	{method: http.MethodGet, path: "/:id/sensenova/usage", permission: authz.ChannelRead, handler: controller.GetSenseNovaUsage},
