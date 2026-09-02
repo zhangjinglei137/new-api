@@ -45,7 +45,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.RelayMode == constant.RelayModeEmbeddings {
 		return "", errors.New("radeoncloud 不支持 embeddings 模式")
 	}
-	return fmt.Sprintf("%s/api/v1/chat/completions", info.ChannelBaseUrl), nil
+	return fmt.Sprintf("%s/api/v1/chat/completions", NormalizeBaseURL(info.ChannelBaseUrl)), nil
 }
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error {

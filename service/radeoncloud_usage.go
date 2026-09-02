@@ -65,7 +65,10 @@ func FetchRadeonCloudUsage(channel *model.Channel) (*RadeonCloudUsageInfo, error
 	if baseURL == "" {
 		baseURL = constant.GetChannelBaseURL(constant.ChannelTypeRadeonCloud)
 	}
-	usageURL := fmt.Sprintf("%s/api/v1/usage", strings.TrimRight(baseURL, "/"))
+	// 兼容渠道配置的 Base URL 带或不带 "/api" 前缀两种写法，
+	// 避免拼接出 "/api/api/v1/usage" 的错误路径。
+	base := strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/api")
+	usageURL := fmt.Sprintf("%s/api/v1/usage", base)
 
 	client, err := GetHttpClientWithProxy(channel.GetSetting().Proxy)
 	if err != nil {

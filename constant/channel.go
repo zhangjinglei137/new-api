@@ -236,7 +236,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSub2API:        "Sub2API",
 	ChannelTypeNewAPI:         "New API",
 	ChannelTypeTaskPlugin:     "Task Plugin",
-	ChannelTypeRadeonCloud:    "RadeonCloud",
+	ChannelTypeRadeonCloud:    "AMD Radeon Cloud",
 	ChannelTypeSenseNova:      "SenseNova",
 	ChannelTypeCommandCode:    "CommandCode",
 	ChannelTypeOpenCodeGo:     "OpenCode Go",

@@ -197,6 +197,27 @@ func TestFetchRadeonCloudUsageSuccess(t *testing.T) {
 	assert.Equal(t, 17, info.TodayRequests)
 }
 
+func TestFetchRadeonCloudUsageWithAPISuffixBaseURL(t *testing.T) {
+	// 用户可能在渠道里把 Base URL 配成 ".../radeon/api"（带 /api 后缀），
+	// 归一化后请求必须打到 ".../radeon/api/v1/usage" 而不是 "/api/api/v1/usage"。
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/usage", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(radeonTestStandardBody(t, time.Now().Add(3*time.Hour).Unix())))
+	}))
+	defer server.Close()
+
+	baseURL := server.URL + "/api"
+	ch := &model.Channel{
+		Type:    constant.ChannelTypeRadeonCloud,
+		Key:     "test-key",
+		BaseURL: &baseURL,
+	}
+	info, err := FetchRadeonCloudUsage(ch)
+	require.NoError(t, err)
+	assert.Equal(t, 20, info.RpmLimit)
+}
+
 func TestFetchRadeonCloudUsageUnauthorized(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

@@ -89,7 +89,7 @@ export const CHANNEL_TYPES = {
   59: 'Sub2API',
   60: 'New API',
   61: 'Task Plugin',
-  95: 'RadeonCloud',
+  95: 'AMD Radeon Cloud',
   97: 'SenseNova',
   98: 'CommandCode',
   99: 'OpenCode Go',

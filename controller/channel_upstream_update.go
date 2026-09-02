@@ -436,7 +436,9 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 			url = fmt.Sprintf("%s/v1/models", baseURL)
 		}
 	case constant.ChannelTypeRadeonCloud:
-		url = fmt.Sprintf("%s/api/v1/models", baseURL)
+		// 兼容渠道配置的 Base URL 带或不带 "/api" 前缀两种写法
+		normalized := strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/api")
+		url = fmt.Sprintf("%s/api/v1/models", normalized)
 	default:
 		url = fmt.Sprintf("%s/v1/models", baseURL)
 	}
