@@ -58,6 +58,7 @@ import { truncateText } from '@/lib/utils'
 import {
   getCodexUsage,
   getCommandCodeUsage,
+  getMoonshotCodingPlanUsage,
   getOpenCodeGoUsage,
   getSenseNovaUsage,
   getVolcCodingPlanUsage,
@@ -109,6 +110,10 @@ import {
   OpenCodeGoUsageDialog,
   type OpenCodeGoUsageResponse,
 } from './dialogs/opencode-usage-dialog'
+import {
+  MoonshotCodingPlanUsageDialog,
+  type MoonshotCodingPlanUsageResponse,
+} from './dialogs/moonshot-codingplan-usage-dialog'
 import {
   VolcCodingPlanUsageDialog,
   type VolcCodingPlanUsageResponse,
@@ -384,6 +389,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const [senseNovaUsageOpen, setSenseNovaUsageOpen] = useState(false)
   const [senseNovaUsageResponse, setSenseNovaUsageResponse] =
     useState<SenseNovaUsageResponse | null>(null)
+  const [moonshotCodingPlanUsageOpen, setMoonshotCodingPlanUsageOpen] =
+    useState(false)
+  const [moonshotCodingPlanUsageResponse, setMoonshotCodingPlanUsageResponse] =
+    useState<MoonshotCodingPlanUsageResponse | null>(null)
   const currencyLabel = getCurrencyLabel()
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
@@ -396,9 +405,17 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const isOpenCodeGo = channel.type === CHANNEL_TYPE_OPENCODE_GO
   const isCommandCode = channel.type === CHANNEL_TYPE_COMMANDCODE
   const isSenseNova = channel.type === CHANNEL_TYPE_SENSENOVA
+  const isMoonshotCodingPlan =
+    channel.type === 25 &&
+    parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding'
 
   const isUsageDialogType =
-    isCodex || isVolcCodingPlan || isOpenCodeGo || isCommandCode || isSenseNova
+    isCodex ||
+    isVolcCodingPlan ||
+    isOpenCodeGo ||
+    isCommandCode ||
+    isSenseNova ||
+    isMoonshotCodingPlan
 
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const balanceFormatOptions = {
@@ -588,6 +605,29 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
   }
 
+  const fetchMoonshotCodingPlanUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getMoonshotCodingPlanUsage(channel.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setMoonshotCodingPlanUsageResponse(res)
+      if (openDialog) {
+        setMoonshotCodingPlanUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleClickUpdate = async () => {
     if (isCodex) {
       await fetchCodexUsage()
@@ -607,6 +647,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
     if (isSenseNova) {
       await fetchSenseNovaUsage()
+      return
+    }
+    if (isMoonshotCodingPlan) {
+      await fetchMoonshotCodingPlanUsage()
       return
     }
 
@@ -663,6 +707,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     remainingTooltipLabel = t('Click to view Command Code usage')
   } else if (isSenseNova) {
     remainingTooltipLabel = t('Click to view SenseNova usage')
+  } else if (isMoonshotCodingPlan) {
+    remainingTooltipLabel = t('Click to view Coding Plan usage')
   }
   let remainingBadgeVariant: StatusBadgeProps['variant'] = variant
   if (isUsageDialogType) {
@@ -757,6 +803,15 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelId={channel.id}
         response={senseNovaUsageResponse}
         onRefresh={() => fetchSenseNovaUsage(false)}
+        isRefreshing={isUpdating}
+      />
+      <MoonshotCodingPlanUsageDialog
+        open={moonshotCodingPlanUsageOpen}
+        onOpenChange={setMoonshotCodingPlanUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        response={moonshotCodingPlanUsageResponse}
+        onRefresh={() => fetchMoonshotCodingPlanUsage(false)}
         isRefreshing={isUpdating}
       />
       {rawBalanceResponse !== null && (
