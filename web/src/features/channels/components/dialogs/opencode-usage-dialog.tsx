@@ -34,7 +34,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { Progress, ProgressIndicator } from '@/components/ui/progress'
+import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import dayjs from '@/lib/dayjs'
 import { formatDateTimeStr } from '@/lib/format'
@@ -175,13 +175,10 @@ function UsageWindowCard(props: UsageWindowCardProps) {
             value={usedPercent}
             aria-label={`${props.title}: ${formatPercent(usedPercent)}%`}
             className='mt-3'
-          >
-            <ProgressIndicator
-              className={
-                usedVariant ? usedVariantProgressClass[usedVariant] : undefined
-              }
-            />
-          </Progress>
+            indicatorClassName={
+              usedVariant ? usedVariantProgressClass[usedVariant] : undefined
+            }
+          />
         ) : (
           <div className='text-muted-foreground mt-3 text-sm'>-</div>
         )}

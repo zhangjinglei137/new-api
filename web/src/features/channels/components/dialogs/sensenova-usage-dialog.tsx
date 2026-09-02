@@ -43,7 +43,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { Progress, ProgressIndicator } from '@/components/ui/progress'
+import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import dayjs from '@/lib/dayjs'
 import { formatDateTimeStr } from '@/lib/format'
@@ -185,9 +185,8 @@ function UsageWindowCard(props: {
             value={usedPercent}
             aria-label={`${props.title}: ${remainingPercent?.toFixed(1)}% ${t('remaining')}`}
             className='mt-3'
-          >
-            <ProgressIndicator className={getUsedColor(remainingPercent)} />
-          </Progress>
+            indicatorClassName={getUsedColor(remainingPercent)}
+          />
         )}
         <div className='text-muted-foreground mt-2 flex items-center justify-between text-[11px]'>
           <span>{t('Remaining available')}</span>

@@ -40,7 +40,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { Progress, ProgressIndicator } from '@/components/ui/progress'
+import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import dayjs from '@/lib/dayjs'
 import { formatDateTimeStr, formatNumber } from '@/lib/format'
@@ -349,15 +349,12 @@ export function RadeonCloudUsageDialog(
                       value={usedPercent}
                       aria-label={`${t('Today Used')}: ${formatPercent(usedPercent)}%`}
                       className='h-2'
-                    >
-                      <ProgressIndicator
-                        className={
-                          usedVariant
-                            ? usedVariantProgressClass[usedVariant]
-                            : undefined
-                        }
-                      />
-                    </Progress>
+                      indicatorClassName={
+                        usedVariant
+                          ? usedVariantProgressClass[usedVariant]
+                          : undefined
+                      }
+                    />
                   ) : (
                     <div className='text-muted-foreground text-sm'>-</div>
                   )}

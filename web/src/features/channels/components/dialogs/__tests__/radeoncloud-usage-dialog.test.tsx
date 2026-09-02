@@ -254,4 +254,21 @@ describe('RadeonCloudUsageDialog', () => {
     )
     expect(screen.getByText(/daily_remaining_points/)).toBeInTheDocument()
   })
+
+  test('renders exactly one progress indicator for the daily usage bar', () => {
+    renderDialog(USAGE_RESPONSE)
+
+    // Regression: passing <ProgressIndicator> as a child of <Progress> used to
+    // render a second, un-tracked color block beside the tracked bar, making
+    // the bar wrap into two rows and (in Radeon Cloud) cover the percentage
+    // label. The indicator color is now threaded through `indicatorClassName`,
+    // so exactly one tracked indicator must exist.
+    const indicators = document.querySelectorAll(
+      '[data-slot="progress-indicator"]'
+    )
+    expect(indicators).toHaveLength(1)
+    // USAGE_RESPONSE maps to a "success" variant (< 80%), so the single
+    // indicator carries the success color class.
+    expect(indicators[0]).toHaveClass('bg-success')
+  })
 })
