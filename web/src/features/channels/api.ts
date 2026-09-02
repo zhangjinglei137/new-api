@@ -473,6 +473,42 @@ export async function getMoonshotCodingPlanUsage(
   return res.data
 }
 
+// ============================================================================
+// Zhipu (type 26) GLM Coding Plan Usage Operations
+// ============================================================================
+
+export type ZhipuCodingPlanWindow = {
+  period: 'session' | 'weekly' | 'monthly'
+  used_percent?: number
+  remaining_percent?: number
+  reset_at?: string | null
+  reset_in_sec?: number
+}
+
+export type ZhipuCodingPlanUsageData = {
+  status?: string
+  level?: string
+  windows?: ZhipuCodingPlanWindow[]
+}
+
+export type ZhipuCodingPlanUsageResponse = {
+  success: boolean
+  message?: string
+  upstream_status?: number
+  error_code?: string
+  data?: ZhipuCodingPlanUsageData
+}
+
+export async function getZhipuCodingPlanUsage(
+  channelId: number
+): Promise<ZhipuCodingPlanUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/zhipu/codingplan/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
 export async function getOpenCodeGoUsage(
   channelId: number
 ): Promise<OpenCodeGoUsageResponse> {

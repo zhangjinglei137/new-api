@@ -62,6 +62,7 @@ import {
   getOpenCodeGoUsage,
   getSenseNovaUsage,
   getVolcCodingPlanUsage,
+  getZhipuCodingPlanUsage,
   updateChannelBalance,
 } from '../api'
 import {
@@ -118,6 +119,10 @@ import {
   VolcCodingPlanUsageDialog,
   type VolcCodingPlanUsageResponse,
 } from './dialogs/volc-codingplan-usage-dialog'
+import {
+  ZhipuCodingPlanUsageDialog,
+  type ZhipuCodingPlanUsageResponse,
+} from './dialogs/zhipu-codingplan-usage-dialog'
 import {
   SenseNovaUsageDialog,
   type SenseNovaUsageResponse,
@@ -393,6 +398,9 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     useState(false)
   const [moonshotCodingPlanUsageResponse, setMoonshotCodingPlanUsageResponse] =
     useState<MoonshotCodingPlanUsageResponse | null>(null)
+  const [zhipuCodingPlanUsageOpen, setZhipuCodingPlanUsageOpen] = useState(false)
+  const [zhipuCodingPlanUsageResponse, setZhipuCodingPlanUsageResponse] =
+    useState<ZhipuCodingPlanUsageResponse | null>(null)
   const currencyLabel = getCurrencyLabel()
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
@@ -408,6 +416,11 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const isMoonshotCodingPlan =
     channel.type === 25 &&
     parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding'
+  const isZhipuCodingPlan =
+    channel.type === 26 &&
+    (parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding' ||
+      parseChannelOtherSettings(channel.settings).endpoint_profile ===
+        'coding-intl')
 
   const isUsageDialogType =
     isCodex ||
@@ -415,7 +428,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     isOpenCodeGo ||
     isCommandCode ||
     isSenseNova ||
-    isMoonshotCodingPlan
+    isMoonshotCodingPlan ||
+    isZhipuCodingPlan
 
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const balanceFormatOptions = {
@@ -628,6 +642,29 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
   }
 
+  const fetchZhipuCodingPlanUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getZhipuCodingPlanUsage(channel.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setZhipuCodingPlanUsageResponse(res)
+      if (openDialog) {
+        setZhipuCodingPlanUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleClickUpdate = async () => {
     if (isCodex) {
       await fetchCodexUsage()
@@ -651,6 +688,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
     if (isMoonshotCodingPlan) {
       await fetchMoonshotCodingPlanUsage()
+      return
+    }
+    if (isZhipuCodingPlan) {
+      await fetchZhipuCodingPlanUsage()
       return
     }
 
@@ -708,6 +749,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   } else if (isSenseNova) {
     remainingTooltipLabel = t('Click to view SenseNova usage')
   } else if (isMoonshotCodingPlan) {
+    remainingTooltipLabel = t('Click to view Coding Plan usage')
+  } else if (isZhipuCodingPlan) {
     remainingTooltipLabel = t('Click to view Coding Plan usage')
   }
   let remainingBadgeVariant: StatusBadgeProps['variant'] = variant
@@ -812,6 +855,15 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelId={channel.id}
         response={moonshotCodingPlanUsageResponse}
         onRefresh={() => fetchMoonshotCodingPlanUsage(false)}
+        isRefreshing={isUpdating}
+      />
+      <ZhipuCodingPlanUsageDialog
+        open={zhipuCodingPlanUsageOpen}
+        onOpenChange={setZhipuCodingPlanUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        response={zhipuCodingPlanUsageResponse}
+        onRefresh={() => fetchZhipuCodingPlanUsage(false)}
         isRefreshing={isUpdating}
       />
       {rawBalanceResponse !== null && (

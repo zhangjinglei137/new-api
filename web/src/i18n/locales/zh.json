@@ -5678,6 +5678,8 @@
     "Showing {{start}}-{{end}} of {{count}} fields_plural": "Showing {{start}}-{{end}} of {{count}} fields",
     "VolcEngine Coding Plan Usage": "火山方舟 Coding Plan 用量",
     "Moonshot Coding Plan Usage": "Moonshot Coding Plan 用量",
+    "Zhipu Coding Plan Usage": "智谱 Coding Plan 用量",
+    "GLM Coding Plan · {{level}}": "GLM Coding Plan · {{level}}",
     "OpenCode Go Usage": "OpenCode Go 用量",
     "Monthly remaining": "每月剩余",
     "Resets at:": "重置于：",

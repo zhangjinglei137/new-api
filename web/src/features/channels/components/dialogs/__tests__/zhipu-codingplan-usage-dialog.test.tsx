@@ -1,0 +1,279 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { render, screen } from '@testing-library/react'
+import { describe, expect, test } from 'vitest'
+
+import {
+  ZhipuCodingPlanUsageDialog,
+  type ZhipuCodingPlanUsageResponse,
+} from '../zhipu-codingplan-usage-dialog'
+
+function renderDialog(response: ZhipuCodingPlanUsageResponse | null) {
+  render(
+    <ZhipuCodingPlanUsageDialog
+      open
+      onOpenChange={() => undefined}
+      channelName='Zhipu GLM Coding Plan'
+      channelId={26}
+      response={response}
+    />
+  )
+}
+
+const THREE_WINDOW_RESPONSE: ZhipuCodingPlanUsageResponse = {
+  success: true,
+  data: {
+    status: 'Running',
+    // Intentionally out of order: the dialog must render session → weekly → monthly.
+    windows: [
+      {
+        period: 'monthly',
+        used_percent: 66,
+        remaining_percent: 34,
+        reset_at: '2026-09-30T00:00:00Z',
+        reset_in_sec: 99999,
+      },
+      {
+        period: 'session',
+        used_percent: 12.5,
+        remaining_percent: 87.5,
+        reset_at: '2026-09-01T00:00:00Z',
+        reset_in_sec: 12345,
+      },
+      {
+        period: 'weekly',
+        used_percent: 50,
+        remaining_percent: 50,
+        reset_at: '2026-09-07T00:00:00Z',
+        reset_in_sec: 45678,
+      },
+    ],
+  },
+}
+
+describe('ZhipuCodingPlanUsageDialog', () => {
+  test('renders session, weekly and monthly windows in fixed order with two-decimal percentages', () => {
+    renderDialog(THREE_WINDOW_RESPONSE)
+
+    expect(screen.getByText('Zhipu Coding Plan Usage')).toBeInTheDocument()
+
+    const titles = screen
+      .getAllByText(/Last 5 hours|Weekly|Monthly/)
+      .map((el) => el.textContent)
+    expect(titles).toStrictEqual(['Last 5 hours', 'Weekly', 'Monthly'])
+
+    // Two-decimal formatting for used percentages (big number + Used row).
+    expect(screen.getAllByText('12.50%')).toHaveLength(2)
+    expect(screen.getAllByText('50.00%')).toHaveLength(2)
+    expect(screen.getAllByText('66.00%')).toHaveLength(2)
+    // Remaining percentages are no longer surfaced.
+    expect(screen.queryByText('87.50%')).not.toBeInTheDocument()
+
+    // Reset times are formatted instead of shown as the raw ISO strings.
+    expect(screen.queryByText('2026-09-01T00:00:00Z')).not.toBeInTheDocument()
+
+    // Raw JSON panel is available once usage data exists.
+    expect(
+      screen.getByText('Show raw upstream response')
+    ).toBeInTheDocument()
+  })
+
+  test('renders a single card when only the session window is present', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [
+          {
+            period: 'session',
+            used_percent: 75,
+            remaining_percent: 25,
+          },
+        ],
+      },
+    })
+
+    expect(screen.getByText('Last 5 hours')).toBeInTheDocument()
+    expect(screen.getAllByText('75.00%')).toHaveLength(2)
+    expect(screen.queryByText('Weekly')).not.toBeInTheDocument()
+    expect(screen.queryByText('Monthly')).not.toBeInTheDocument()
+  })
+
+  test('omits the monthly window when it is absent from the response', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [
+          { period: 'session', used_percent: 10 },
+          { period: 'weekly', used_percent: 20 },
+        ],
+      },
+    })
+
+    expect(screen.getByText('Last 5 hours')).toBeInTheDocument()
+    expect(screen.getByText('Weekly')).toBeInTheDocument()
+    expect(screen.queryByText('Monthly')).not.toBeInTheDocument()
+  })
+
+  test('shows the plan level in the title when present and omits it otherwise', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        level: 'pro',
+        windows: [{ period: 'session', used_percent: 50 }],
+      },
+    })
+
+    expect(screen.getByText('GLM Coding Plan · Pro')).toBeInTheDocument()
+    expect(screen.queryByText('Zhipu Coding Plan Usage')).not.toBeInTheDocument()
+  })
+
+  test('uses the generic title when no level is present', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [{ period: 'session', used_percent: 50 }],
+      },
+    })
+
+    expect(screen.getByText('Zhipu Coding Plan Usage')).toBeInTheDocument()
+    expect(screen.queryByText(/GLM Coding Plan ·/)).not.toBeInTheDocument()
+  })
+
+  test('shows a dash instead of 0% when window percentages are missing', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [{ period: 'session' }],
+      },
+    })
+
+    expect(screen.getByText('Last 5 hours')).toBeInTheDocument()
+    expect(screen.queryByText('0.00%')).not.toBeInTheDocument()
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0)
+  })
+
+  test('clamps out-of-range used percentages into [0, 100]', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [
+          {
+            period: 'session',
+            used_percent: 250,
+          },
+          {
+            period: 'weekly',
+            used_percent: -10,
+          },
+        ],
+      },
+    })
+
+    expect(screen.getAllByText('100.00%')).toHaveLength(2)
+    expect(screen.queryByText('250.00%')).not.toBeInTheDocument()
+    // Negative used percent clamps to 0 and stays visible.
+    expect(screen.getAllByText('0.00%')).toHaveLength(2)
+  })
+
+  test('shows a degraded message plus raw panel when windows are empty', () => {
+    renderDialog({
+      success: true,
+      data: {
+        status: 'ok',
+        windows: [],
+      },
+    })
+
+    expect(screen.getByText('Unable to identify usage data')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'The upstream response did not include recognizable usage windows.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Show raw upstream response')
+    ).toBeInTheDocument()
+  })
+
+  test('shows a degraded message plus raw panel when data is missing', () => {
+    renderDialog({ success: true })
+
+    expect(screen.getByText('Unable to identify usage data')).toBeInTheDocument()
+    expect(
+      screen.getByText('Show raw upstream response')
+    ).toBeInTheDocument()
+  })
+
+  test('passes through the backend message when credentials are not configured', () => {
+    renderDialog({
+      success: false,
+      error_code: 'credentials_not_configured',
+      message: '智谱 GLM Coding Plan API key 未配置，请在渠道设置中更新凭证',
+    })
+
+    expect(
+      screen.getByText('Usage credentials not configured')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('智谱 GLM Coding Plan API key 未配置，请在渠道设置中更新凭证')
+    ).toBeInTheDocument()
+  })
+
+  test('falls back to the upstream message for unknown failures', () => {
+    renderDialog({
+      success: false,
+      error_code: 'fetch_failed',
+      message: 'upstream exploded',
+    })
+
+    expect(screen.getByText('Unable to identify usage data')).toBeInTheDocument()
+    expect(screen.getByText('upstream exploded')).toBeInTheDocument()
+  })
+
+  test('omits the raw JSON panel when the query failed', () => {
+    renderDialog({
+      success: false,
+      error_code: 'fetch_failed',
+      message: 'upstream exploded',
+    })
+
+    expect(
+      screen.queryByText('Show raw upstream response')
+    ).not.toBeInTheDocument()
+  })
+
+  test('shows a refresh button when a refresh handler is provided', () => {
+    render(
+      <ZhipuCodingPlanUsageDialog
+        open
+        onOpenChange={() => undefined}
+        response={THREE_WINDOW_RESPONSE}
+        onRefresh={() => undefined}
+      />
+    )
+
+    expect(screen.getByText('Refresh usage')).toBeInTheDocument()
+  })
+})
