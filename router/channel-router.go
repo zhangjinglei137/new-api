@@ -69,6 +69,7 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/:id/moonshot/codingplan/usage", permission: authz.ChannelRead, handler: controller.GetMoonshotCodingPlanUsage},
 	{method: http.MethodGet, path: "/:id/zhipu/codingplan/usage", permission: authz.ChannelRead, handler: controller.GetZhipuCodingPlanUsage},
 	{method: http.MethodGet, path: "/:id/opencode/usage", permission: authz.ChannelRead, handler: controller.GetOpenCodeGoUsage},
+	{method: http.MethodGet, path: "/:id/radeoncloud/usage", permission: authz.ChannelRead, handler: controller.GetRadeonCloudUsage},
 	{method: http.MethodGet, path: "/:id/commandcode/usage", permission: authz.ChannelRead, handler: controller.GetCommandCodeUsage},
 	{method: http.MethodGet, path: "/:id/sensenova/usage", permission: authz.ChannelRead, handler: controller.GetSenseNovaUsage},
 	{method: http.MethodPost, path: "/ollama/pull", permission: authz.ChannelSensitiveWrite, handler: controller.OllamaPullModel},

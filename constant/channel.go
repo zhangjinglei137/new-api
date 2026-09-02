@@ -59,6 +59,7 @@ const (
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
 	ChannelTypeTaskPlugin     = 61
+	ChannelTypeRadeonCloud    = 95
 	ChannelTypeSenseNova      = 97
 	ChannelTypeCommandCode    = 98
 	ChannelTypeOpenCodeGo     = 99
@@ -162,7 +163,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //92
 	"",                                          //93
 	"",                                          //94
-	"",                                          //95
+	"https://developer.amd.com.cn/radeon",       //95
 	"",                                          //96
 	"https://token.sensenova.cn",                //97
 	"https://api.commandcode.ai/provider",       //98
@@ -235,6 +236,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSub2API:        "Sub2API",
 	ChannelTypeNewAPI:         "New API",
 	ChannelTypeTaskPlugin:     "Task Plugin",
+	ChannelTypeRadeonCloud:    "RadeonCloud",
 	ChannelTypeSenseNova:      "SenseNova",
 	ChannelTypeCommandCode:    "CommandCode",
 	ChannelTypeOpenCodeGo:     "OpenCode Go",

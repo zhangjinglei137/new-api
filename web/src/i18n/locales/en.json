@@ -5698,6 +5698,20 @@
     "Unable to identify usage data": "Unable to identify usage data",
     "Coding Plan usage credentials": "Coding Plan usage credentials",
     "These credentials are only used for the Coding Plan usage query and are stored encrypted. Get your Access Key ID and Secret Access Key at https://console.volcengine.com/iam/keymanage. Personal use only — do not share your credentials.": "These credentials are only used for the Coding Plan usage query and are stored encrypted. Get your Access Key ID and Secret Access Key at https://console.volcengine.com/iam/keymanage. Personal use only — do not share your credentials.",
-    "Auth cookie of the opencode.ai login session (valid for about 30 days). Leave blank to keep the existing credential; update manually after expiry.": "Auth cookie of the opencode.ai login session (valid for about 30 days). Leave blank to keep the existing credential; update manually after expiry."
+    "Auth cookie of the opencode.ai login session (valid for about 30 days). Leave blank to keep the existing credential; update manually after expiry.": "Auth cookie of the opencode.ai login session (valid for about 30 days). Leave blank to keep the existing credential; update manually after expiry.",
+    "AMD Radeon Cloud Usage": "AMD Radeon Cloud Usage",
+    "Free to use. Points track API usage against your daily limit—they are not charges.": "Free to use. Points track API usage against your daily limit—they are not charges.",
+    "Today Remaining": "Today Remaining",
+    "Today Used": "Today Used",
+    "Daily Allowance": "Daily Allowance",
+    "RPM Limit": "RPM Limit",
+    "Today Requests": "Today Requests",
+    "Today Tokens": "Today Tokens",
+    "Last 24h": "Last 24h",
+    "Last Request": "Last Request",
+    "Click to view usage": "Click to view usage",
+    "The upstream response did not include recognizable usage data.": "The upstream response did not include recognizable usage data.",
+    "{{count}} requests": "{{count}} requests",
+    "{{count}} tokens": "{{count}} tokens"
   }
 }

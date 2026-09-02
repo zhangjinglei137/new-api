@@ -20,15 +20,15 @@ import type { SVGProps } from 'react'
 
 import { cn } from '@/lib/utils'
 
-type IconCommandcodeProps = SVGProps<SVGSVGElement> & {
+type IconRadeonCloudProps = SVGProps<SVGSVGElement> & {
   size?: number
 }
 
-export function IconCommandcode({
+export function IconRadeonCloud({
   size = 24,
   className,
   ...props
-}: IconCommandcodeProps) {
+}: IconRadeonCloudProps) {
   return (
     <svg
       role='img'
@@ -39,8 +39,8 @@ export function IconCommandcode({
       className={cn(className)}
       {...props}
     >
-      <title>commandcode</title>
-      <path d='M5 3h2v1H5Z M17 3h2v1H17Z M4 4h1v1H4Z M19 4h1v1H19Z M3 5h1v2H3Z M20 5h1v2H20Z M8 6h1v1H8Z M15 6h1v1H15Z M7 7h3v1H7Z M14 7h3v1H14Z M6 8h2v1H6Z M10 8h1v1H10Z M13 8h1v1H13Z M16 8h2v1H16Z M7 9h1v1H7Z M9 9h2v1H9Z M13 9h2v1H13Z M16 9h1v1H16Z M8 10h8v1H8Z M10 11h1v2H10Z M13 11h1v2H13Z M8 13h8v1H8Z M7 14h1v1H7Z M9 14h2v1H9Z M13 14h2v1H13Z M16 14h1v1H16Z M6 15h2v1H6Z M10 15h1v1H10Z M13 15h1v1H13Z M16 15h2v1H16Z M7 16h3v1H7Z M14 16h3v1H14Z M3 17h1v2H3Z M8 17h1v1H8Z M15 17h1v1H15Z M20 17h1v2H20Z M4 19h1v1H4Z M19 19h1v1H19Z M5 20h2v1H5Z M17 20h2v1H17Z' />
+      <title>AMD Radeon Cloud</title>
+      <path d='M4 3h16v1H4Z M4 4h17v1H4Z M5 5h16v1H5Z M6 6h15v1H6Z M7 7h14v1H7Z M16 8h5v9H16Z M6 10h2v1H6Z M5 11h3v1H5Z M4 12h4v1H4Z M3 13h5v3H3Z M3 16h11v1H3Z M3 17h10v1H3Z M17 17h4v1H17Z M3 18h9v1H3Z M18 18h3v1H18Z M3 19h8v1H3Z M19 19h2v1H19Z M3 20h7v1H3Z' />
     </svg>
   )
 }

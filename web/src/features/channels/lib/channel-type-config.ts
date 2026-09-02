@@ -187,6 +187,18 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       other: 'Usage query requires a SenseNova username and password',
     },
   },
+  95: {
+    id: 95,
+    name: CHANNEL_TYPES[95],
+    icon: 'RadeonCloud',
+    defaultBaseUrl: 'https://developer.amd.com.cn/radeon',
+    hints: {
+      baseUrl: 'Default: https://developer.amd.com.cn/radeon',
+      key: 'AMD Radeon Cloud API key',
+      models: 'Model IDs exposed by this channel',
+      other: 'Free to use; usage is tracked against the daily allowance',
+    },
+  },
 }
 
 /**

@@ -60,6 +60,7 @@ import {
   getCommandCodeUsage,
   getMoonshotCodingPlanUsage,
   getOpenCodeGoUsage,
+  getRadeonCloudUsage,
   getSenseNovaUsage,
   getVolcCodingPlanUsage,
   getZhipuCodingPlanUsage,
@@ -70,6 +71,7 @@ import {
   CHANNEL_TYPE_CODEX,
   CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_OPENCODE_GO,
+  CHANNEL_TYPE_RADEON_CLOUD,
   CHANNEL_TYPE_SENSENOVA,
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
@@ -111,6 +113,10 @@ import {
   OpenCodeGoUsageDialog,
   type OpenCodeGoUsageResponse,
 } from './dialogs/opencode-usage-dialog'
+import {
+  RadeonCloudUsageDialog,
+  type RadeonCloudUsageResponse,
+} from './dialogs/radeoncloud-usage-dialog'
 import {
   MoonshotCodingPlanUsageDialog,
   type MoonshotCodingPlanUsageResponse,
@@ -401,6 +407,9 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const [zhipuCodingPlanUsageOpen, setZhipuCodingPlanUsageOpen] = useState(false)
   const [zhipuCodingPlanUsageResponse, setZhipuCodingPlanUsageResponse] =
     useState<ZhipuCodingPlanUsageResponse | null>(null)
+  const [radeonCloudUsageOpen, setRadeonCloudUsageOpen] = useState(false)
+  const [radeonCloudUsageResponse, setRadeonCloudUsageResponse] =
+    useState<RadeonCloudUsageResponse | null>(null)
   const currencyLabel = getCurrencyLabel()
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
@@ -421,6 +430,7 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     (parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding' ||
       parseChannelOtherSettings(channel.settings).endpoint_profile ===
         'coding-intl')
+  const isRadeonCloud = channel.type === CHANNEL_TYPE_RADEON_CLOUD
 
   const isUsageDialogType =
     isCodex ||
@@ -429,7 +439,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     isCommandCode ||
     isSenseNova ||
     isMoonshotCodingPlan ||
-    isZhipuCodingPlan
+    isZhipuCodingPlan ||
+    isRadeonCloud
 
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const balanceFormatOptions = {
@@ -665,6 +676,29 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
   }
 
+  const fetchRadeonCloudUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getRadeonCloudUsage(channel.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setRadeonCloudUsageResponse(res)
+      if (openDialog) {
+        setRadeonCloudUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleClickUpdate = async () => {
     if (isCodex) {
       await fetchCodexUsage()
@@ -692,6 +726,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
     if (isZhipuCodingPlan) {
       await fetchZhipuCodingPlanUsage()
+      return
+    }
+    if (isRadeonCloud) {
+      await fetchRadeonCloudUsage()
       return
     }
 
@@ -752,6 +790,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     remainingTooltipLabel = t('Click to view Coding Plan usage')
   } else if (isZhipuCodingPlan) {
     remainingTooltipLabel = t('Click to view Coding Plan usage')
+  } else if (isRadeonCloud) {
+    remainingTooltipLabel = t('Click to view usage')
   }
   let remainingBadgeVariant: StatusBadgeProps['variant'] = variant
   if (isUsageDialogType) {
@@ -864,6 +904,15 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelId={channel.id}
         response={zhipuCodingPlanUsageResponse}
         onRefresh={() => fetchZhipuCodingPlanUsage(false)}
+        isRefreshing={isUpdating}
+      />
+      <RadeonCloudUsageDialog
+        open={radeonCloudUsageOpen}
+        onOpenChange={setRadeonCloudUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        response={radeonCloudUsageResponse}
+        onRefresh={() => fetchRadeonCloudUsage(false)}
         isRefreshing={isUpdating}
       />
       {rawBalanceResponse !== null && (

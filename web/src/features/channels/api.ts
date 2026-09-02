@@ -520,6 +520,44 @@ export async function getOpenCodeGoUsage(
 }
 
 // ============================================================================
+// AMD Radeon Cloud (type 95) Usage Operations
+// ============================================================================
+
+export type RadeonCloudUsageData = {
+  rpm_limit?: number
+  daily_limit_points?: number
+  daily_used_points?: number
+  daily_remaining_points?: number
+  daily_used_percent?: number
+  daily_reset_at?: string | null
+  daily_reset_in_sec?: number
+  today_requests?: number
+  today_tokens?: number
+  last_24h_requests?: number
+  last_24h_tokens?: number
+  last_24h_last_request_at?: string | null
+  period_started_at?: string | null
+}
+
+export type RadeonCloudUsageResponse = {
+  success: boolean
+  message?: string
+  upstream_status?: number
+  error_code?: string
+  data?: RadeonCloudUsageData
+}
+
+export async function getRadeonCloudUsage(
+  channelId: number
+): Promise<RadeonCloudUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/radeoncloud/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+// ============================================================================
 // Command Code (type 98) Usage Operations
 // ============================================================================
 
