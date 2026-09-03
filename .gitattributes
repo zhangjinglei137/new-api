@@ -41,3 +41,12 @@ electron/** linguist-vendored
 
 # TanStack Router regenerates this manifest from the route source files.
 web/src/routeTree.gen.ts linguist-generated
+
+# ============================================
+# 本地合并策略（本地优先，配合 sync-upstream 自动化）
+# ============================================
+# 本地在此文件有大量核心扩展（事务化删除/能力清理等），冲突时取本地侧。
+model/channel.go merge=ours
+# 双方都在结构体尾部追加字段的 DTO：并集保留双方字段。
+# 不能简单 ours（会丢上游 ToolLossPolicy 导致 relay 编译失败），union 并集保留双方。
+relaykit/dto/channel_settings.go merge=union
