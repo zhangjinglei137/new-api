@@ -109,6 +109,13 @@ jobs:
             go.sum
             relaykit/go.sum
 
+      - name: Create frontend embed placeholder
+        run: |
+          # main.go 有 //go:embed web/dist，runner checkout 后该目录不存在，
+          # 必须先建占位文件否则 go vet/build 报 "pattern web/dist: no matching files found"。
+          mkdir -p web/dist
+          touch web/dist/index.html
+
       - name: Verify build (fail-safe gate)
         id: verify
         if: steps.merge.outputs.merge == 'success' || steps.merge.outputs.merge == 'success-ours'
