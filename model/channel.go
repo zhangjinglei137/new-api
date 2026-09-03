@@ -1054,6 +1054,9 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	if err := channelOtherSettings.ValidateToolLossPolicy(); err != nil {
+		return err
+	}
 	if endpointProfile := channelOtherSettings.EndpointProfile; endpointProfile != "" {
 		profiles, supportedType := constant.ChannelSpecialPlanProfiles[channel.Type]
 		if !supportedType {

@@ -161,6 +161,10 @@ type ChannelOtherSettings struct {
 	// 经 mergeSensitiveOtherSettings 加密写入，读取时用 common.DecryptSecret。
 	VolcCodingPlanAccessKeyId     string `json:"volc_coding_plan_access_key_id,omitempty"`
 	VolcCodingPlanSecretAccessKey string `json:"volc_coding_plan_secret_access_key,omitempty"`
+	// ToolLossPolicy is a channel-level opt-in for request-phase conversion
+	// rejection. Empty follows the default allow policy. Accepted values:
+	// "", "allow", "safe", "strict".
+	ToolLossPolicy string `json:"tool_loss_policy,omitempty"`
 }
 
 // ResolveProxy returns the proxy URL to use for the given model.
@@ -190,6 +194,20 @@ func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {
 		return false
 	}
 	return *s.OpenRouterEnterprise
+}
+
+// ValidateToolLossPolicy validates the channel-level request-phase tool-loss
+// policy. Empty keeps the default allow policy.
+func (s *ChannelOtherSettings) ValidateToolLossPolicy() error {
+	if s == nil {
+		return nil
+	}
+	switch strings.TrimSpace(s.ToolLossPolicy) {
+	case "", string(types.ConversionLossPolicyAllow), string(types.ConversionLossPolicySafe), string(types.ConversionLossPolicyStrict):
+		return nil
+	default:
+		return fmt.Errorf("invalid tool_loss_policy: %s", s.ToolLossPolicy)
+	}
 }
 
 const (
