@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -111,22 +110,22 @@ func parseMoonshotCodingPlanUsage(body []byte) (*MoonshotCodingPlanUsageInfo, er
 		return nil, fmt.Errorf("invalid json body: %w", err)
 	}
 
-	info := &MoonshotCodingPlanUsageInfo{Status: moonshotJSONString(raw, "status", "planStatus")}
+	info := &MoonshotCodingPlanUsageInfo{Status: jsonString(raw, "status", "planStatus")}
 	byPeriod := make(map[string]MoonshotCodingPlanWindow, 2)
 
 	// 顶层 usage：周配额（weekly）。
-	if usage, ok := moonshotJSONMap(raw, "usage", "quota"); ok {
+	if usage, ok := jsonMapGet(raw, "usage", "quota"); ok {
 		if window, ok := moonshotWindowFromFields("weekly", usage); ok {
 			byPeriod["weekly"] = window
 		}
 	}
 
 	// limits 数组：duration=300（分钟）的 5h 滚动窗 → session，其余窗口跳过。
-	for _, item := range moonshotJSONMapSlice(raw, "limits") {
+	for _, item := range jsonMapSlice(raw, "limits") {
 		if !moonshotIsSessionWindow(item) {
 			continue
 		}
-		detail, ok := moonshotJSONMap(item, "detail", "usage")
+		detail, ok := jsonMapGet(item, "detail", "usage")
 		if !ok {
 			continue
 		}
@@ -149,28 +148,28 @@ func parseMoonshotCodingPlanUsage(body []byte) (*MoonshotCodingPlanUsageInfo, er
 // moonshotIsSessionWindow 判断 limits 条目是否命中 5h 滚动窗
 // （duration=300 且 timeUnit=TIME_UNIT_MINUTE；时间单位缺失时仅看 duration）。
 func moonshotIsSessionWindow(item map[string]any) bool {
-	window, ok := moonshotJSONMap(item, "window")
+	window, ok := jsonMapGet(item, "window")
 	if !ok {
 		return false
 	}
-	timeUnit := strings.ToUpper(moonshotJSONString(window, "timeUnit", "time_unit", "unit"))
+	timeUnit := strings.ToUpper(jsonString(window, "timeUnit", "time_unit", "unit"))
 	if timeUnit != "" && timeUnit != "TIME_UNIT_MINUTE" && timeUnit != "MINUTE" {
 		return false
 	}
-	return moonshotJSONInt64(window, "duration") == 300
+	return jsonInt64Clamped(window, "duration") == 300
 }
 
 // moonshotWindowFromFields 从单个窗口字段构造用量数据。limit 无效或
 // used/remaining 全部缺失（无法计算百分比）时返回 false，跳过该窗口。
 func moonshotWindowFromFields(period string, m map[string]any) (MoonshotCodingPlanWindow, bool) {
-	limit := moonshotJSONFloat(m, "limit", "quota", "quotaLimit")
+	limit := jsonFloat(m, "limit", "quota", "quotaLimit")
 	if limit <= 0 {
 		return MoonshotCodingPlanWindow{}, false
 	}
-	used, usedOK := moonshotJSONFloatOK(m, "used", "usage")
+	used, usedOK := jsonFloatOK(m, "used", "usage")
 	if !usedOK {
 		// used 缺失时用 limit-remaining 兜底。
-		if remaining, remainingOK := moonshotJSONFloatOK(m, "remaining", "remain", "quotaRemaining"); remainingOK {
+		if remaining, remainingOK := jsonFloatOK(m, "remaining", "remain", "quotaRemaining"); remainingOK {
 			used = limit - remaining
 			usedOK = true
 		}
@@ -215,7 +214,7 @@ func moonshotResetTime(m map[string]any) (resetAt string, resetInSec int64, ok b
 				t, _ = time.Parse("2006-01-02 15:04:05", trimmed)
 			}
 		case float64:
-			sec := int64(n)
+			sec := clampToInt64(n)
 			if sec >= 1e12 {
 				sec /= 1000
 			}
@@ -243,93 +242,4 @@ func clampMoonshotPercent(v float64) float64 {
 		v = 100
 	}
 	return math.Round(v*100) / 100
-}
-
-func moonshotJSONMap(m map[string]any, keys ...string) (map[string]any, bool) {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		if nested, ok := value.(map[string]any); ok {
-			return nested, true
-		}
-	}
-	return nil, false
-}
-
-func moonshotJSONMapSlice(m map[string]any, keys ...string) []map[string]any {
-	for _, key := range keys {
-		raw, ok := m[key]
-		if !ok {
-			continue
-		}
-		items, ok := raw.([]any)
-		if !ok {
-			continue
-		}
-		result := make([]map[string]any, 0, len(items))
-		for _, item := range items {
-			if nested, ok := item.(map[string]any); ok {
-				result = append(result, nested)
-			}
-		}
-		return result
-	}
-	return nil
-}
-
-func moonshotJSONString(m map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := m[key]; ok {
-			if s, ok := value.(string); ok {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func moonshotJSONFloatOK(m map[string]any, keys ...string) (float64, bool) {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			if math.IsNaN(n) {
-				continue
-			}
-			return n, true
-		case string:
-			if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil && !math.IsNaN(f) {
-				return f, true
-			}
-		}
-	}
-	return 0, false
-}
-
-func moonshotJSONFloat(m map[string]any, keys ...string) float64 {
-	f, _ := moonshotJSONFloatOK(m, keys...)
-	return f
-}
-
-func moonshotJSONInt64(m map[string]any, keys ...string) int64 {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			return int64(n)
-		case string:
-			if i, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64); err == nil {
-				return i
-			}
-		}
-	}
-	return 0
 }

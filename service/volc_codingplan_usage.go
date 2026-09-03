@@ -9,7 +9,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -72,19 +71,19 @@ func ParseVolcCodingPlanUsage(body []byte) (*VolcCodingPlanUsageInfo, error) {
 		return nil, fmt.Errorf("missing Result in response")
 	}
 
-	entries := volcJSONMapSlice(result, "QuotaUsage", "Usages", "Details")
+	entries := jsonMapSlice(result, "QuotaUsage", "Usages", "Details")
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("no usage windows found")
 	}
 
-	info := &VolcCodingPlanUsageInfo{Status: volcJSONString(result, "Status")}
+	info := &VolcCodingPlanUsageInfo{Status: jsonString(result, "Status")}
 	byPeriod := make(map[string]VolcCodingPlanWindow, len(entries))
 	for _, entry := range entries {
 		period := volcCodingPlanPeriod(entry)
 		if period == "" {
 			continue
 		}
-		used := volcRoundPercent(volcJSONFloat(entry, "Percent", "UsedPercent", "UsagePercent"))
+		used := volcRoundPercent(jsonFloat(entry, "Percent", "UsedPercent", "UsagePercent"))
 		remaining := 100 - used
 		if remaining < 0 {
 			remaining = 0
@@ -99,7 +98,7 @@ func ParseVolcCodingPlanUsage(body []byte) (*VolcCodingPlanUsageInfo, error) {
 			UsedPercent:      used,
 			RemainingPercent: remaining,
 		}
-		if reset := volcJSONInt64(entry, "ResetTimestamp", "ResetTime"); reset > 0 {
+		if reset := jsonInt64Clamped(entry, "ResetTimestamp", "ResetTime"); reset > 0 {
 			if reset >= 1e12 {
 				reset /= 1000
 			}
@@ -127,7 +126,7 @@ func ParseVolcCodingPlanUsage(body []byte) (*VolcCodingPlanUsageInfo, error) {
 // volcCodingPlanPeriod 将窗口条目中的 Level（含别名回退）归一化为
 // session/weekly/monthly；未识别返回空串。
 func volcCodingPlanPeriod(entry map[string]any) string {
-	level := strings.ToLower(strings.TrimSpace(volcJSONString(entry, "Level", "Type", "Period", "Label", "Window")))
+	level := strings.ToLower(strings.TrimSpace(jsonString(entry, "Level", "Type", "Period", "Label", "Window")))
 	switch level {
 	case "session", "weekly", "monthly":
 		return level
@@ -136,77 +135,12 @@ func volcCodingPlanPeriod(entry map[string]any) string {
 	}
 }
 
-// volcRoundPercent 将百分比四舍五入到两位小数。
+// volcRoundPercent 将百分比四舍五入到两位小数；NaN/Inf 兜底为 0。
 func volcRoundPercent(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0
+	}
 	return math.Round(v*100) / 100
-}
-
-func volcJSONMapSlice(m map[string]any, keys ...string) []map[string]any {
-	for _, key := range keys {
-		raw, ok := m[key]
-		if !ok {
-			continue
-		}
-		items, ok := raw.([]any)
-		if !ok {
-			continue
-		}
-		result := make([]map[string]any, 0, len(items))
-		for _, item := range items {
-			if window, ok := item.(map[string]any); ok {
-				result = append(result, window)
-			}
-		}
-		return result
-	}
-	return nil
-}
-
-func volcJSONString(m map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := m[key]; ok {
-			if s, ok := value.(string); ok {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func volcJSONFloat(m map[string]any, keys ...string) float64 {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			return n
-		case string:
-			if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil {
-				return f
-			}
-		}
-	}
-	return 0
-}
-
-func volcJSONInt64(m map[string]any, keys ...string) int64 {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			return int64(n)
-		case string:
-			if i, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64); err == nil {
-				return i
-			}
-		}
-	}
-	return 0
 }
 
 // signVolcOpenAPIV4 为火山方舟 OpenAPI（open.volcengineapi.com）请求生成 V4

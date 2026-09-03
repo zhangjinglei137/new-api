@@ -85,6 +85,9 @@ type openCodeGoWindowRaw struct {
 // FetchOpenCodeGoUsage 通过官方 usage API 获取 opencode 账号级用量信息。
 // 使用渠道已有的 API Key（Bearer 认证），不再依赖工作区页面与会话 Cookie。
 func FetchOpenCodeGoUsage(channel *model.Channel) (*OpenCodeGoUsageInfo, error) {
+	if channel == nil {
+		return nil, fmt.Errorf("nil channel")
+	}
 	keys := channel.GetKeys()
 	if len(keys) == 0 || strings.TrimSpace(keys[0]) == "" {
 		return nil, fmt.Errorf("opencode api key 未配置")
@@ -117,12 +120,37 @@ func FetchOpenCodeGoUsage(channel *model.Channel) (*OpenCodeGoUsageInfo, error) 
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
 		return nil, fmt.Errorf("opencode api key 无效或已过期")
-	case resp.StatusCode == http.StatusForbidden || strings.Contains(string(body), "EntitlementError"):
+	case resp.StatusCode == http.StatusForbidden:
 		return nil, fmt.Errorf("该 API Key 无 OpenCode Go 订阅")
 	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		// 非 2xx 响应优先解析 JSON body 的 error/type 字段判断无订阅，
+		// 字符串匹配仅作兜底。
+		if openCodeGoIsEntitlementError(body) {
+			return nil, fmt.Errorf("该 API Key 无 OpenCode Go 订阅")
+		}
 		return nil, fmt.Errorf("opencode usage api 请求失败, status code: %d", resp.StatusCode)
 	}
 	return parseOpenCodeGoUsage(body)
+}
+
+// openCodeGoIsEntitlementError 判断响应体是否表示 OpenCode Go 无订阅
+// （EntitlementError）。优先解析 JSON 的 error/type 字段，字符串匹配仅兜底。
+func openCodeGoIsEntitlementError(body []byte) bool {
+	var raw map[string]any
+	if err := common.Unmarshal(body, &raw); err == nil {
+		if typ := jsonString(raw, "type", "error_type"); strings.Contains(typ, "EntitlementError") {
+			return true
+		}
+		if errMsg := jsonString(raw, "error", "message"); strings.Contains(errMsg, "EntitlementError") {
+			return true
+		}
+		if errObj, ok := jsonMapGet(raw, "error"); ok {
+			if typ := jsonString(errObj, "type", "name"); strings.Contains(typ, "EntitlementError") {
+				return true
+			}
+		}
+	}
+	return strings.Contains(string(body), "EntitlementError")
 }
 
 // parseOpenCodeGoUsage 解析官方 usage API 响应。

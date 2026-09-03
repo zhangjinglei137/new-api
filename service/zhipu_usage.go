@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -134,15 +133,15 @@ func parseZhipuCodingPlanUsage(body []byte) (*ZhipuCodingPlanUsageInfo, error) {
 	}
 
 	info := &ZhipuCodingPlanUsageInfo{}
-	data, ok := zhipuJSONMap(raw, "data")
+	data, ok := jsonMapGet(raw, "data")
 	if !ok {
 		return nil, fmt.Errorf("no usable usage window found")
 	}
-	info.Status = zhipuJSONString(data, "status")
-	info.Level = zhipuJSONString(data, "level")
+	info.Status = jsonString(data, "status")
+	info.Level = jsonString(data, "level")
 
 	byPeriod := make(map[string]ZhipuCodingPlanWindow, 3)
-	for _, item := range zhipuJSONMapSlice(data, "limits") {
+	for _, item := range jsonMapSlice(data, "limits") {
 		period, matched := zhipuWindowPeriod(item)
 		if !matched {
 			continue
@@ -172,11 +171,11 @@ func parseZhipuCodingPlanUsage(body []byte) (*ZhipuCodingPlanUsageInfo, error) {
 //
 // 只按上述组合命中，其余行忽略（TIME_LIMIT 的 unit 也可能是 5，不按 unit 误分类）。
 func zhipuWindowPeriod(item map[string]any) (string, bool) {
-	typ := strings.ToUpper(zhipuJSONString(item, "type"))
+	typ := strings.ToUpper(jsonString(item, "type"))
 	switch typ {
 	case "TOKENS_LIMIT", "CREDIT_LIMIT":
-		unit := zhipuJSONInt64(item, "unit")
-		number := zhipuJSONInt64(item, "number")
+		unit := jsonInt64Clamped(item, "unit")
+		number := jsonInt64Clamped(item, "number")
 		switch {
 		case unit == 3 && number == 5:
 			return "session", true
@@ -194,14 +193,14 @@ func zhipuWindowPeriod(item map[string]any) (string, bool) {
 // 时跳过该窗口，不产出 0% 假窗口）。
 func zhipuWindowFromFields(period string, m map[string]any) (ZhipuCodingPlanWindow, bool) {
 	var usedPercent float64
-	if percentage, ok := zhipuJSONFloatOK(m, "percentage"); ok {
+	if percentage, ok := jsonFloatOK(m, "percentage"); ok {
 		usedPercent = clampZhipuPercent(percentage)
 	} else {
-		usage, usageOK := zhipuJSONFloatOK(m, "usage")
+		usage, usageOK := jsonFloatOK(m, "usage")
 		if !usageOK || usage <= 0 {
 			return ZhipuCodingPlanWindow{}, false
 		}
-		current, _ := zhipuJSONFloatOK(m, "currentValue", "current_value", "used")
+		current, _ := jsonFloatOK(m, "currentValue", "current_value", "used")
 		if current < 0 {
 			current = 0
 		}
@@ -224,19 +223,7 @@ func zhipuWindowFromFields(period string, m map[string]any) (ZhipuCodingPlanWind
 // 秒数（向上取整），已过期置 0。
 func zhipuResetTime(m map[string]any) (resetAt string, resetInSec int64, ok bool) {
 	for _, key := range []string{"nextResetTime", "resetTime", "resetAt", "reset_at", "reset_time"} {
-		value, present := m[key]
-		if !present {
-			continue
-		}
-		var ms int64
-		switch n := value.(type) {
-		case float64:
-			ms = int64(n)
-		case string:
-			if i, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64); err == nil {
-				ms = i
-			}
-		}
+		ms := jsonInt64Clamped(m, key)
 		if ms <= 0 {
 			continue
 		}
@@ -260,88 +247,4 @@ func clampZhipuPercent(v float64) float64 {
 		v = 100
 	}
 	return math.Round(v*100) / 100
-}
-
-func zhipuJSONMap(m map[string]any, keys ...string) (map[string]any, bool) {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		if nested, ok := value.(map[string]any); ok {
-			return nested, true
-		}
-	}
-	return nil, false
-}
-
-func zhipuJSONMapSlice(m map[string]any, keys ...string) []map[string]any {
-	for _, key := range keys {
-		raw, ok := m[key]
-		if !ok {
-			continue
-		}
-		items, ok := raw.([]any)
-		if !ok {
-			continue
-		}
-		result := make([]map[string]any, 0, len(items))
-		for _, item := range items {
-			if nested, ok := item.(map[string]any); ok {
-				result = append(result, nested)
-			}
-		}
-		return result
-	}
-	return nil
-}
-
-func zhipuJSONString(m map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := m[key]; ok {
-			if s, ok := value.(string); ok {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func zhipuJSONFloatOK(m map[string]any, keys ...string) (float64, bool) {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			if math.IsNaN(n) {
-				continue
-			}
-			return n, true
-		case string:
-			if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil && !math.IsNaN(f) {
-				return f, true
-			}
-		}
-	}
-	return 0, false
-}
-
-func zhipuJSONInt64(m map[string]any, keys ...string) int64 {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			return int64(n)
-		case string:
-			if i, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64); err == nil {
-				return i
-			}
-		}
-	}
-	return 0
 }

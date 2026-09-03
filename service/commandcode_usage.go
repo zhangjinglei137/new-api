@@ -6,7 +6,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -109,6 +108,9 @@ type commandCodeSubscription struct {
 // 依赖渠道配置的登录会话 Cookie（commandcode_cookie，先解密、再白名单归一化）。
 // 先调 credits（必需），再调 subscriptions（可选 enrichment，失败不阻塞）。
 func FetchCommandCodeUsage(channel *model.Channel) (*CommandCodeUsageInfo, error) {
+	if channel == nil {
+		return nil, fmt.Errorf("nil channel")
+	}
 	rawCookie := strings.TrimSpace(channel.GetOtherSettings().CommandCodeCookie)
 	if rawCookie == "" {
 		return nil, fmt.Errorf("commandcode cookie 未配置")
@@ -219,19 +221,19 @@ func parseCommandCodeCredits(body []byte) (*commandCodeCredits, error) {
 	if err := common.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("invalid credits json: %w", err)
 	}
-	creditsMap := commandCodeJSONObject(raw, "credits")
-	if creditsMap == nil {
+	creditsMap, ok := jsonMapGet(raw, "credits")
+	if !ok {
 		return nil, fmt.Errorf("missing credits in response")
 	}
 	credits := &commandCodeCredits{
-		MonthlyCredits:   commandCodeJSONFloat(creditsMap, "monthlyCredits", "monthly_credits"),
-		PurchasedCredits: commandCodeJSONFloat(creditsMap, "purchasedCredits", "purchased_credits"),
+		MonthlyCredits:   jsonFloat(creditsMap, "monthlyCredits", "monthly_credits"),
+		PurchasedCredits: jsonFloat(creditsMap, "purchasedCredits", "purchased_credits"),
 	}
-	limitsMap := commandCodeJSONObject(raw, "windowLimits", "window_limits")
-	if limitsMap == nil {
-		limitsMap = commandCodeJSONObject(creditsMap, "windowLimits", "window_limits")
+	limitsMap, ok := jsonMapGet(raw, "windowLimits", "window_limits")
+	if !ok {
+		limitsMap, ok = jsonMapGet(creditsMap, "windowLimits", "window_limits")
 	}
-	if limitsMap != nil {
+	if ok {
 		credits.WindowLimits = parseCommandCodeWindowLimits(limitsMap)
 	}
 	return credits, nil
@@ -240,20 +242,20 @@ func parseCommandCodeCredits(body []byte) (*commandCodeCredits, error) {
 // parseCommandCodeWindowLimits 解析窗口限额（5h/weekly），单个窗口缺失不报错。
 func parseCommandCodeWindowLimits(m map[string]any) *commandCodeWindowLimits {
 	limits := &commandCodeWindowLimits{}
-	if five := commandCodeJSONObject(m, "fiveHour", "five_hour"); five != nil {
+	if five, ok := jsonMapGet(m, "fiveHour", "five_hour"); ok {
 		limits.FiveHour = &commandCodeLimitWindow{
-			Used:     commandCodeJSONFloat(five, "used"),
-			Cap:      commandCodeJSONFloat(five, "cap"),
-			Exceeded: commandCodeJSONBool(five, "exceeded"),
-			ResetAt:  commandCodeJSONInt64(five, "resetAt", "reset_at"),
+			Used:     jsonFloat(five, "used"),
+			Cap:      jsonFloat(five, "cap"),
+			Exceeded: jsonBool(five, "exceeded"),
+			ResetAt:  jsonInt64Clamped(five, "resetAt", "reset_at"),
 		}
 	}
-	if weekly := commandCodeJSONObject(m, "weekly"); weekly != nil {
+	if weekly, ok := jsonMapGet(m, "weekly"); ok {
 		limits.Weekly = &commandCodeLimitWindow{
-			Used:     commandCodeJSONFloat(weekly, "used"),
-			Cap:      commandCodeJSONFloat(weekly, "cap"),
-			Exceeded: commandCodeJSONBool(weekly, "exceeded"),
-			ResetAt:  commandCodeJSONInt64(weekly, "resetAt", "reset_at"),
+			Used:     jsonFloat(weekly, "used"),
+			Cap:      jsonFloat(weekly, "cap"),
+			Exceeded: jsonBool(weekly, "exceeded"),
+			ResetAt:  jsonInt64Clamped(weekly, "resetAt", "reset_at"),
 		}
 	}
 	return limits
@@ -267,13 +269,13 @@ func parseCommandCodeSubscriptions(body []byte) (*commandCodeSubscription, error
 		return nil, fmt.Errorf("invalid subscriptions json: %w", err)
 	}
 	sub := &commandCodeSubscription{}
-	dataMap := commandCodeJSONObject(raw, "data")
-	if dataMap == nil {
+	dataMap, ok := jsonMapGet(raw, "data")
+	if !ok {
 		return sub, nil
 	}
 	sub.HasData = true
-	sub.PlanID = commandCodeJSONString(dataMap, "planId", "plan_id")
-	sub.CurrentPeriodEnd = commandCodeJSONString(dataMap, "currentPeriodEnd", "current_period_end")
+	sub.PlanID = jsonString(dataMap, "planId", "plan_id")
+	sub.CurrentPeriodEnd = jsonString(dataMap, "currentPeriodEnd", "current_period_end")
 	return sub, nil
 }
 
@@ -403,73 +405,4 @@ func commandCodeClampPercent(v float64) float64 {
 		return 0
 	}
 	return math.Max(0, math.Min(100, v))
-}
-
-func commandCodeJSONObject(m map[string]any, keys ...string) map[string]any {
-	for _, key := range keys {
-		if value, ok := m[key]; ok {
-			if obj, ok := value.(map[string]any); ok {
-				return obj
-			}
-		}
-	}
-	return nil
-}
-
-func commandCodeJSONString(m map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := m[key]; ok {
-			if s, ok := value.(string); ok {
-				return strings.TrimSpace(s)
-			}
-		}
-	}
-	return ""
-}
-
-func commandCodeJSONFloat(m map[string]any, keys ...string) float64 {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			return n
-		case string:
-			if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil {
-				return f
-			}
-		}
-	}
-	return 0
-}
-
-func commandCodeJSONBool(m map[string]any, keys ...string) bool {
-	for _, key := range keys {
-		if value, ok := m[key]; ok {
-			if b, ok := value.(bool); ok {
-				return b
-			}
-		}
-	}
-	return false
-}
-
-func commandCodeJSONInt64(m map[string]any, keys ...string) int64 {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			return int64(n)
-		case string:
-			if i, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64); err == nil {
-				return i
-			}
-		}
-	}
-	return 0
 }

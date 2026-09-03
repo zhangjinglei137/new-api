@@ -75,6 +75,9 @@ func parseOpenCodeGoBalancePage(html string) (float64, error) {
 // fetchOpenCodeGoPage 抓取 opencode 工作区页面 HTML，供余额/用量解析共用：
 // workspace id + 解密后的 cookie（历史明文自动透传）+ 代理 + 30s 超时 + User-Agent。
 func fetchOpenCodeGoPage(channel *model.Channel) (string, error) {
+	if channel == nil {
+		return "", fmt.Errorf("nil channel")
+	}
 	settings := channel.GetOtherSettings()
 	workspaceID := strings.TrimSpace(settings.OpenCodeWorkspaceId)
 	cookie := strings.TrimSpace(settings.OpenCodeAuthCookie)

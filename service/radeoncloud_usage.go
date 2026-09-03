@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -114,13 +113,13 @@ func parseRadeonCloudUsage(body []byte) (*RadeonCloudUsageInfo, error) {
 	}
 
 	info := &RadeonCloudUsageInfo{
-		RpmLimit:        radeonJSONInt(raw, "rpm_limit"),
-		DailyResetAt:    radeonJSONString(raw, "daily_reset_at"),
-		PeriodStartedAt: radeonJSONString(raw, "period_started_at"),
+		RpmLimit:        jsonInt(raw, "rpm_limit"),
+		DailyResetAt:    jsonString(raw, "daily_reset_at"),
+		PeriodStartedAt: jsonString(raw, "period_started_at"),
 	}
-	limitUSD := radeonJSONFloat(raw, "daily_cost_limit_usd")
-	usedUSD := radeonJSONFloat(raw, "daily_cost_used_usd")
-	remainingUSD := radeonJSONFloat(raw, "daily_cost_remaining_usd")
+	limitUSD := jsonFloat(raw, "daily_cost_limit_usd")
+	usedUSD := jsonFloat(raw, "daily_cost_used_usd")
+	remainingUSD := jsonFloat(raw, "daily_cost_remaining_usd")
 	info.DailyLimitPoints = radeonPointsFromUSD(limitUSD)
 	info.DailyUsedPoints = radeonPointsFromUSD(usedUSD)
 	info.DailyRemainingPoints = radeonPointsFromUSD(remainingUSD)
@@ -129,14 +128,14 @@ func parseRadeonCloudUsage(body []byte) (*RadeonCloudUsageInfo, error) {
 	}
 	info.DailyResetInSec = radeonResetInSec(raw)
 
-	if today, ok := radeonJSONMap(raw, "today"); ok {
-		info.TodayRequests = radeonJSONInt(today, "requests")
-		info.TodayTokens = radeonJSONInt64(today, "total_tokens")
+	if today, ok := jsonMapGet(raw, "today"); ok {
+		info.TodayRequests = jsonInt(today, "requests")
+		info.TodayTokens = jsonInt64Clamped(today, "total_tokens")
 	}
-	if last24h, ok := radeonJSONMap(raw, "last_24_hours"); ok {
-		info.Last24hRequests = radeonJSONInt(last24h, "requests")
-		info.Last24hTokens = radeonJSONInt64(last24h, "total_tokens")
-		info.Last24hLastRequestAt = radeonJSONString(last24h, "last_request_at")
+	if last24h, ok := jsonMapGet(raw, "last_24_hours"); ok {
+		info.Last24hRequests = jsonInt(last24h, "requests")
+		info.Last24hTokens = jsonInt64Clamped(last24h, "total_tokens")
+		info.Last24hLastRequestAt = jsonString(last24h, "last_request_at")
 	}
 	return info, nil
 }
@@ -163,13 +162,13 @@ func radeonRound(v float64, digits int) float64 {
 // daily_reset_epoch（秒时间戳），缺失时回退解析 daily_reset_at（RFC3339）。
 // 无法解析或已过期时返回 0。
 func radeonResetInSec(raw map[string]any) int64 {
-	epoch := radeonJSONInt64(raw, "daily_reset_epoch")
+	epoch := jsonInt64Clamped(raw, "daily_reset_epoch")
 	var t time.Time
 	switch {
 	case epoch > 0:
 		t = time.Unix(epoch, 0)
-	case radeonJSONString(raw, "daily_reset_at") != "":
-		t, _ = time.Parse(time.RFC3339, radeonJSONString(raw, "daily_reset_at"))
+	case jsonString(raw, "daily_reset_at") != "":
+		t, _ = time.Parse(time.RFC3339, jsonString(raw, "daily_reset_at"))
 	}
 	if t.IsZero() {
 		return 0
@@ -179,72 +178,4 @@ func radeonResetInSec(raw map[string]any) int64 {
 		return 0
 	}
 	return remain
-}
-
-func radeonJSONMap(m map[string]any, keys ...string) (map[string]any, bool) {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		if nested, ok := value.(map[string]any); ok {
-			return nested, true
-		}
-	}
-	return nil, false
-}
-
-func radeonJSONString(m map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := m[key]; ok {
-			if s, ok := value.(string); ok {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-// radeonJSONFloatOK 提取数字字段：接受 JSON number（float64）、整数与
-// 数字字符串；NaN 视为缺失。返回 ok=false 表示字段缺失或类型不兼容。
-func radeonJSONFloatOK(m map[string]any, keys ...string) (float64, bool) {
-	for _, key := range keys {
-		value, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch n := value.(type) {
-		case float64:
-			if math.IsNaN(n) {
-				continue
-			}
-			return n, true
-		case string:
-			if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil && !math.IsNaN(f) {
-				return f, true
-			}
-		}
-	}
-	return 0, false
-}
-
-func radeonJSONFloat(m map[string]any, keys ...string) float64 {
-	f, _ := radeonJSONFloatOK(m, keys...)
-	return f
-}
-
-func radeonJSONInt(m map[string]any, keys ...string) int {
-	f, ok := radeonJSONFloatOK(m, keys...)
-	if !ok {
-		return 0
-	}
-	return int(f)
-}
-
-func radeonJSONInt64(m map[string]any, keys ...string) int64 {
-	f, ok := radeonJSONFloatOK(m, keys...)
-	if !ok {
-		return 0
-	}
-	return int64(f)
 }
