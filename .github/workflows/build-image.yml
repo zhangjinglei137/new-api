@@ -24,6 +24,10 @@ jobs:
             platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    concurrency:
+      group: build-image-${{ matrix.arch }}
+      cancel-in-progress: true
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -34,7 +38,7 @@ jobs:
         run: |
           # Version = upstream latest tag + build timestamp, e.g. v1.0.0-rc.24-20260817-1504.
           # Falls back to v0.0.0 when the upstream GitHub API is unreachable.
-          UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+          UPSTREAM_TAG="$(curl -fsSL --max-time 30 -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
           if [ -z "$UPSTREAM_TAG" ]; then
             UPSTREAM_TAG="v0.0.0"
           fi
@@ -58,8 +62,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           tags: |
             thntime/new-api:edge-${{ matrix.arch }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
 
   merge:
     name: Create multi-arch manifests

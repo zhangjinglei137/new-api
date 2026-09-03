@@ -37,7 +37,7 @@ jobs:
             TAG_PREFIX="$CUSTOM_VERSION"
             VERSION="$CUSTOM_VERSION"
           else
-            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/Calcium-Ion/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v0.0.0"
             fi
@@ -106,8 +106,8 @@ jobs:
             thntime/new-api:${{ needs.prepare.outputs.tag_prefix }}-${{ matrix.arch }}
             thntime/new-api:${{ needs.prepare.outputs.version }}-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           provenance: mode=max
           sbom: true
 

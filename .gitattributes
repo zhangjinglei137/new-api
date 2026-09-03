@@ -45,8 +45,9 @@ web/src/routeTree.gen.ts linguist-generated
 # ============================================
 # 本地合并策略（本地优先，配合 sync-upstream 自动化）
 # ============================================
-# 本地在此文件有大量核心扩展（事务化删除/能力清理等），冲突时取本地侧。
+# model/channel.go：本地核心扩展，冲突取本地侧。
+#   注意：git 无内置 ours 驱动，需在 sync workflow 中 `git config merge.ours.driver true` 才生效；
+#   rerere 会优先重放已人工解决的方案（保留本地 + 补入上游 ValidateToolLossPolicy）。
+# relaykit/dto/channel_settings.go：不使用 union（易产生错位损坏代码），
+#   依赖默认三方 merge（追加字段行不重叠时自动合并）+ 全局 -X ours 兜底 + vet 关卡。
 model/channel.go merge=ours
-# 双方都在结构体尾部追加字段的 DTO：并集保留双方字段。
-# 不能简单 ours（会丢上游 ToolLossPolicy 导致 relay 编译失败），union 并集保留双方。
-relaykit/dto/channel_settings.go merge=union

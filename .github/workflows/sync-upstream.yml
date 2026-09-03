@@ -1,9 +1,12 @@
 name: Sync Upstream
 
-# 每天 UTC 00:00 自动把 QuantumNous/new-api 的 main 合并进本仓库 main,
-# 合并后有新提交即推送(push 会自动触发 Build Docker Image)。
-# 手动触发:仓库 Actions 页 -> Sync Upstream -> Run workflow。
-# 冲突时 merge 失败,workflow 标红并通过邮件通知,需手动解决。
+# 每天 UTC 00:00 自动把 QuantumNous/new-api 的 main 合并进本仓库 main。
+# 策略（本地优先）：
+#   - .gitattributes 按文件策略（model/channel.go merge=ours、relaykit/dto/channel_settings.go merge=union）
+#   - 全局 -X ours 兜底 + git rerere 缓存重放已人工解决的冲突
+#   - go vet 编译验证关卡（防止 ours 丢弃上游必填字段导致编译失败）
+# 冲突自动解决后 push（触发 build-image.yml 重建镜像）；上游已包含在 HEAD 则短路不 push。
+# 失败兜底：自动创建带 sync-upstream label 的 issue 通知，不硬失败、不推坏代码。
 
 on:
   schedule:
@@ -12,34 +15,149 @@ on:
 
 permissions:
   contents: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: true
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Configure git rerere
+        run: |
+          git config rerere.enabled true
+          git config rerere.autoupdate true
+          # 自定义 ours 驱动，使 .gitattributes 中 model/channel.go merge=ours 生效（git 无内置 ours 驱动）
+          git config merge.ours.driver true
+
+      - name: Restore rerere seed from repo
+        run: |
+          if [ -d .github/rerere-cache ]; then
+            mkdir -p .git/rr-cache
+            cp -r .github/rerere-cache/* .git/rr-cache/ 2>/dev/null || true
+            echo "Restored rerere seed from repo"
+          else
+            echo "No rerere seed in repo"
+          fi
+
+      - name: Restore rerere cache
+        uses: actions/cache@v4
+        with:
+          path: .git/rr-cache
+          key: rerene-${{ github.run_id }}
+          restore-keys: |
+            rerene-
+
       - name: Fetch upstream
         run: |
+          git remote remove upstream 2>/dev/null || true
           git remote add upstream https://github.com/QuantumNous/new-api.git
           git fetch upstream main
 
-      - name: Merge upstream into main
-        id: merge
+      - name: Check if upstream already merged
+        id: check
         run: |
-          if [ "$(git rev-parse HEAD)" = "$(git rev-parse upstream/main)" ]; then
-            echo "Upstream is already up to date, nothing to do"
-            echo "updated=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Upstream is already contained in HEAD, nothing to do"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skipped=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Merge upstream into main (local-first + rerere)
+        id: merge
+        if: steps.check.outputs.skipped == 'false'
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git merge --no-edit upstream/main
-          echo "updated=true" >> "$GITHUB_OUTPUT"
+
+          echo "### Upstream commits being merged" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git log --oneline HEAD..upstream/main >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # 第一层：默认三方 merge（.gitattributes ours/union + rerere 重放历史方案自动生效）
+          if git merge --no-edit upstream/main >/tmp/merge.log 2>&1; then
+            echo "merge=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "Default merge had conflicts, applying -X ours fallback..."
+            git merge --abort 2>/dev/null || true
+            # 第二层：-X ours 全局兜底（rerere 命中优先重放已解决的方案，未命中取本地侧）
+            if git merge --no-edit -X ours upstream/main >/tmp/merge-ours.log 2>&1; then
+              echo "merge=success-ours" >> "$GITHUB_OUTPUT"
+            else
+              echo "merge=failed" >> "$GITHUB_OUTPUT"
+              git diff --name-only --diff-filter=U > /tmp/conflicted-files.txt 2>/dev/null || true
+              git merge --abort 2>/dev/null || true
+            fi
+          fi
+
+      - name: Verify build (fail-safe gate)
+        id: verify
+        if: steps.merge.outputs.merge == 'success' || steps.merge.outputs.merge == 'success-ours'
+        run: |
+          set +e
+          GOWORK=off go vet ./... > /tmp/vet-root.log 2>&1
+          VET_ROOT=$?
+          (cd relaykit && GOWORK=off go vet ./... > /tmp/vet-relaykit.log 2>&1)
+          VET_RELAYKIT=$?
+          set -e
+          if [ $VET_ROOT -ne 0 ] || [ $VET_RELAYKIT -ne 0 ]; then
+            echo "verify=failed" >> "$GITHUB_OUTPUT"
+            echo "### VET FAILURE (upstream field lost?)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -60 /tmp/vet-root.log >> "$GITHUB_STEP_SUMMARY"
+            echo '--- relaykit ---' >> "$GITHUB_STEP_SUMMARY"
+            tail -40 /tmp/vet-relaykit.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            git merge --abort 2>/dev/null || true
+          else
+            echo "verify=passed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save rerere cache
+        if: steps.merge.outputs.merge == 'success' || steps.merge.outputs.merge == 'success-ours'
+        uses: actions/cache/save@v4
+        with:
+          path: .git/rr-cache
+          key: rerene-${{ github.run_id }}
+
+      - name: Update rerere seed into merge commit
+        if: steps.verify.outputs.verify == 'passed'
+        run: |
+          rm -rf .github/rerere-cache
+          mkdir -p .github/rerere-cache
+          cp -r .git/rr-cache/* .github/rerere-cache/ 2>/dev/null || true
+          git add .github/rerere-cache
+          git commit --amend --no-edit 2>/dev/null || echo "no rr-cache to amend"
 
       - name: Push merge
-        if: steps.merge.outputs.updated == 'true'
+        if: steps.check.outputs.skipped == 'false' && steps.verify.outputs.verify == 'passed'
         run: git push origin main
+
+      - name: Create issue on failure
+        if: failure() && steps.check.outputs.skipped == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+            const conflicted = fs.existsSync('/tmp/conflicted-files.txt')
+              ? fs.readFileSync('/tmp/conflicted-files.txt', 'utf8')
+              : 'see run logs';
+            const commits = execSync('git log --oneline HEAD..upstream/main 2>/dev/null || echo unknown').toString();
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Sync upstream 失败 - 需人工处理',
+              body: `每日上游同步无法自动解决冲突。\n\n**上游提交：**\n\`\`\`\n${commits}\`\`\`\n\n**冲突文件：**\n\`\`\`\n${conflicted}\`\`\`\n\n处理：手动合并并解决冲突，push 后重跑本 workflow；rerere 缓存会自动更新。`,
+              labels: ['sync-upstream', 'auto-created']
+            });
