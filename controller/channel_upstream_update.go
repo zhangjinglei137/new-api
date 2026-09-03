@@ -28,6 +28,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
+	"gorm.io/gorm"
 )
 
 const (
@@ -40,24 +41,35 @@ const (
 	channelUpstreamModelUpdateNotifyMaxFailedChannelIDs   = 10
 )
 
-var channelUpstreamModelUpdateSelectFields = []string{
-	"id",
-	"name",
-	"type",
-	"key",
-	"status",
-	"base_url",
-	"models",
-	"model_mapping",
-	"settings",
-	"setting",
-	"other",
-	"group",
-	"priority",
-	"weight",
-	"tag",
-	"channel_info",
-	"header_override",
+// channelUpstreamModelUpdateSelectColumns 返回上游模型巡检所需 channel 列。
+// GORM Select([]string{...}) 不会给列名加引号：group 是 MySQL/PostgreSQL 的
+// 保留字（裸写会生成非法 SQL），且本功能无消费方，故直接不列出；
+// key 同为 MySQL 保留字但拉取上游模型时必须读取，故按数据库类型显式引用
+// （规则同 model.initCol 的 commonGroupCol/commonKeyCol：PostgreSQL 用
+// "key"，其余用 `key`）。
+func channelUpstreamModelUpdateSelectColumns() []string {
+	keyCol := "`key`"
+	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
+		keyCol = `"key"`
+	}
+	return []string{
+		"id",
+		"name",
+		"type",
+		keyCol,
+		"status",
+		"base_url",
+		"models",
+		"model_mapping",
+		"settings",
+		"setting",
+		"other",
+		"priority",
+		"weight",
+		"tag",
+		"channel_info",
+		"header_override",
+	}
 }
 
 var channelUpstreamModelUpdateNotifyState = struct {
@@ -507,17 +519,16 @@ func fetchAdvancedCustomUpstreamModelIDs(channel *model.Channel, baseURL string)
 	return parseOpenAIModelIDs(body)
 }
 
-func updateChannelUpstreamModelSettings(channel *model.Channel, settings dto.ChannelOtherSettings, updateModels bool) error {
-	channel.SetOtherSettings(settings)
-	updates := map[string]interface{}{
-		"settings": channel.OtherSettings,
-	}
-	if updateModels {
-		updates["models"] = channel.Models
-	}
-	return model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Updates(updates).Error
-}
-
+// persistChannelUpstreamModelSettings 在事务 + 行锁内对 channel 行执行
+// read-modify-write：先 SELECT ... FOR UPDATE（SQLite 自动跳过）锁读最新行，
+// 再写入由锁内计算产出的 settings/models。对比直接 model.DB.Updates 的旧写法，
+// 这保证并发巡检/手动应用等写者基于最新行计算，不会互相覆盖丢更新。
+// settings 在事务内基于锁读行的最新 OtherSettings 派生，调用方可通过
+// persistChannelUpstreamModelSettings 的输出拿到该派生值。
+//
+// NOTICE：行锁代码一律走 model.LockForUpdate（导出自 model.lockForUpdate），
+// 不要在任何调用点重复 clause.Locking（GORM v1 的 Set("gorm:query_option")
+// 在 v2 下静默失效）。
 func checkAndPersistChannelUpstreamModelUpdates(
 	channel *model.Channel,
 	settings *dto.ChannelOtherSettings,
@@ -533,32 +544,70 @@ func checkAndPersistChannelUpstreamModelUpdates(
 		}
 	}
 
+	// 上游模型列表拉取（HTTP 往返）不需要行锁；行锁只保护对 channel 行的读-改-写。
 	pendingAddModels, pendingRemoveModels, fetchErr := collectPendingUpstreamModelChanges(channel, *settings)
-	settings.UpstreamModelUpdateLastCheckTime = now
+
+	// 巡检失败同样推进 last_check_time。事务内锁读最新行，基于最新 settings
+	// 改写，避免覆盖并发写入的其它设置段。
 	if fetchErr != nil {
-		if err = updateChannelUpstreamModelSettings(channel, *settings, false); err != nil {
-			return false, 0, err
+		settings.UpstreamModelUpdateLastCheckTime = now
+		if persistErr := model.DB.Transaction(func(tx *gorm.DB) error {
+			var latest model.Channel
+			if lockErr := model.LockForUpdate(tx).Where("id = ?", channel.Id).First(&latest).Error; lockErr != nil {
+				return lockErr
+			}
+			s := latest.GetOtherSettings()
+			s.UpstreamModelUpdateLastCheckTime = now
+			latest.SetOtherSettings(s)
+			*settings = s
+			return tx.Model(&model.Channel{}).Where("id = ?", latest.Id).Update("settings", latest.OtherSettings).Error
+		}); persistErr != nil {
+			return false, 0, persistErr
 		}
 		return false, 0, fetchErr
 	}
 
-	if allowAutoApply && settings.UpstreamModelUpdateAutoSyncEnabled && len(pendingAddModels) > 0 {
-		originModels := normalizeModelNames(channel.GetModels())
-		mergedModels := mergeModelNames(originModels, pendingAddModels)
-		if len(mergedModels) > len(originModels) {
-			channel.Models = strings.Join(mergedModels, ",")
-			autoAdded = len(mergedModels) - len(originModels)
-			modelsChanged = true
+	// 锁内完成 读最新行 → 计算 next 状态 → 写 的整段 read-modify-write：
+	// MySQL/PostgreSQL 下 SELECT ... FOR UPDATE 让同一行的并发写者串行化，
+	// 后到者基于最新行重新计算，不会覆盖先到者的更新；SQLite 自动跳过
+	//（单写者模型，冲突事务直接失败而非双双提交）。
+	if writeErr := model.DB.Transaction(func(tx *gorm.DB) error {
+		var latest model.Channel
+		if lockErr := model.LockForUpdate(tx).Where("id = ?", channel.Id).First(&latest).Error; lockErr != nil {
+			return lockErr
 		}
-		settings.UpstreamModelUpdateLastDetectedModels = []string{}
-	} else {
-		settings.UpstreamModelUpdateLastDetectedModels = pendingAddModels
+		s := latest.GetOtherSettings()
+		s.UpstreamModelUpdateLastCheckTime = now
+		s.UpstreamModelUpdateLastRemovedModels = pendingRemoveModels
+		if allowAutoApply && s.UpstreamModelUpdateAutoSyncEnabled && len(pendingAddModels) > 0 {
+			originModels := normalizeModelNames(latest.GetModels())
+			mergedModels := mergeModelNames(originModels, pendingAddModels)
+			if len(mergedModels) > len(originModels) {
+				latest.Models = strings.Join(mergedModels, ",")
+				autoAdded = len(mergedModels) - len(originModels)
+				modelsChanged = true
+			}
+			s.UpstreamModelUpdateLastDetectedModels = []string{}
+		} else {
+			s.UpstreamModelUpdateLastDetectedModels = pendingAddModels
+		}
+		latest.SetOtherSettings(s)
+		updates := map[string]interface{}{
+			"settings": latest.OtherSettings,
+		}
+		if modelsChanged {
+			updates["models"] = latest.Models
+		}
+		if updateErr := tx.Model(&model.Channel{}).Where("id = ?", latest.Id).Updates(updates).Error; updateErr != nil {
+			return updateErr
+		}
+		// 回填：调用方（后台巡检 / Detect 接口）依赖 settings 展示本次检测结果
+		*settings = s
+		return nil
+	}); writeErr != nil {
+		return false, autoAdded, writeErr
 	}
-	settings.UpstreamModelUpdateLastRemovedModels = pendingRemoveModels
 
-	if err = updateChannelUpstreamModelSettings(channel, *settings, modelsChanged); err != nil {
-		return false, autoAdded, err
-	}
 	if modelsChanged {
 		if err = channel.UpdateAbilities(nil); err != nil {
 			return true, autoAdded, err
@@ -725,7 +774,7 @@ scanLoop:
 		}
 		var channels []*model.Channel
 		query := model.DB.
-			Select(channelUpstreamModelUpdateSelectFields).
+			Select(channelUpstreamModelUpdateSelectColumns()).
 			Where("status = ?", common.ChannelStatusEnabled).
 			Order("id asc").
 			Limit(channelUpstreamModelUpdateTaskBatchSize)
@@ -976,41 +1025,66 @@ func applyChannelUpstreamModelUpdates(
 	modelsChanged bool,
 	err error,
 ) {
-	settings := channel.GetOtherSettings()
-	pendingAddModels := normalizeModelNames(settings.UpstreamModelUpdateLastDetectedModels)
-	pendingRemoveModels := normalizeModelNames(settings.UpstreamModelUpdateLastRemovedModels)
-	addModels := intersectModelNames(addModelsInput, pendingAddModels)
-	ignoreModels := intersectModelNames(ignoreModelsInput, pendingAddModels)
-	removeModels := intersectModelNames(removeModelsInput, pendingRemoveModels)
-	removeModels = subtractModelNames(removeModels, addModels)
+	// 锁内完成 读最新行 → 计算 next 状态 → 写 的整段 read-modify-write，
+	// 防止并发巡检/手动应用互覆盖：MySQL/PostgreSQL 下 FOR UPDATE 让并发写者
+	// 串行化，后到者基于锁读的最新行重新计算（不会用旧快照覆盖新状态）；
+	// SQLite 自动跳过（单写者模型）。行锁统一走 model.LockForUpdate。
+	if txErr := model.DB.Transaction(func(tx *gorm.DB) error {
+		var latest model.Channel
+		if lockErr := model.LockForUpdate(tx).Where("id = ?", channel.Id).First(&latest).Error; lockErr != nil {
+			return lockErr
+		}
 
-	originModels := normalizeModelNames(channel.GetModels())
-	nextModels := applySelectedModelChanges(originModels, addModels, removeModels)
-	modelsChanged = !slices.Equal(originModels, nextModels)
-	if modelsChanged {
-		channel.Models = strings.Join(nextModels, ",")
-	}
+		settings := latest.GetOtherSettings()
+		pendingAddModels := normalizeModelNames(settings.UpstreamModelUpdateLastDetectedModels)
+		pendingRemoveModels := normalizeModelNames(settings.UpstreamModelUpdateLastRemovedModels)
+		addModels := intersectModelNames(addModelsInput, pendingAddModels)
+		ignoreModels := intersectModelNames(ignoreModelsInput, pendingAddModels)
+		removedModels = intersectModelNames(removeModelsInput, pendingRemoveModels)
+		removedModels = subtractModelNames(removedModels, addModels)
 
-	settings.UpstreamModelUpdateIgnoredModels = mergeModelNames(settings.UpstreamModelUpdateIgnoredModels, ignoreModels)
-	if len(addModels) > 0 {
-		settings.UpstreamModelUpdateIgnoredModels = subtractModelNames(settings.UpstreamModelUpdateIgnoredModels, addModels)
-	}
-	remainingModels = subtractModelNames(pendingAddModels, append(addModels, ignoreModels...))
-	remainingRemoveModels = subtractModelNames(pendingRemoveModels, removeModels)
-	settings.UpstreamModelUpdateLastDetectedModels = remainingModels
-	settings.UpstreamModelUpdateLastRemovedModels = remainingRemoveModels
-	settings.UpstreamModelUpdateLastCheckTime = common.GetTimestamp()
+		originModels := normalizeModelNames(latest.GetModels())
+		nextModels := applySelectedModelChanges(originModels, addModels, removedModels)
+		changed := !slices.Equal(originModels, nextModels)
 
-	if err := updateChannelUpstreamModelSettings(channel, settings, modelsChanged); err != nil {
-		return nil, nil, nil, nil, false, err
+		settings.UpstreamModelUpdateIgnoredModels = mergeModelNames(settings.UpstreamModelUpdateIgnoredModels, ignoreModels)
+		if len(addModels) > 0 {
+			settings.UpstreamModelUpdateIgnoredModels = subtractModelNames(settings.UpstreamModelUpdateIgnoredModels, addModels)
+		}
+		remainingModels = subtractModelNames(pendingAddModels, append(addModels, ignoreModels...))
+		remainingRemoveModels = subtractModelNames(pendingRemoveModels, removedModels)
+		settings.UpstreamModelUpdateLastDetectedModels = remainingModels
+		settings.UpstreamModelUpdateLastRemovedModels = remainingRemoveModels
+		settings.UpstreamModelUpdateLastCheckTime = common.GetTimestamp()
+
+		latest.SetOtherSettings(settings)
+		updates := map[string]interface{}{
+			"settings": latest.OtherSettings,
+		}
+		if changed {
+			latest.Models = strings.Join(nextModels, ",")
+			updates["models"] = latest.Models
+		}
+		if updateErr := tx.Model(&model.Channel{}).Where("id = ?", latest.Id).Updates(updates).Error; updateErr != nil {
+			return updateErr
+		}
+
+		// 回填：调用方（ApplyChannelUpstreamModelUpdates 响应）依赖 channel 最新状态展示
+		channel.SetOtherSettings(settings)
+		channel.Models = latest.Models
+		addedModels = addModels
+		modelsChanged = changed
+		return nil
+	}); txErr != nil {
+		return nil, nil, nil, nil, false, txErr
 	}
 
 	if modelsChanged {
 		if err := channel.UpdateAbilities(nil); err != nil {
-			return addModels, removeModels, remainingModels, remainingRemoveModels, true, err
+			return addedModels, removedModels, remainingModels, remainingRemoveModels, true, err
 		}
 	}
-	return addModels, removeModels, remainingModels, remainingRemoveModels, modelsChanged, nil
+	return addedModels, removedModels, remainingModels, remainingRemoveModels, modelsChanged, nil
 }
 
 func collectPendingApplyUpstreamModelChanges(settings dto.ChannelOtherSettings) (pendingAddModels []string, pendingRemoveModels []string) {
@@ -1020,7 +1094,7 @@ func collectPendingApplyUpstreamModelChanges(settings dto.ChannelOtherSettings) 
 func findEnabledChannelsAfterID(lastID int, batchSize int) ([]*model.Channel, error) {
 	var channels []*model.Channel
 	query := model.DB.
-		Select(channelUpstreamModelUpdateSelectFields).
+		Select(channelUpstreamModelUpdateSelectColumns()).
 		Where("status = ?", common.ChannelStatusEnabled).
 		Order("id asc").
 		Limit(batchSize)

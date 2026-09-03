@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"math"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
@@ -31,10 +33,18 @@ func ConvertOpenCodeGoToRatioData(reader io.Reader) (map[string]any, error) {
 	return convertOpenCodeGoRatioData(data, float64(ratio_setting.USD))
 }
 
+// maxRatioBound 是 api.json 单条价格字段（USD/1M tokens）能进入计费的上界
+// （建议值 1e6，覆盖当前全部已知模型价格三个数量级）。上游 api.json 由
+// 第三方维护，病态输入（如 1e999 解析出的 +Inf 或恶意超大数）若直接换算会
+// 让 model_ratio 无界放大并污染真实计费，因此按计费安全不变式统一拒绝。
+const maxRatioBound = 1e6
+
 // convertOpenCodeGoRatioData 将 api.json 定价（USD/1M tokens）转换为本地 ratio：
 // model_ratio = input × USD/1000
 // completion_ratio = output/input；cache_ratio = cache_read/input。
 // 免费模型（input 为 0）的 ratio 为 0，不产生 completion/cache 比值。
+// 病态价格（NaN/±Inf/负值/超 maxRatioBound）不会进入计费：input 异常则整个
+// 模型跳过（model_ratio 无法安全确定），output/cache_read 异常则仅跳过对应比值。
 func convertOpenCodeGoRatioData(data []byte, usd float64) (map[string]any, error) {
 	var upstream map[string]openCodeGoProvider
 	if err := common.Unmarshal(data, &upstream); err != nil {
@@ -58,7 +68,12 @@ func convertOpenCodeGoRatioData(data []byte, usd float64) (map[string]any, error
 		if m.Cost.Input != nil {
 			input = *m.Cost.Input
 		}
-		if math.IsNaN(input) || math.IsInf(input, 0) || input < 0 {
+		// input 决定 model_ratio：换算前先做 allFinite 校验（风格同
+		// controller/model_rich.go 的 allFiniteNonNegative），NaN/±Inf/负值/
+		// 超上界一律跳过该模型并告警，异常值不得进入真实计费。
+		if !isValidOpenCodeGoCost(input) {
+			logger.LogWarn(context.Background(),
+				"opencode-go pricing: skip model %q for invalid input cost %v (bound=%g)", name, input, maxRatioBound)
 			continue
 		}
 
@@ -101,6 +116,9 @@ func roundOpenCodeGoRatioValue(value float64) float64 {
 	return math.Round(value*1e15) / 1e15
 }
 
+// isValidOpenCodeGoCost 校验单个价格字段为有限、非负且不超 maxRatioBound 的
+// 正常值（allFinite 校验，风格同 controller/model_rich.go allFiniteNonNegative）。
+// 防止 NaN/±Inf/负值/超大值（如 1e999 解析出的 +Inf 或恶意大数）进入计费换算。
 func isValidOpenCodeGoCost(v float64) bool {
-	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0
+	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= maxRatioBound
 }

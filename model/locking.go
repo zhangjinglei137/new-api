@@ -23,3 +23,10 @@ func lockForUpdate(tx *gorm.DB) *gorm.DB {
 	}
 	return tx.Clauses(clause.Locking{Strength: "UPDATE"})
 }
+
+// LockForUpdate 是 lockForUpdate 对其它包（如 controller 的事务内
+// read-modify-write 流程）的导出薄包装：FOR UPDATE / SQLite 跳过等方言逻辑
+// 只允许存在于 lockForUpdate，调用方不得各自复制 clause.Locking。
+func LockForUpdate(tx *gorm.DB) *gorm.DB {
+	return lockForUpdate(tx)
+}

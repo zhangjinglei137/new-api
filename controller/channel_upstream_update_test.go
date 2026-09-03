@@ -604,3 +604,71 @@ func TestDetectAllChannelUpstreamModelUpdatesRejectsExistingActiveTask(t *testin
 	require.Contains(t, recorder.Body.String(), existing.TaskID)
 	require.Contains(t, recorder.Body.String(), "已有模型更新任务正在运行或等待中")
 }
+
+// TestApplyChannelUpstreamModelUpdatesPersistsLockedReadModifyWrite 回归
+// applyChannelUpstreamModelUpdates 事务化（锁内 读最新行 → 计算 → 写）后的
+// 数据一致性：返回值、调用方 channel 内存回填、DB 持久化三者必须一致，且
+// 幂等（已应用完的模型再次 apply 不产生变更）。行锁语义（MySQL/PostgreSQL
+// 的 SELECT ... FOR UPDATE）无法在 SQLite 测试环境触发——SQLite 下
+// lockForUpdate 按设计跳过——helper 本身由 model/locking_test.go 覆盖。
+func TestApplyChannelUpstreamModelUpdatesPersistsLockedReadModifyWrite(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+
+	channel := &model.Channel{
+		Name:   "upstream apply test",
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "test-key",
+		Status: common.ChannelStatusEnabled,
+	}
+	settings := channel.GetOtherSettings()
+	settings.UpstreamModelUpdateCheckEnabled = true
+	settings.UpstreamModelUpdateLastDetectedModels = []string{"gpt-4.1", "gpt-4.1-mini"}
+	settings.UpstreamModelUpdateLastRemovedModels = []string{"gpt-4o"}
+	channel.SetOtherSettings(settings)
+	channel.Models = "gpt-4o"
+	require.NoError(t, db.Create(channel).Error)
+
+	addedModels, removedModels, remainingModels, remainingRemoveModels, modelsChanged, err := applyChannelUpstreamModelUpdates(
+		channel,
+		[]string{"gpt-4.1"},
+		[]string{"gpt-4.1-mini"},
+		[]string{"gpt-4o"},
+	)
+	require.NoError(t, err)
+	require.True(t, modelsChanged)
+	require.Equal(t, []string{"gpt-4.1"}, addedModels)
+	require.Equal(t, []string{"gpt-4o"}, removedModels)
+	require.Empty(t, remainingModels)
+	require.Empty(t, remainingRemoveModels)
+	// 调用方 channel 内存对象须回填最新状态（ApplyChannelUpstreamModelUpdates 响应依赖）
+	require.Equal(t, "gpt-4.1", channel.Models)
+	require.Equal(t, []string{"gpt-4.1-mini"}, channel.GetOtherSettings().UpstreamModelUpdateIgnoredModels)
+
+	// DB 持久化须与返回值一致
+	reloaded, err := model.GetChannelById(channel.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, "gpt-4.1", reloaded.Models)
+	persisted := reloaded.GetOtherSettings()
+	require.Empty(t, persisted.UpstreamModelUpdateLastDetectedModels)
+	require.Empty(t, persisted.UpstreamModelUpdateLastRemovedModels)
+	require.Equal(t, []string{"gpt-4.1-mini"}, persisted.UpstreamModelUpdateIgnoredModels)
+	require.NotZero(t, persisted.UpstreamModelUpdateLastCheckTime)
+
+	// 幂等：残留 pending 为空时再次 apply 不产生变更、不重复写库
+	addedModels, removedModels, remainingModels, remainingRemoveModels, modelsChanged, err = applyChannelUpstreamModelUpdates(
+		channel,
+		[]string{"gpt-4.1"},
+		nil,
+		[]string{"gpt-4o"},
+	)
+	require.NoError(t, err)
+	require.False(t, modelsChanged)
+	require.Empty(t, addedModels)
+	require.Empty(t, removedModels)
+	require.Empty(t, remainingModels)
+	require.Empty(t, remainingRemoveModels)
+
+	reloaded, err = model.GetChannelById(channel.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, "gpt-4.1", reloaded.Models)
+}

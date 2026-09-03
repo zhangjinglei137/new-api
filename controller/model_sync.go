@@ -31,6 +31,10 @@ const (
 	// opencode-go 官方仓库（llm-metadata）无 opencode 条目，独立拉取 models.opencode.ai
 	openCodeGoSyncModelsURL = "https://models.opencode.ai/api.json"
 	openCodeGoSyncVendor    = "OpenCode Go"
+	// upstreamFetchCacheLimit 限制 etagCache/bodyCache 条目数（超过后整体清空）。
+	// fetchJSON 按调用方提供的任意 URL 累积缓存，URL 来自不可信输入时缓存会
+	// 无界增长，故设置简单容量上限防止内存泄漏。
+	upstreamFetchCacheLimit = 64
 )
 
 // openCodeGoProviderVendors 将 api.json 的 provider.npm 值映射为供应商名
@@ -413,6 +417,11 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 				}
 				// cache body and ETag
 				cacheMutex.Lock()
+				if len(bodyCache) >= upstreamFetchCacheLimit {
+					// 缓存满：整体清空（简单淘汰），防止不可信上游 URL 使缓存无界增长
+					etagCache = make(map[string]string)
+					bodyCache = make(map[string][]byte)
+				}
 				if et := resp.Header.Get("ETag"); et != "" {
 					etagCache[url] = et
 				}
