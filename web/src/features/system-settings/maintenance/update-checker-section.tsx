@@ -31,6 +31,7 @@ import { formatTimestamp, formatTimestampToDate } from '@/lib/format'
 import { checkUpdate, updateSystemOption } from '../api'
 import { SettingsSection } from '../components/settings-section'
 import type { OperationsSettings } from '../types'
+import { compareVersions } from '../utils/version-compare'
 
 type ReleaseInfo = {
   tag_name: string
@@ -81,10 +82,15 @@ export function UpdateCheckerSection({
         throw new Error(payload.message || t('Failed to check for updates'))
       }
 
-      if (currentVersion && payload.data.tag_name === currentVersion) {
+      // 只有远端 release 确实更新于当前版本时才提示；相等或更旧均视为已是最新。
+      // 版本号无法解析时退化为字符串相等判断（避免对自定义版本号误报）。
+      const isNewer = currentVersion
+        ? compareVersions(payload.data.tag_name, currentVersion) === 1
+        : true
+      if (currentVersion && !isNewer) {
         toast.success(
           t('You are running the latest version ({{version}}).', {
-            version: payload.data.tag_name,
+            version: currentVersion,
           })
         )
         return
