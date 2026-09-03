@@ -55,6 +55,7 @@ import {
   type SubmitErrorHandler,
   useFieldArray,
   useForm,
+  useFormState,
 } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -70,6 +71,7 @@ import {
 import { JsonCodeEditor } from '@/components/json-code-editor'
 import { JsonEditor } from '@/components/json-editor'
 import { MultiSelect } from '@/components/multi-select'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -161,13 +163,12 @@ import {
 } from '../../constants'
 import { useChannelMutateForm } from '../../hooks/use-channel-mutate-form'
 import {
+  CHANNEL_TYPE_DEFAULTS,
   CHANNEL_FORM_DEFAULT_VALUES,
   CHANNEL_TYPE_ADVANCED_CUSTOM,
   channelFormSchema,
   channelsQueryKeys,
   getAdvancedCustomStats,
-  getAdvancedCustomTemplateConfig,
-  stringifyAdvancedCustomConfig,
   transformChannelToFormDefaults,
   type ChannelFormValues,
   deduplicateKeys,
@@ -275,6 +276,12 @@ const ADVANCED_SETTINGS_SECTION_IDS = {
   fieldPassthrough: 'channel-section-advanced-field-passthrough',
   upstreamModelDetection: 'channel-section-advanced-upstream-model-detection',
 } as const
+// DOM ids for the editor sections are prefixed and scoped to the drawer form
+// element so they cannot collide with same-named ids anywhere else in the page.
+const CHANNEL_EDITOR_SECTION_ID_PREFIX = 'channel-editor-'
+function editorSectionDomId(sectionId: string): string {
+  return `${CHANNEL_EDITOR_SECTION_ID_PREFIX}${sectionId}`
+}
 const ADVANCED_SETTINGS_CHILD_SECTION_IDS: string[] = Object.values(
   ADVANCED_SETTINGS_SECTION_IDS
 )
@@ -675,6 +682,7 @@ export function ChannelMutateDrawer({
   const missingModelsResolveRef = useRef<
     ((action: MissingModelsAction) => void) | null
   >(null)
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
   const channelFormRef = useRef<HTMLFormElement>(null)
   const advancedNavScrollPendingRef = useRef(false)
   const [activeEditorSectionId, setActiveEditorSectionId] = useState<string>(
@@ -753,6 +761,9 @@ export function ChannelMutateDrawer({
     resolver: zodResolver(channelFormSchema),
     defaultValues: CHANNEL_FORM_DEFAULT_VALUES,
   })
+  // Subscribe to isDirty so the close-confirm check sees the live value
+  // (reading form.formState.isDirty without a subscription is stale).
+  const { isDirty: isFormDirty } = useFormState({ control: form.control })
   const modelProxyRulesFields = useFieldArray({
     control: form.control,
     name: 'model_proxy_rules',
@@ -1388,67 +1399,34 @@ export function ChannelMutateDrawer({
   useEffect(() => {
     if (isEditing) return // Don't auto-set defaults when editing
 
-    // Type 45 (VolcEngine) - set default base_url
-    if (currentType === 45) {
+    const defaults = CHANNEL_TYPE_DEFAULTS[currentType]
+    if (!defaults) return
+
+    if (defaults.base_url) {
       const currentBaseUrlValue = form.getValues('base_url')
       if (!currentBaseUrlValue || currentBaseUrlValue === '') {
-        form.setValue('base_url', 'https://ark.cn-beijing.volces.com')
+        form.setValue('base_url', defaults.base_url)
       }
     }
 
-    // Type 18 (Xunfei) - set default other (version)
-    if (currentType === 18) {
+    if (defaults.other) {
       const currentOther = form.getValues('other')
       if (!currentOther || currentOther === '') {
-        form.setValue('other', 'v2.1')
+        form.setValue('other', defaults.other)
       }
     }
 
-    // Type 61 (OpenCode Go) - prefill default routes, header override and base URL
-    if (currentType === CHANNEL_TYPE_OPENCODE_GO) {
-      const currentBaseUrlValue = form.getValues('base_url')
-      if (!currentBaseUrlValue || currentBaseUrlValue === '') {
-        form.setValue('base_url', 'https://opencode.ai/zen/go')
-      }
+    if (defaults.advanced_custom) {
       const currentAdvancedCustom = form.getValues('advanced_custom')
       if (!currentAdvancedCustom?.trim()) {
-        form.setValue(
-          'advanced_custom',
-          stringifyAdvancedCustomConfig(
-            getAdvancedCustomTemplateConfig('opencode_go')
-          )
-        )
-      }
-      const currentHeaderOverride = form.getValues('header_override')
-      if (!currentHeaderOverride?.trim()) {
-        form.setValue(
-          'header_override',
-          JSON.stringify(
-            {
-              '*': true,
-              Authorization: 'Bearer {api_key}',
-              'x-api-key': '{api_key}',
-              'Content-Type': '{client_header:Content-Type}',
-              'User-Agent': '{client_header:User-Agent}',
-              'x-opencode-client': '{client_header:x-opencode-client}',
-              'x-opencode-project': '{client_header:x-opencode-project}',
-              'x-opencode-request': '{client_header:x-opencode-request}',
-              'x-opencode-session': '{client_header:x-opencode-session}',
-              Accept: '{client_header:Accept}',
-              Host: 'opencode.ai',
-              'Accept-Encoding': '{client_header:Accept-Encoding}',
-            },
-            null,
-            2
-          )
-        )
+        form.setValue('advanced_custom', defaults.advanced_custom)
       }
     }
 
-    if (currentType === CHANNEL_TYPE_SENSENOVA) {
-      const currentBaseUrlValue = form.getValues('base_url')
-      if (!currentBaseUrlValue || currentBaseUrlValue === '') {
-        form.setValue('base_url', 'https://token.sensenova.cn')
+    if (defaults.header_override) {
+      const currentHeaderOverride = form.getValues('header_override')
+      if (!currentHeaderOverride?.trim()) {
+        form.setValue('header_override', defaults.header_override)
       }
     }
   }, [currentType, isEditing, form])
@@ -1463,23 +1441,22 @@ export function ChannelMutateDrawer({
     }
   }, [form, isEditing, multiKeyMode, supportsMultiKeyAddMode])
 
+  const warnedV1BaseUrlRef = useRef<string | null>(null)
+
   // Validate base_url - warn if it ends with /v1
   useEffect(() => {
     if (!currentBaseUrl || !currentBaseUrl.endsWith('/v1')) return
+    // Dedupe so each distinct /v1 URL warns only once (immediate, no timeout).
+    if (warnedV1BaseUrlRef.current === currentBaseUrl) return
+    warnedV1BaseUrlRef.current = currentBaseUrl
 
-    // Show warning toast
-    const timer = setTimeout(() => {
-      toast.warning(
-        t(
-          'Warning: Base URL should not end with /v1. New API will handle it automatically. This may cause request failures.'
-        ),
-        { duration: 5000 }
-      )
-    }, 500)
-
-    return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentBaseUrl])
+    toast.warning(
+      t(
+        'Warning: Base URL should not end with /v1. New API will handle it automatically. This may cause request failures.'
+      ),
+      { duration: 5000 }
+    )
+  }, [currentBaseUrl, t])
 
   // Handle key deduplication
   const handleDeduplicateKeys = () => {
@@ -1766,6 +1743,10 @@ export function ChannelMutateDrawer({
         statusCodeRiskResolveRef.current(false)
         statusCodeRiskResolveRef.current = null
       }
+      if (missingModelsResolveRef.current) {
+        missingModelsResolveRef.current('cancel')
+        missingModelsResolveRef.current = null
+      }
     }
   }, [])
 
@@ -1922,8 +1903,10 @@ export function ChannelMutateDrawer({
       }
 
       const scrollTargetIntoView = () => {
-        document
-          .querySelector<HTMLElement>(`#${targetId}`)
+        channelFormRef.current
+          ?.querySelector<HTMLElement>(
+            `#${editorSectionDomId(targetId)}`
+          )
           ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }
 
@@ -1945,8 +1928,8 @@ export function ChannelMutateDrawer({
     let nextActiveSectionId: string = CHANNEL_EDITOR_SECTION_IDS.identity
 
     for (const sectionId of CHANNEL_EDITOR_MAIN_SECTION_IDS) {
-      const sectionElement = document.querySelector<HTMLElement>(
-        `#${sectionId}`
+      const sectionElement = formElement.querySelector<HTMLElement>(
+        `#${editorSectionDomId(sectionId)}`
       )
       if (!sectionElement) continue
       if (sectionElement.getBoundingClientRect().top <= activationY) {
@@ -1998,22 +1981,57 @@ export function ChannelMutateDrawer({
     [handleAdvancedSettingsOpenChange, t]
   )
 
-  // Handle drawer close
+  // Close the drawer and reset all drawer-local state. Also falls back any
+  // pending guard dialogs (status-code risk / missing models) so the awaiting
+  // onSubmit promise is never left hanging after the drawer closes.
+  const closeAndResetDrawer = useCallback(() => {
+    if (statusCodeRiskResolveRef.current) {
+      statusCodeRiskResolveRef.current(false)
+      statusCodeRiskResolveRef.current = null
+    }
+    if (missingModelsResolveRef.current) {
+      missingModelsResolveRef.current('cancel')
+      missingModelsResolveRef.current = null
+    }
+    setStatusCodeRiskOpen(false)
+    setStatusCodeRiskDetailItems([])
+    setMissingModelsDialogOpen(false)
+    setMissingModelsList([])
+    form.reset(CHANNEL_FORM_DEFAULT_VALUES)
+    setDoubaoAccessMode('standard')
+    advancedNavScrollPendingRef.current = false
+    setActiveEditorSectionId(CHANNEL_EDITOR_SECTION_IDS.identity)
+    setExpandedEditorNavItemId(undefined)
+    setAdvancedSettingsOpen(false)
+    setClipboardConnectionInfo(null)
+  }, [form])
+
+  // Handle drawer close. If the form has unsaved changes (and we are not in
+  // the middle of submitting), ask for confirmation first so edits aren't
+  // silently discarded.
   const handleOpenChange = useCallback(
     (v: boolean) => {
-      onOpenChange(v)
-      if (!v) {
-        form.reset(CHANNEL_FORM_DEFAULT_VALUES)
-        setDoubaoAccessMode('standard')
-        advancedNavScrollPendingRef.current = false
-        setActiveEditorSectionId(CHANNEL_EDITOR_SECTION_IDS.identity)
-        setExpandedEditorNavItemId(undefined)
-        setAdvancedSettingsOpen(false)
-        setClipboardConnectionInfo(null)
+      if (v) {
+        onOpenChange(true)
+        return
       }
+
+      if (isFormDirty && !isSubmitting) {
+        setConfirmDiscardOpen(true)
+        return
+      }
+
+      onOpenChange(false)
+      closeAndResetDrawer()
     },
-    [onOpenChange, form]
+    [onOpenChange, isFormDirty, isSubmitting, closeAndResetDrawer]
   )
+
+  const handleConfirmDiscard = useCallback(() => {
+    setConfirmDiscardOpen(false)
+    onOpenChange(false)
+    closeAndResetDrawer()
+  }, [onOpenChange, closeAndResetDrawer])
 
   return (
     <>
@@ -2123,7 +2141,7 @@ export function ChannelMutateDrawer({
                   <div className='flex min-w-0 flex-col gap-5'>
                     {/* ── Basic Information ── */}
                     <div
-                      id={CHANNEL_EDITOR_SECTION_IDS.identity}
+                      id={editorSectionDomId(CHANNEL_EDITOR_SECTION_IDS.identity)}
                       className='scroll-mt-4'
                     >
                       <ChannelBasicSection>
@@ -2339,7 +2357,9 @@ export function ChannelMutateDrawer({
 
                     {/* ── API Access ── */}
                     <div
-                      id={CHANNEL_EDITOR_SECTION_IDS.credentials}
+                      id={editorSectionDomId(
+                        CHANNEL_EDITOR_SECTION_IDS.credentials
+                      )}
                       className='scroll-mt-4'
                     >
                       <ChannelApiAccessSection>
@@ -3933,7 +3953,7 @@ export function ChannelMutateDrawer({
 
                     {/* ── Models & Groups ── */}
                     <div
-                      id={CHANNEL_EDITOR_SECTION_IDS.models}
+                      id={editorSectionDomId(CHANNEL_EDITOR_SECTION_IDS.models)}
                       className='scroll-mt-4'
                     >
                       <ChannelModelsSection>
@@ -4299,7 +4319,7 @@ export function ChannelMutateDrawer({
                     </div>
 
                     <div
-                      id={CHANNEL_EDITOR_SECTION_IDS.advanced}
+                      id={editorSectionDomId(CHANNEL_EDITOR_SECTION_IDS.advanced)}
                       className='scroll-mt-4'
                     >
                       <ChannelAdvancedSection
@@ -4315,7 +4335,9 @@ export function ChannelMutateDrawer({
                             iconTone='info'
                           />
                           <div
-                            id={ADVANCED_SETTINGS_SECTION_IDS.routingStrategy}
+                            id={editorSectionDomId(
+                              ADVANCED_SETTINGS_SECTION_IDS.routingStrategy
+                            )}
                             className={configuredAdvancedSectionClassName(
                               'flex scroll-mt-4 flex-col gap-4',
                               routingStrategyConfigured
@@ -4423,7 +4445,9 @@ export function ChannelMutateDrawer({
                           </div>
 
                           <div
-                            id={ADVANCED_SETTINGS_SECTION_IDS.internalNotes}
+                            id={editorSectionDomId(
+                              ADVANCED_SETTINGS_SECTION_IDS.internalNotes
+                            )}
                             className={configuredAdvancedSectionClassName(
                               'flex scroll-mt-4 flex-col gap-4 border-t pt-4',
                               internalNotesConfigured
@@ -4481,7 +4505,9 @@ export function ChannelMutateDrawer({
                           </div>
 
                           <div
-                            id={ADVANCED_SETTINGS_SECTION_IDS.overrideRules}
+                            id={editorSectionDomId(
+                              ADVANCED_SETTINGS_SECTION_IDS.overrideRules
+                            )}
                             className={configuredAdvancedSectionClassName(
                               'flex scroll-mt-4 flex-col gap-4 border-t pt-4',
                               overrideRulesConfigured
@@ -4730,7 +4756,9 @@ export function ChannelMutateDrawer({
 
                         {/* ── Extra Settings ── */}
                         <div
-                          id={ADVANCED_SETTINGS_SECTION_IDS.extraSettings}
+                          id={editorSectionDomId(
+                            ADVANCED_SETTINGS_SECTION_IDS.extraSettings
+                          )}
                           className={sideDrawerSectionClassName(
                             configuredAdvancedSectionClassName(
                               'scroll-mt-4',
@@ -5137,7 +5165,9 @@ export function ChannelMutateDrawer({
 
                         {FIELD_PASSTHROUGH_TYPES.has(currentType) && (
                           <div
-                            id={ADVANCED_SETTINGS_SECTION_IDS.fieldPassthrough}
+                            id={editorSectionDomId(
+                              ADVANCED_SETTINGS_SECTION_IDS.fieldPassthrough
+                            )}
                             className={sideDrawerSectionClassName(
                               configuredAdvancedSectionClassName(
                                 'scroll-mt-4',
@@ -5387,9 +5417,10 @@ export function ChannelMutateDrawer({
 
                         {MODEL_FETCHABLE_TYPES.has(currentType) && (
                           <div
-                            id={
-                              ADVANCED_SETTINGS_SECTION_IDS.upstreamModelDetection
-                            }
+                            id={editorSectionDomId(
+                              ADVANCED_SETTINGS_SECTION_IDS
+                                .upstreamModelDetection
+                            )}
                             className={sideDrawerSectionClassName(
                               configuredAdvancedSectionClassName(
                                 'scroll-mt-4',
@@ -5631,6 +5662,16 @@ export function ChannelMutateDrawer({
         }}
         detailItems={statusCodeRiskDetailItems}
         onConfirm={() => handleStatusCodeRiskAction(true)}
+      />
+
+      <ConfirmDialog
+        open={confirmDiscardOpen}
+        onOpenChange={setConfirmDiscardOpen}
+        title={t('Unsaved changes')}
+        desc={t('You have unsaved changes. Are you sure you want to leave?')}
+        confirmText={t('Leave')}
+        destructive
+        handleConfirm={handleConfirmDiscard}
       />
     </>
   )
