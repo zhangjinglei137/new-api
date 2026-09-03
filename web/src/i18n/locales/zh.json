@@ -5712,6 +5712,7 @@
     "Click to view usage": "点击查看用量",
     "The upstream response did not include recognizable usage data.": "上游响应中未包含可识别的用量数据。",
     "{{count}} requests": "{{count}} 个请求",
-    "{{count}} tokens": "{{count}} 个 Token"
+    "{{count}} tokens": "{{count}} 个 Token",
+    "Status: ": "状态："
   }
 }

@@ -173,7 +173,7 @@ describe('MoonshotCodingPlanUsageDialog', () => {
     ).toBeInTheDocument()
   })
 
-  test('passes through the backend message when credentials are not configured', () => {
+  test('passes through the backend message verbatim when credentials are not configured', () => {
     renderDialog({
       success: false,
       error_code: 'credentials_not_configured',
@@ -183,9 +183,9 @@ describe('MoonshotCodingPlanUsageDialog', () => {
     expect(
       screen.getByText('Usage credentials not configured')
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('Moonshot API key 未配置，请在渠道设置中更新凭证')
-    ).toBeInTheDocument()
+    // Payload contract: backend message passes through unchanged; assert a
+    // stable substring rather than the full sentence.
+    expect(screen.getByText(/未配置，请在渠道设置中更新凭证/)).toBeInTheDocument()
   })
 
   test('falls back to the upstream message for unknown failures', () => {

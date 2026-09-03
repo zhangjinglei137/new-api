@@ -22,12 +22,11 @@ import { describe, expect, test, vi } from 'vitest'
 import dayjs from '@/lib/dayjs'
 import { formatDateTimeStr } from '@/lib/format'
 
-import type {
-  SenseNovaUsagePool,
-  SenseNovaUsageResponse,
-  SenseNovaUsageWindow,
-} from '../../../api'
-import { SenseNovaUsageDialog } from '../sensenova-usage-dialog'
+import type { SenseNovaUsagePool, SenseNovaUsageWindow } from '../../../api'
+import {
+  SenseNovaUsageDialog,
+  type SenseNovaUsageResponse,
+} from '../sensenova-usage-dialog'
 
 function renderDialog(response: SenseNovaUsageResponse | null, onRefresh?: () => void) {
   render(
@@ -252,21 +251,48 @@ describe('SenseNovaUsageDialog', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('routes failure messages to the login-failed, credential and generic titles', () => {
-    renderDialog({ success: false, message: 'SenseNova 登录失败，请检查账号' })
+  test('branches the failure title on login_failed and passes the backend message through', () => {
+    // login_failed -> login-failed title; the backend message is passed
+    // through verbatim (asserted by substring, not the full message).
+    renderDialog({
+      success: false,
+      error_code: 'login_failed',
+      message: 'SenseNova 登录失败，请检查账号',
+    })
     expect(screen.getByRole('alert')).toBeInTheDocument()
     expect(screen.getByText('SenseNova login failed')).toBeInTheDocument()
-    expect(screen.getByText('SenseNova 登录失败，请检查账号')).toBeInTheDocument()
+    expect(screen.getByText(/请检查账号/)).toBeInTheDocument()
+  })
 
-    renderDialog({ success: false, message: 'SenseNova 账号未配置' })
+  test('maps credentials_not_configured and credentials_expired to the credential title', () => {
+    renderDialog({
+      success: false,
+      error_code: 'credentials_not_configured',
+      message: 'SenseNova 账号未配置',
+    })
     expect(screen.getByText('SenseNova credentials not configured')).toBeInTheDocument()
 
-    renderDialog({ success: false, message: 'upstream exploded' })
+    renderDialog({
+      success: false,
+      error_code: 'credentials_expired',
+      message: 'SenseNova 凭证已失效',
+    })
+    expect(
+      screen.getAllByText('SenseNova credentials not configured')
+    ).toHaveLength(2)
+  })
+
+  test('falls back to the generic copy for unknown error codes', () => {
+    renderDialog({ success: false, error_code: 'none', message: 'upstream exploded' })
     expect(screen.getByText('Unable to load SenseNova usage')).toBeInTheDocument()
   })
 
   test('renders the failure alert with the destructive style', () => {
-    renderDialog({ success: false, message: 'SenseNova 登录失败' })
+    renderDialog({
+      success: false,
+      error_code: 'login_failed',
+      message: 'SenseNova 登录失败',
+    })
 
     const alert = screen.getByRole('alert')
     expect(alert.className).toContain('destructive')

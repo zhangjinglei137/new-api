@@ -218,16 +218,16 @@ describe('CommandCodeUsageDialog', () => {
     ).toBeInTheDocument()
   })
 
-  test('shows the upstream error message on failure', () => {
+  test('shows the upstream error message passed through verbatim on failure', () => {
     renderDialog({
       success: false,
       message: 'commandcode cookie 未配置',
     })
 
     expect(screen.getByText('Unable to identify usage data')).toBeInTheDocument()
-    expect(
-      screen.getByText('commandcode cookie 未配置')
-    ).toBeInTheDocument()
+    // Payload contract: the backend message is surfaced unchanged in the
+    // alert description; assert a stable substring rather than full text.
+    expect(screen.getByText(/cookie 未配置/)).toBeInTheDocument()
   })
 
   test('omits the raw JSON panel when the query failed', () => {

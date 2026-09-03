@@ -47,7 +47,6 @@ import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Dialog } from '@/components/dialog'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -71,7 +70,6 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty'
 import { Progress } from '@/components/ui/progress'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import dayjs from '@/lib/dayjs'
@@ -83,6 +81,9 @@ import {
   resetCodexUsage,
   type CodexResetCreditsResponse,
 } from '../../api'
+
+import { UsageDialogShell } from './usage/usage-dialog-shell'
+import { useUsageDialogState } from './usage/use-usage-dialog-state'
 
 type CodexRateLimitWindow = {
   used_percent?: number
@@ -913,7 +914,6 @@ export function CodexUsageDialog({
 }: CodexUsageDialogProps) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
-  const [showRawJson, setShowRawJson] = useState(false)
   const [showResetCredits, setShowResetCredits] = useState(false)
   const [resetCreditsResponse, setResetCreditsResponse] =
     useState<CodexResetCreditsResponse | null>(null)
@@ -1010,7 +1010,6 @@ export function CodexUsageDialog({
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
-      setShowRawJson(false)
       setShowResetCredits(false)
       setResetCreditsResponse(null)
       setResetCreditsError('')
@@ -1080,31 +1079,48 @@ export function CodexUsageDialog({
     }
   }, [response])
 
+  const { showRawPanel } = useUsageDialogState({
+    response,
+    hasUsageData: Boolean(payload),
+    getUsageErrorCopy: () => ({ title: '', body: '' }),
+  })
+
   return (
-    <Dialog
+    <UsageDialogShell
       open={open}
       onOpenChange={handleDialogOpenChange}
       title={t('Codex Account & Usage')}
       contentClassName='sm:max-w-[900px]'
       titleClassName='flex items-center gap-2'
-      contentHeight='auto'
-      bodyClassName='flex flex-col gap-4'
-      footer={
-        <Button
-          type='button'
-          variant='outline'
-          onClick={() => handleDialogOpenChange(false)}
-        >
-          {t('Close')}
-        </Button>
+      errorCopy={null}
+      showDegraded={false}
+      showRawPanel={showRawPanel}
+      rawJsonText={rawJsonText}
+      rawTriggerLabel={t('Raw JSON')}
+      rawHeader={
+        <div className='flex justify-end border-t px-3 py-2'>
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            onClick={() => copyToClipboard(rawJsonText)}
+            disabled={!rawJsonText}
+          >
+            {copiedText === rawJsonText ? (
+              <Check data-icon='inline-start' className='text-success' />
+            ) : (
+              <Copy data-icon='inline-start' />
+            )}
+            {t('Copy')}
+          </Button>
+        </div>
       }
     >
-      <div className='flex flex-col gap-4'>
-        {errorMessage && (
-          <div className='rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400'>
-            {errorMessage}
-          </div>
-        )}
+      {errorMessage && (
+        <div className='rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400'>
+          {errorMessage}
+        </div>
+      )}
 
         <Card size='sm' className='bg-muted/30 gap-0 py-0'>
           <CardHeader className='p-4 pb-2'>
@@ -1272,55 +1288,7 @@ export function CodexUsageDialog({
           </div>
         ) : null}
 
-        <Collapsible
-          open={showRawJson}
-          onOpenChange={setShowRawJson}
-          className='rounded-lg border'
-        >
-          <CollapsibleTrigger
-            render={
-              <button
-                type='button'
-                className='hover:bg-muted/40 flex w-full items-center justify-between gap-2 p-3 transition-colors'
-                aria-expanded={showRawJson}
-              />
-            }
-          >
-            <div className='text-sm font-medium'>{t('Raw JSON')}</div>
-            {showRawJson ? (
-              <ChevronUp className='text-muted-foreground h-4 w-4' />
-            ) : (
-              <ChevronDown className='text-muted-foreground h-4 w-4' />
-            )}
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <>
-              <div className='flex justify-end border-t px-3 py-2'>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
-                  onClick={() => copyToClipboard(rawJsonText)}
-                  disabled={!rawJsonText}
-                >
-                  {copiedText === rawJsonText ? (
-                    <Check data-icon='inline-start' className='text-success' />
-                  ) : (
-                    <Copy data-icon='inline-start' />
-                  )}
-                  {t('Copy')}
-                </Button>
-              </div>
-              <ScrollArea className='max-h-[50vh]'>
-                <pre className='bg-muted/30 m-0 p-3 text-xs break-words whitespace-pre-wrap'>
-                  {rawJsonText || '-'}
-                </pre>
-              </ScrollArea>
-            </>
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
-      <ConfirmDialog
+        <ConfirmDialog
         open={resetConfirmOpen}
         onOpenChange={setResetConfirmOpen}
         title={t('Confirm usage reset')}
@@ -1349,6 +1317,6 @@ export function CodexUsageDialog({
         confirmText={isResetting ? t('Resetting...') : t('Apply reset')}
         handleConfirm={handleConfirmReset}
       />
-    </Dialog>
+    </UsageDialogShell>
   )
 }

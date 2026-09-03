@@ -40,30 +40,50 @@ func GetSenseNovaUsage(c *gin.Context) {
 	}
 	settings := ch.GetOtherSettings()
 	if strings.TrimSpace(settings.SenseNovaUsername) == "" || strings.TrimSpace(settings.SenseNovaPassword) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "sensenova 账号未配置"})
+		c.JSON(http.StatusOK, gin.H{
+			"success":    false,
+			"message":    "sensenova 账号未配置",
+			"error_code": service.SenseNovaErrorCodeCredentialsNotConfigured,
+		})
 		return
 	}
 	username, err := common.DecryptSecret(strings.TrimSpace(settings.SenseNovaUsername))
 	if err != nil {
 		common.SysError("failed to decrypt sensenova username: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "sensenova 账号未配置"})
+		c.JSON(http.StatusOK, gin.H{
+			"success":    false,
+			"message":    "sensenova 账号未配置",
+			"error_code": service.SenseNovaErrorCodeCredentialsNotConfigured,
+		})
 		return
 	}
 	password, err := common.DecryptSecret(strings.TrimSpace(settings.SenseNovaPassword))
 	if err != nil {
 		common.SysError("failed to decrypt sensenova password: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "sensenova 账号未配置"})
+		c.JSON(http.StatusOK, gin.H{
+			"success":    false,
+			"message":    "sensenova 账号未配置",
+			"error_code": service.SenseNovaErrorCodeCredentialsNotConfigured,
+		})
 		return
 	}
 	if username == "" || password == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "sensenova 账号未配置"})
+		c.JSON(http.StatusOK, gin.H{
+			"success":    false,
+			"message":    "sensenova 账号未配置",
+			"error_code": service.SenseNovaErrorCodeCredentialsNotConfigured,
+		})
 		return
 	}
 
 	info, err := service.FetchSenseNovaUsage(ch.Id, username, password, ch.GetSetting().Proxy)
 	if err != nil {
 		common.SysError("failed to fetch sensenova usage: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		c.JSON(http.StatusOK, gin.H{
+			"success":    false,
+			"message":    err.Error(),
+			"error_code": service.ClassifySenseNovaUsageError(err),
+		})
 		return
 	}
 	pools := make([]gin.H, 0, len(info.Pools))
@@ -89,8 +109,13 @@ func GetSenseNovaUsage(c *gin.Context) {
 			"nearest_grant_expiring_balance": p.NearestGrantExpiringBalance,
 		})
 	}
-	common.ApiSuccess(c, gin.H{
-		"plan":  gin.H{"id": info.Plan.ID, "name": info.Plan.Name},
-		"pools": pools,
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"message":    "",
+		"error_code": service.SenseNovaErrorCodeNone,
+		"data": gin.H{
+			"plan":  gin.H{"id": info.Plan.ID, "name": info.Plan.Name},
+			"pools": pools,
+		},
 	})
 }

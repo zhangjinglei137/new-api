@@ -58,6 +58,41 @@ var senseNovaRedirectHosts = map[string]struct{}{
 // 调用方应作废缓存并重新登录。
 var errSenseNovaTokenInvalid = errors.New("sensenova token 已失效")
 
+// SenseNova 用量查询的稳定 error_code。前端据此渲染固定的错误标题，
+// 避免依赖可能随上游变化的中文 message 文本。
+const (
+	// SenseNovaErrorCodeNone 表示查询正常或无特定错误分类。
+	SenseNovaErrorCodeNone = "none"
+	// SenseNovaErrorCodeCredentialsNotConfigured 表示渠道未配置账号密码。
+	SenseNovaErrorCodeCredentialsNotConfigured = "credentials_not_configured"
+	// SenseNovaErrorCodeCredentialsExpired 表示登录态/令牌已失效（含刷新失败）。
+	SenseNovaErrorCodeCredentialsExpired = "credentials_expired"
+	// SenseNovaErrorCodeLoginFailed 表示账号密码登录流程失败。
+	SenseNovaErrorCodeLoginFailed = "login_failed"
+)
+
+// ClassifySenseNovaUsageError 将用量查询错误映射为稳定的 error_code。
+// nil 返回 none；token 失效（pool-usage 401/403）与 refresh 续期失败归为
+// credentials_expired；登录流程失败归为 login_failed；其余上游错误返回
+// none（前端回退到通用标题）。
+func ClassifySenseNovaUsageError(err error) string {
+	if err == nil {
+		return SenseNovaErrorCodeNone
+	}
+	if errors.Is(err, errSenseNovaTokenInvalid) {
+		return SenseNovaErrorCodeCredentialsExpired
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "续期失败"):
+		return SenseNovaErrorCodeCredentialsExpired
+	case strings.Contains(msg, "登录失败"):
+		return SenseNovaErrorCodeLoginFailed
+	default:
+		return SenseNovaErrorCodeNone
+	}
+}
+
 // SenseNovaToken 是 SenseNova 登录/续期得到的令牌。
 type SenseNovaToken struct {
 	AccessToken  string

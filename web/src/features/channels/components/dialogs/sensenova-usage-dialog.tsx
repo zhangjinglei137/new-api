@@ -17,34 +17,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
-  AlertTriangle,
   ChevronDown,
   ChevronUp,
   Gift,
   Info,
   Loader2,
-  RefreshCw,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Dialog } from '@/components/dialog'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 import { Progress } from '@/components/ui/progress'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import dayjs from '@/lib/dayjs'
 import { formatDateTimeStr } from '@/lib/format'
 import { toIntlLocale } from '@/i18n/languages'
@@ -52,11 +41,27 @@ import { cn } from '@/lib/utils'
 
 import type {
   SenseNovaUsagePool,
-  SenseNovaUsageResponse,
+  SenseNovaUsageResponse as BaseSenseNovaUsageResponse,
   SenseNovaUsageWindow,
 } from '../../api'
 
-export type { SenseNovaUsageResponse } from '../../api'
+import { UsageDialogShell } from './usage/usage-dialog-shell'
+import type { UsageErrorCopy } from './usage/use-usage-dialog-state'
+import { useUsageDialogState } from './usage/use-usage-dialog-state'
+
+/**
+ * Stable error codes returned by the backend. The dialog branches on these
+ * instead of fragile Chinese message text.
+ */
+export type SenseNovaUsageErrorCode =
+  | 'credentials_not_configured'
+  | 'credentials_expired'
+  | 'login_failed'
+  | 'none'
+
+export type SenseNovaUsageResponse = BaseSenseNovaUsageResponse & {
+  error_code?: SenseNovaUsageErrorCode
+}
 
 export type SenseNovaUsageDialogProps = {
   open: boolean
@@ -136,7 +141,7 @@ function PoolTypeBadge(props: { pool: SenseNovaUsagePool }) {
   )
 }
 
-function UsageWindowCard(props: {
+function WindowCard(props: {
   window: SenseNovaUsageWindow | null | undefined
   title: string
   locale?: string
@@ -271,12 +276,12 @@ function PoolCard(props: {
       </CardHeader>
       <CardContent className='space-y-3 p-4'>
         <div className='grid gap-3 sm:grid-cols-2'>
-          <UsageWindowCard
+          <WindowCard
             title={windowTitle('window_5h', t)}
             window={props.pool.window_5h}
             locale={props.locale}
           />
-          <UsageWindowCard
+          <WindowCard
             title={windowTitle('window_7d', t)}
             window={props.pool.window_7d}
             locale={props.locale}
@@ -305,20 +310,38 @@ function PoolCard(props: {
   )
 }
 
-function getErrorTitle(message: string, t: (key: string) => string): string {
-  const lower = message.toLowerCase()
-  if (lower.includes('登录失败') || lower.includes('login')) {
-    return t('SenseNova login failed')
+/**
+ * SenseNova maps failures through the stable backend `error_code` instead of
+ * matching Chinese message text.
+ */
+function getUsageErrorCopy(
+  errorCode: string | undefined,
+  message: string | undefined,
+  t: (key: string) => string
+): UsageErrorCopy {
+  if (errorCode === 'login_failed') {
+    return {
+      title: t('SenseNova login failed'),
+      body: message?.trim() || t('Failed to fetch usage'),
+    }
   }
-  if (lower.includes('账号未配置') || lower.includes('credential')) {
-    return t('SenseNova credentials not configured')
+  if (
+    errorCode === 'credentials_not_configured' ||
+    errorCode === 'credentials_expired'
+  ) {
+    return {
+      title: t('SenseNova credentials not configured'),
+      body: message?.trim() || t('Failed to fetch usage'),
+    }
   }
-  return t('Unable to load SenseNova usage')
+  return {
+    title: t('Unable to load SenseNova usage'),
+    body: message?.trim() || t('Failed to fetch usage'),
+  }
 }
 
 export function SenseNovaUsageDialog(props: SenseNovaUsageDialogProps) {
   const { t, i18n } = useTranslation()
-  const [showRawJson, setShowRawJson] = useState(false)
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const pools = Array.isArray(props.response?.data?.pools)
     ? props.response.data.pools.filter(
@@ -326,95 +349,54 @@ export function SenseNovaUsageDialog(props: SenseNovaUsageDialogProps) {
       )
     : []
   const isLoading = props.response === null
-  const errorMessage =
-    props.response?.success === false
-      ? props.response.message?.trim() || t('Failed to fetch usage')
-      : ''
-  const rawJsonText = props.response
-    ? JSON.stringify(props.response, null, 2)
-    : ''
-  const showRawPanel = Boolean(props.response && props.response.success && rawJsonText)
-  const showDegraded = Boolean(props.response?.success && pools.length === 0)
+  const { errorCopy, showDegraded, rawJsonText, showRawPanel } =
+    useUsageDialogState({
+      response: props.response,
+      hasUsageData: pools.length > 0,
+      getUsageErrorCopy,
+    })
 
   return (
-    <Dialog
+    <UsageDialogShell
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={t('SenseNova Usage')}
-      contentHeight='auto'
       bodyClassName='flex max-h-[min(76vh,760px)] flex-col gap-4 overflow-y-auto'
-      footer={
-        <Button type='button' variant='outline' onClick={() => props.onOpenChange(false)}>
-          {t('Close')}
-        </Button>
-      }
-    >
-      <div className='flex flex-col gap-4'>
-        {isLoading && (
+      errorCopy={errorCopy}
+      loading={
+        isLoading ? (
           <div className='text-muted-foreground flex items-center justify-center gap-2 py-12 text-sm'>
             <Loader2 className='size-4 animate-spin' />
             {t('Loading SenseNova usage...')}
           </div>
-        )}
-        {errorMessage && (
-          <Alert variant='destructive'>
-            <AlertTriangle />
-            <AlertTitle>{getErrorTitle(errorMessage, t)}</AlertTitle>
-            <AlertDescription>{errorMessage}</AlertDescription>
-          </Alert>
-        )}
-        {showDegraded && (
-          <Alert>
-            <AlertTriangle />
-            <AlertTitle>{t('Unable to identify usage data')}</AlertTitle>
-            <AlertDescription>{t('SenseNova returned no pool data.')}</AlertDescription>
-          </Alert>
-        )}
-        {props.response?.success && props.response.data?.plan?.name && (
-          <div className='flex items-center gap-2 text-sm'>
-            <span className='text-muted-foreground'>{t('Plan')}</span>
-            <Badge variant='secondary'>{props.response.data.plan.name}</Badge>
-          </div>
-        )}
-        {props.onRefresh && (
-          <div className='flex justify-end'>
-            <Button type='button' variant='outline' size='sm' onClick={props.onRefresh} disabled={Boolean(props.isRefreshing)}>
-              <RefreshCw data-icon='inline-start' />
-              {t('Refresh usage')}
-            </Button>
-          </div>
-        )}
-        {pools.length > 0 && (
-          <div className='flex flex-col gap-3'>
-            {pools.map((pool, index) => (
-              <PoolCard key={`${pool.pool_type || 'pool'}-${pool.name || index}`} pool={pool} locale={locale} />
-            ))}
-          </div>
-        )}
-        {pools.some((pool) => pool.pool_type === 'dedicated') && (
-          <div className='border-info/20 bg-info/5 text-info flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs'>
-            <Info className='mt-0.5 size-4 shrink-0' aria-hidden='true' />
-            <span>{t('Using a dedicated pool earns rewards for the general pool.')}</span>
-          </div>
-        )}
-        {showRawPanel && (
-          <Collapsible open={showRawJson} onOpenChange={setShowRawJson} className='rounded-lg border'>
-            <CollapsibleTrigger
-              render={
-                <button type='button' className='hover:bg-muted/40 flex w-full items-center justify-between gap-2 p-3 text-left transition-colors' aria-expanded={showRawJson} />
-              }
-            >
-              <div className='text-sm font-medium'>{t('Show raw upstream response')}</div>
-              {showRawJson ? <ChevronUp className='text-muted-foreground size-4' /> : <ChevronDown className='text-muted-foreground size-4' />}
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <ScrollArea className='max-h-[50vh]'>
-                <pre className='bg-muted/30 m-0 p-3 text-xs break-words whitespace-pre-wrap'>{rawJsonText}</pre>
-              </ScrollArea>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-      </div>
-    </Dialog>
+        ) : null
+      }
+      showDegraded={showDegraded}
+      degradedBody={t('SenseNova returned no pool data.')}
+      onRefresh={props.onRefresh}
+      isRefreshing={props.isRefreshing}
+      showRawPanel={showRawPanel}
+      rawJsonText={rawJsonText}
+    >
+      {props.response?.success && props.response.data?.plan?.name && (
+        <div className='flex items-center gap-2 text-sm'>
+          <span className='text-muted-foreground'>{t('Plan')}</span>
+          <Badge variant='secondary'>{props.response.data.plan.name}</Badge>
+        </div>
+      )}
+      {pools.length > 0 && (
+        <div className='flex flex-col gap-3'>
+          {pools.map((pool, index) => (
+            <PoolCard key={`${pool.pool_type || 'pool'}-${pool.name || index}`} pool={pool} locale={locale} />
+          ))}
+        </div>
+      )}
+      {pools.some((pool) => pool.pool_type === 'dedicated') && (
+        <div className='border-info/20 bg-info/5 text-info flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs'>
+          <Info className='mt-0.5 size-4 shrink-0' aria-hidden='true' />
+          <span>{t('Using a dedicated pool earns rewards for the general pool.')}</span>
+        </div>
+      )}
+    </UsageDialogShell>
   )
 }

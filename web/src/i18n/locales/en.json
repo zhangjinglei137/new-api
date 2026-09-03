@@ -5712,6 +5712,7 @@
     "Click to view usage": "Click to view usage",
     "The upstream response did not include recognizable usage data.": "The upstream response did not include recognizable usage data.",
     "{{count}} requests": "{{count}} requests",
-    "{{count}} tokens": "{{count}} tokens"
+    "{{count}} tokens": "{{count}} tokens",
+    "Status: ": "Status: "
   }
 }

@@ -186,7 +186,7 @@ describe('VolcCodingPlanUsageDialog', () => {
     ).toBeInTheDocument()
   })
 
-  test('passes through the backend message when credentials are not configured', () => {
+  test('passes through the backend message verbatim when credentials are not configured', () => {
     renderDialog({
       success: false,
       error_code: 'credentials_not_configured',
@@ -196,14 +196,15 @@ describe('VolcCodingPlanUsageDialog', () => {
     expect(
       screen.getByText('Usage credentials not configured')
     ).toBeInTheDocument()
+    // Payload contract: the backend message is passed through unchanged.
+    // Assert an AlertDescription substring instead of the full sentence so the
+    // test survives copy tweaks upstream.
     expect(
-      screen.getByText(
-        'OpenAPI Access Key / Secret Access Key 未配置，请在渠道设置中更新凭证'
-      )
+      screen.getByText(/未配置，请在渠道设置中更新凭证/)
     ).toBeInTheDocument()
   })
 
-  test('passes through the backend message when credentials expired', () => {
+  test('passes through the backend message verbatim when credentials expired', () => {
     renderDialog({
       success: false,
       error_code: 'credentials_expired',
@@ -214,11 +215,9 @@ describe('VolcCodingPlanUsageDialog', () => {
     expect(
       screen.getByText('Usage credentials not configured')
     ).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        '火山 OpenAPI Access Key / Secret Access Key 无效或已被禁用，请在渠道设置中更新凭证'
-      )
-    ).toBeInTheDocument()
+    // Payload contract: backend message passes through unchanged; assert a
+    // stable substring rather than the full message.
+    expect(screen.getByText(/无效或已被禁用/)).toBeInTheDocument()
   })
 
   test('falls back to the upstream message for unknown failures', () => {

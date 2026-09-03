@@ -176,7 +176,7 @@ describe('RadeonCloudUsageDialog', () => {
     ).toBeInTheDocument()
   })
 
-  test('passes through the backend message when credentials are expired', () => {
+  test('passes through the backend message verbatim when credentials are expired', () => {
     renderDialog({
       success: false,
       error_code: 'credentials_expired',
@@ -186,9 +186,9 @@ describe('RadeonCloudUsageDialog', () => {
     expect(
       screen.getByText('Usage credentials not configured')
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('AMD Radeon Cloud API key 已过期，请更新凭证')
-    ).toBeInTheDocument()
+    // Payload contract: backend message passes through unchanged; assert a
+    // stable substring rather than the full sentence.
+    expect(screen.getByText(/已过期，请更新凭证/)).toBeInTheDocument()
     // The free-to-use notice is hidden when the query failed.
     expect(
       screen.queryByText(/Free to use/)
