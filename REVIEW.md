@@ -16,14 +16,18 @@
 > 6. `refactor(web)` 合并 API 与渠道图表组件
 > 7. `docs` 本报告
 >
-> **已实施**：sync-upstream 方案（.gitattributes + merge.ours.driver + rerere 缓存/种子 + vet 关卡 + issue 兜底）、CI 全部修复、后端 H1/H2/O1-O8/R1/R3/T1、前端 H1/H2/H3/R1/R2/O1-O4/P2/P4（P2 为 CHANNEL_TYPE_DEFAULTS 配置表）、上游 7 个提交手动合并、rerere 种子入库。
+> **已实施**：sync-upstream 方案（.gitattributes + merge.ours.driver + rerere 缓存/种子 + vet 关卡 + issue 兜底）、CI 全部修复、后端 H1/H2/O1/O2/O4/O6/O7/O8/R1/R3/T1、前端 H1/H2/H3/R1/R2/O1-O4/P2/P4（P2 为 CHANNEL_TYPE_DEFAULTS 配置表）、上游 7 个提交手动合并、rerere 种子入库。
 >
 > **未实施（有明确理由）**：
 > - P1（魔法键回显后端规范化）：需后端数据迁移，L 级，留作后续建议
 > - P3（doubaoAccessMode 纯派生）：`endpoint_profile` 无法表达 standard/custom 差异，纯派生会破坏火山渠道回显链路，保留现状
+> - O3（sensenova 锁内网络请求）：当前实现实际安全——锁内串行化恰好防止 token stampede，仅同凭证并发阻塞至登录完成（≤30s）的性能取舍，非正确性缺陷；如需优化可后续引入 singleflight
 > - O9 打包优化：诊断确认 vchart 已有效分包，大 chunk 为图标库（按需加载），主包大头是 `lobe-icon.tsx` 全量导入；构建配置保持现状
+> - O5（sensenova 凭证摘要分隔符）：推送前已修复（sha256 加 `\x00` 分隔）
 >
-> **验证结果**：根模块+relaykit 全量 build/vet/test 通过（567 前端用例全绿）；pg 实证裸 `group` 保留字报错（O8 修复必要）；SQLite T2 三态验证通过；sync 驱动 dry-run 实证有效。**MySQL 实例验证未做**（需起容器，待授权）。
+> **验证结果**：根模块+relaykit 全量 build/vet/test 通过（567 前端用例全绿）；pg 实证裸 `group` 保留字报错（O8 修复必要）；SQLite T2 三态验证通过；sync 驱动 dry-run 实证有效。**MySQL 实例验证未做**（需起容器，待授权，按 AGENTS 要求如实标注、不声称 MySQL 兼容）。
+>
+> **council 全面验证（2026-09-03）**：3 位 councillor（ds/glm/qw）一致裁决 **GO（可推送）**，未发现阻塞性缺陷；gpt 两次空返回标记 FAILED。非阻塞跟进项：MySQL 实例验证、fr/ja/ru/vi/zh-TW 补 68 个 i18n key、`ClassifySenseNovaUsageError` 改 sentinel error、sync-upstream 补 setup-go（已修）。
 
 ---
 

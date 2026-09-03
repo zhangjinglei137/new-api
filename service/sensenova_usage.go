@@ -174,9 +174,10 @@ var (
 	senseNovaTokenEntries   = make(map[senseNovaTokenKey]*senseNovaTokenEntry)
 )
 
-// senseNovaCredDigest 返回凭证摘要 sha256(username+password) 的 hex。
+// senseNovaCredDigest 返回凭证摘要 sha256(username+"\x00"+password) 的 hex。
+// 使用空字节分隔用户名与密码，避免 ("abc","def") 与 ("ab","cdef") 拼接碰撞。
 func senseNovaCredDigest(username, password string) string {
-	sum := sha256.Sum256([]byte(username + password))
+	sum := sha256.Sum256([]byte(username + "\x00" + password))
 	return hex.EncodeToString(sum[:])
 }
 

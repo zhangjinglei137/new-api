@@ -2,7 +2,8 @@ name: Sync Upstream
 
 # 每天 UTC 00:00 自动把 QuantumNous/new-api 的 main 合并进本仓库 main。
 # 策略（本地优先）：
-#   - .gitattributes 按文件策略（model/channel.go merge=ours、relaykit/dto/channel_settings.go merge=union）
+#   - .gitattributes 按文件策略（model/channel.go merge=ours，配合 merge.ours.driver 生效）
+#   - channel_settings.go 不设策略：依赖默认三方 merge（追加字段不重叠自动合并）+ -X ours 兜底
 #   - 全局 -X ours 兜底 + git rerere 缓存重放已人工解决的冲突
 #   - go vet 编译验证关卡（防止 ours 丢弃上游必填字段导致编译失败）
 # 冲突自动解决后 push（触发 build-image.yml 重建镜像）；上游已包含在 HEAD 则短路不 push。
@@ -99,6 +100,14 @@ jobs:
               git merge --abort 2>/dev/null || true
             fi
           fi
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            relaykit/go.sum
 
       - name: Verify build (fail-safe gate)
         id: verify
