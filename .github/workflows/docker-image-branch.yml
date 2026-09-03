@@ -37,7 +37,11 @@ jobs:
             TAG_PREFIX="$CUSTOM_VERSION"
             VERSION="$CUSTOM_VERSION"
           else
+            # 匿名 REST 在共享 runner 上易被限流，回退到 git 协议枚举上游最新 rc 标签（不受限流影响）。
             UPSTREAM_TAG="$(curl -fsSL --max-time 30 https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)"
+            if [ -z "$UPSTREAM_TAG" ]; then
+              UPSTREAM_TAG="$(git ls-remote --tags --refs https://github.com/QuantumNous/new-api.git 'refs/tags/v1.0.0-rc.*' 2>/dev/null | sed 's|.*refs/tags/||' | sort -V | tail -1)"
+            fi
             if [ -z "$UPSTREAM_TAG" ]; then
               UPSTREAM_TAG="v0.0.0"
             fi
