@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type TFunction } from 'i18next'
+import type { TFunction } from 'i18next'
 
 import type { TokenUnit } from './types'
 
@@ -145,3 +145,10 @@ export type ViewMode = (typeof VIEW_MODES)[keyof typeof VIEW_MODES]
 
 /** Default page size for pricing table */
 export const DEFAULT_PRICING_PAGE_SIZE = 20
+
+/**
+ * Page size for the model card grid. Large enough that the current catalog
+ * (well under 1000 models) renders on a single page without pagination
+ * controls; pagination reappears automatically if the catalog ever exceeds it.
+ */
+export const MODEL_CARD_GRID_PAGE_SIZE = 1000
