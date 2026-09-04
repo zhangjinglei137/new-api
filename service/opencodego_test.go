@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"math"
-	"strings"
 	"testing"
 	"time"
 
@@ -152,92 +151,6 @@ func TestConvertOpenCodeGoRatioData(t *testing.T) {
 	t.Run("invalid json", func(t *testing.T) {
 		_, err := convertOpenCodeGoRatioData([]byte("{not json"), 500)
 		require.Error(t, err)
-	})
-}
-
-// openCodeGoBalancePageFixture 对应当前 opencode 工作区页面（2026-08 抓取）：
-// usagePercent 为浮点、status 为 "ok"、rewards 段以 ]}) 结尾（位于 referral 对象内）。
-const openCodeGoBalancePageFixture = `
-<script>
-const workspace = {mine:!0,useBalance:!0,allowTraining:!1,region:$R[32]=["us","eu","sg","cn"],rollingUsage:$R[33]={status:"ok",resetInSec:3811,usagePercent:23.6,usage:283070516,limit:1200000000},weeklyUsage:$R[34]={status:"ok",resetInSec:397146,usagePercent:81.2,usage:2435686434,limit:3000000000},monthlyUsage:$R[35]={status:"ok",resetInSec:1615573,usagePercent:65.8,usage:3950635351,limit:6000000000}});
-const referral = {referralCode:"Z70E54QECG",hasReferral:!0,rewardAmount:500,rewards:$R[40]=[{id:"ref_01M0BRG1FNH1FAPQGX92FW6YCA",source:"inviter",status:"available",email:"a@example.com",amount:500,timeCreated:new Date("2026-08-19T01:07:50.000Z"),timeApplied:null},{id:"ref_01KZZ1C8WKB0W7C2YMX76M562F",source:"invitee",status:"available",email:"b@example.com",amount:500,timeCreated:new Date("2026-08-14T02:27:08.000Z"),timeApplied:null}]});
-</script>
-`
-
-// openCodeGoLegacyBalancePageFixture 对应旧版工作区页面：usagePercent 为整数、
-// status 为 "active"、rewards 段以 ]) 结尾，用于兼容性回归。
-const openCodeGoLegacyBalancePageFixture = `
-<script>
-const usage = {monthlyUsage:$R[0]={status:"active",resetInSec:86400,usagePercent:40}};
-const rewardAmount:500;
-const rewards:$R[1]=[{id:"1",source:"invite",status:"applied",email:"a@b.com",amount:500},{id:"2",source:"signup",status:"pending",email:"b@c.com",amount:500}]);
-</script>
-`
-
-func TestParseOpenCodeGoBalancePage(t *testing.T) {
-	t.Run("valid current page", func(t *testing.T) {
-		balance, err := parseOpenCodeGoBalancePage(openCodeGoBalancePageFixture)
-		require.NoError(t, err)
-		// 60 × (1 − 0.658) + 2 × 500/100 = 20.52 + 10 = 30.52
-		assert.InDelta(t, 30.52, balance, 1e-9)
-	})
-
-	t.Run("legacy page format", func(t *testing.T) {
-		balance, err := parseOpenCodeGoBalancePage(openCodeGoLegacyBalancePageFixture)
-		require.NoError(t, err)
-		// 60 × (1 − 0.4) + 1 × 500/100 = 36 + 5 = 41
-		assert.InDelta(t, 41.0, balance, 1e-9)
-	})
-
-	t.Run("missing usage percent", func(t *testing.T) {
-		_, err := parseOpenCodeGoBalancePage("<html>no usage data</html>")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "无法从 opencode 页面解析用量数据")
-	})
-
-	t.Run("missing rewards", func(t *testing.T) {
-		// 页面无奖励段（用户无邀请奖励）时按 0 个奖励计算，不报错
-		html := `{monthlyUsage:$R[0]={status:"ok",resetInSec:1615573,usagePercent:65.8}};`
-		balance, err := parseOpenCodeGoBalancePage(html)
-		require.NoError(t, err)
-		assert.InDelta(t, 20.52, balance, 1e-9)
-	})
-
-	t.Run("empty rewards list", func(t *testing.T) {
-		html := `{monthlyUsage:$R[0]={status:"ok",resetInSec:1615573,usagePercent:65.8}};rewards:$R[1]=[]);`
-		balance, err := parseOpenCodeGoBalancePage(html)
-		require.NoError(t, err)
-		assert.InDelta(t, 20.52, balance, 1e-9)
-	})
-
-	t.Run("reward amount defaults to 500", func(t *testing.T) {
-		html := strings.Replace(openCodeGoBalancePageFixture, "rewardAmount:500,", "", 1)
-		balance, err := parseOpenCodeGoBalancePage(html)
-		require.NoError(t, err)
-		assert.InDelta(t, 30.52, balance, 1e-9)
-	})
-
-	t.Run("custom reward amount", func(t *testing.T) {
-		html := strings.Replace(openCodeGoBalancePageFixture, "rewardAmount:500,", "rewardAmount:1000,", 1)
-		balance, err := parseOpenCodeGoBalancePage(html)
-		require.NoError(t, err)
-		// 60 × (1 − 0.658) + 2 × 1000/100 = 20.52 + 20 = 40.52
-		assert.InDelta(t, 40.52, balance, 1e-9)
-	})
-
-	t.Run("integer usage percent", func(t *testing.T) {
-		// 整数百分比（旧格式）也应由浮点正则解析
-		html := `{monthlyUsage:$R[0]={status:"active",resetInSec:86400,usagePercent:40}};`
-		balance, err := parseOpenCodeGoBalancePage(html)
-		require.NoError(t, err)
-		assert.InDelta(t, 36.0, balance, 1e-9)
-	})
-
-	t.Run("usage percent clamped to 100", func(t *testing.T) {
-		html := `{monthlyUsage:$R[0]={status:"ok",resetInSec:1615573,usagePercent:123.7}};`
-		balance, err := parseOpenCodeGoBalancePage(html)
-		require.NoError(t, err)
-		assert.InDelta(t, 0.0, balance, 1e-9)
 	})
 }
 

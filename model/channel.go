@@ -1171,7 +1171,8 @@ func (channel *Channel) MaskSensitiveOtherSettings() {
 	}
 	changed := false
 	// volc_coding_plan_csrf_token / volc_coding_plan_cookie 已无字段读取（仅 AK/SK 认证），
-	// 但历史存量 settings 可能仍含旧密文，保留在删除列表中脱敏防止外泄，兼容历史数据。
+	// opencode_auth_cookie 亦已随旧版工作区抓取逻辑删除；但历史存量 settings
+	// 可能仍含旧密文，保留在删除列表中脱敏防止外泄，兼容历史数据。
 	for _, key := range []string{"volc_coding_plan_csrf_token", "volc_coding_plan_cookie", "volc_coding_plan_access_key_id", "volc_coding_plan_secret_access_key", "opencode_auth_cookie", "commandcode_cookie", "sensenova_username", "sensenova_password"} {
 		if _, ok := settings[key]; ok {
 			delete(settings, key)

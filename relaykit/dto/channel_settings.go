@@ -144,10 +144,8 @@ type ChannelOtherSettings struct {
 	// Exact model names take priority over regex rules; within the same kind,
 	// the first rule in array order wins.
 	ModelProxyRules     []ModelProxyRule `json:"model_proxy_rules,omitempty"`
-	OpenCodeWorkspaceId string           `json:"opencode_workspace_id,omitempty"`
-	OpenCodeAuthCookie  string           `json:"opencode_auth_cookie,omitempty"`
 	// CommandCodeCookie 为 AES-GCM 加密后的 CommandCode 登录会话整段 Cookie
-	// （与 opencode_auth_cookie 同模式，只存密文）。
+	// （与其它敏感凭证同模式，只存密文）。
 	CommandCodeCookie string `json:"commandcode_cookie,omitempty"`
 	// SenseNovaUsername / SenseNovaPassword 为 SenseNova（日日新）渠道的登录
 	// 凭证。两者均 AES-GCM 加密存储（sensenova_password 存密文，sensenova_username

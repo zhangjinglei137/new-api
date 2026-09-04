@@ -295,9 +295,6 @@ export const channelFormSchema = z
       .refine(isOptionalJsonObject, ERROR_MESSAGES.INVALID_JSON),
     advanced_custom: z.string().optional(),
     other: z.string().optional(),
-    // OpenCode Go specific settings (stored in settings JSON)
-    opencode_workspace_id: z.string().optional(),
-    opencode_auth_cookie: z.string().optional(),
     // Command Code specific settings (stored in settings JSON)
     commandcode_cookie: z.string().optional(),
     // SenseNova usage query credentials (stored in settings JSON)
@@ -544,8 +541,6 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_ignored_models: '',
   advanced_custom: '',
   model_proxy_rules: [],
-  opencode_workspace_id: '',
-  opencode_auth_cookie: '',
   commandcode_cookie: '',
   sensenova_username: '',
   sensenova_password: '',
@@ -619,8 +614,6 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
   let modelProxyRules: ModelProxyRuleFormValue[] = []
-  let opencodeWorkspaceId = ''
-  let opencodeAuthCookie = ''
   let commandCodeCookie = ''
 
   if (channel.settings) {
@@ -666,8 +659,6 @@ export function transformChannelToFormDefaults(
             proxy: String(rule.proxy || ''),
           }))
       }
-      opencodeWorkspaceId = parsed.opencode_workspace_id || ''
-      opencodeAuthCookie = parsed.opencode_auth_cookie || ''
       commandCodeCookie = parsed.commandcode_cookie || ''
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -722,8 +713,6 @@ export function transformChannelToFormDefaults(
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
     model_proxy_rules: modelProxyRules,
-    opencode_workspace_id: opencodeWorkspaceId,
-    opencode_auth_cookie: opencodeAuthCookie,
     commandcode_cookie: commandCodeCookie,
     // SenseNova credentials are intentionally never populated from the API.
     // The backend stores them encrypted and does not return them for editing.
@@ -916,24 +905,6 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     }
   } else if ('advanced_custom' in settingsObj) {
     delete settingsObj.advanced_custom
-  }
-
-  if (formData.type === CHANNEL_TYPE_OPENCODE_GO) {
-    settingsObj.opencode_workspace_id = formData.opencode_workspace_id || ''
-    // The backend never returns the stored cookie, so an empty input keeps the
-    // existing value. Omit the field entirely instead of overwriting it.
-    if (formData.opencode_auth_cookie) {
-      settingsObj.opencode_auth_cookie = formData.opencode_auth_cookie
-    } else {
-      delete settingsObj.opencode_auth_cookie
-    }
-  } else {
-    if ('opencode_workspace_id' in settingsObj) {
-      delete settingsObj.opencode_workspace_id
-    }
-    if ('opencode_auth_cookie' in settingsObj) {
-      delete settingsObj.opencode_auth_cookie
-    }
   }
 
   // Command Code (type 98) usage query cookie. The backend never returns the

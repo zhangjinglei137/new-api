@@ -94,7 +94,7 @@
 | # | 定位 | 问题 | 建议 | 优先级/工作量 |
 |---|---|---|---|---|
 | O1 | `service/radeoncloud_usage.go:241,249`（及 zhipu/moonshot/commandcode/volc 同批 `*JSONInt64`） | 裸 `int()`/`int64()` 无上界 clamp，上游 `1e20` 展示为 max int | 抽 `jsonInt64Clamped` 统一 clamp（同时解决 O1 一致性） | 中 / S |
-| O2 | `service/opencodego_usage.go:87`、`opencodego_balance.go:77`、`commandcode_usage.go:111` | 缺 nil channel 防御，与同批 zhipu/moonshot/radeoncloud 不一致（当前调用方已守卫，属 API 不一致隐患） | 补齐 `if channel == nil` 守卫 | 低 / S |
+| O2 | `service/opencodego_usage.go:87`、`commandcode_usage.go:111` | 缺 nil channel 防御，与同批 zhipu/moonshot/radeoncloud 不一致（当前调用方已守卫，属 API 不一致隐患） | 补齐 `if channel == nil` 守卫 | 低 / S |
 | O3 | `service/sensenova_usage.go:207-229` | 登录网络请求在 `entry.mu` 锁内执行，同凭证并发阻塞最长 30s，401 重试可触发 token stampede | singleflight 或移网络请求出锁 | 低 / M |
 | O4 | `controller/model_sync.go:316-319` | `etagCache`/`bodyCache` 全局 map 无容量上限，长期运行内存增长 | 加容量上限（如 64 条）或 LRU | 低 / S |
 | O5 | `service/sensenova_usage.go:143-146` | `sha256(username+password)` 无分隔符，理论上 `("abc","def")` 与 `("ab","cdef")` 缓存键碰撞 | 改 `sha256(username+"\x00"+password)` | 低 / S |

@@ -212,17 +212,17 @@ describe('OpenCodeGoUsageDialog', () => {
   test('shows the upstream error message on failure', () => {
     renderDialog({
       success: false,
-      message: 'workspace not configured',
+      message: 'opencode api key 无效或已过期',
     })
 
     expect(screen.getByText('Unable to identify usage data')).toBeInTheDocument()
-    expect(screen.getByText('workspace not configured')).toBeInTheDocument()
+    expect(screen.getByText('opencode api key 无效或已过期')).toBeInTheDocument()
   })
 
   test('omits the raw JSON panel when the query failed', () => {
     renderDialog({
       success: false,
-      message: 'workspace not configured',
+      message: 'opencode api key 无效或已过期',
     })
 
     expect(

@@ -369,15 +369,6 @@ func updateChannelMoonshotBalance(channel *model.Channel) (float64, error) {
 	return availableBalanceUsd, nil
 }
 
-func updateChannelOpenCodeGoBalance(channel *model.Channel) (float64, error) {
-	balance, err := service.UpdateOpenCodeGoBalance(channel)
-	if err != nil {
-		return 0, err
-	}
-	channel.UpdateBalance(balance)
-	return balance, nil
-}
-
 func fetchAdvancedCustomBalance(channel *model.Channel) (channelBalanceResult, error) {
 	key := strings.TrimSpace(channel.Key)
 	info := &relaycommon.RelayInfo{
@@ -501,8 +492,6 @@ func updateStandardChannelBalance(channel *model.Channel) (float64, error) {
 		return updateChannelOpenRouterBalance(channel)
 	case constant.ChannelTypeMoonshot:
 		return updateChannelMoonshotBalance(channel)
-	case constant.ChannelTypeOpenCodeGo:
-		return updateChannelOpenCodeGoBalance(channel)
 	default:
 		return 0, errors.New("尚未实现")
 	}
