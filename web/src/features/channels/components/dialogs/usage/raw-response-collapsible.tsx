@@ -25,7 +25,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ScrollArea } from '@/components/ui/scroll-area'
 
 export type RawResponseCollapsibleProps = {
   open: boolean
@@ -65,11 +64,11 @@ export function RawResponseCollapsible(props: RawResponseCollapsibleProps) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         {props.header}
-        <ScrollArea className='max-h-[50vh]'>
+        <div className='max-h-[50vh] overflow-y-auto overflow-x-hidden'>
           <pre className='bg-muted/30 m-0 p-3 text-xs break-words whitespace-pre-wrap'>
             {props.text}
           </pre>
-        </ScrollArea>
+        </div>
       </CollapsibleContent>
     </Collapsible>
   )
