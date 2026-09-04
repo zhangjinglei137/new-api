@@ -561,8 +561,6 @@ export const STATIC_I18N_KEYS = [
   'Call Ranking',
   'Bar Chart',
   'Area Chart',
-  'Proportion',
-  'Ranking',
 
   // Misc
   'Cancel',
