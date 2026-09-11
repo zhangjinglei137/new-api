@@ -7,10 +7,12 @@
 - [x] 修复 `common/crypto.go`：import 补 `strings`（保留本地 AES-GCM，吸收上游 argon2 分支）；确认 `common/account_password.go` 已合并
 - [x] 移植上游 `resolveModelMetadata` + `MatchesName` 到本地 `model/model_meta.go`（保留本地富元数据列与 Insert/Update/Delete）
 - [x] 融合 `controller/vendor_meta.go`：本地 `vendor_counts` + 上游 `vendorAPIError`/`recordManageAudit`/`association`；同步移植 `model.SearchVendors` 的 `association` 形参
+  - [x] verify 修复：`TestDeleteVendorMeta*` 测试 fixture 补 Request/operator 上下文（recordManageAudit 读 ClientIP）
 - [x] 融合 `controller/channel_upstream_update.go`：本地 DB 保留字列引用修复 + 上游火山 `/api/v3/models` 修复
 - [x] 融合 `controller/model_meta.go`：本地富元数据优先 + 吸收 `interface{}→any`/审计；放弃 square_state
 - [x] 融合 `controller/model_sync.go`：本地富元数据同步映射优先 + 吸收上游非富元数据改进
 - [x] `go build ./...` + `go vet ./...` 通过（root 模块）
+  - [x] verify 修复：`TestResetChannelBalanceZerosBalanceAndUsedQuota` 适配上游审计架构（audit_logs 表 + AuditLog 断言）
 - [x] `cd relaykit && GOWORK=off go build ./...` 通过（模块独立构建）
 
 ### 前端
