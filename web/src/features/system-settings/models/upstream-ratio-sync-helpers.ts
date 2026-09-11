@@ -25,14 +25,8 @@ import type { PricingSyncValues } from '../types'
 import {
   OFFICIAL_CHANNEL_ID,
   OFFICIAL_CHANNEL_NAME,
-<<<<<<< HEAD
-  OPENCODE_GO_PRESET_ID,
-  OPENCODE_GO_PRESET_NAME,
-  RATIO_TYPE_OPTIONS,
-=======
   MODELS_DEV_PRESET_ID,
   MODELS_DEV_PRESET_NAME,
->>>>>>> upstream/main
 } from './constants'
 import { formatPricingNumber } from './pricing-format'
 
@@ -55,31 +49,6 @@ export function getUpstreamDisplayName(
   ) {
     return t('models.dev pricing preset')
   }
-<<<<<<< HEAD
-  return 'ratio'
-}
-
-export function isSelectableUpstreamValue(
-  value: number | string | 'same' | null | undefined
-): boolean {
-  return value !== null && value !== undefined && value !== 'same'
-}
-
-export function getUpstreamDisplayName(sourceName: string): string {
-  const synthesizedPresets = [
-    { name: OFFICIAL_CHANNEL_NAME, id: OFFICIAL_CHANNEL_ID },
-    { name: MODELS_DEV_PRESET_NAME, id: MODELS_DEV_PRESET_ID },
-    { name: OPENCODE_GO_PRESET_NAME, id: OPENCODE_GO_PRESET_ID },
-  ]
-
-  for (const preset of synthesizedPresets) {
-    if (sourceName === `${preset.name}(${preset.id})`) {
-      return preset.name
-    }
-  }
-
-=======
->>>>>>> upstream/main
   return sourceName
 }
 

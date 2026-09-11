@@ -139,12 +139,6 @@ export function SyncWizardDialog(props: {
     onError: (error) => handleServerError(error),
   })
 
-  // Restore the last-used options only when the dialog (re)opens. Do NOT add
-  // SYNC_SOURCE_OPTIONS or syncWizardOptions to the dependencies: the options
-  // array is recreated on every render and syncWizardOptions only changes from
-  // within this dialog (handleSync), so depending on them would reset the
-  // user's in-dialog selection on every render — making any non-default source
-  // (e.g. OpenCode Go) unselectable.
   useEffect(() => {
     if (props.open) {
       setPreview(null)
@@ -272,56 +266,10 @@ export function SyncWizardDialog(props: {
         'Changes which model names inherit this metadata. Prices are not inherited.'
       )
     }
-<<<<<<< HEAD
-    // eslint-disable-next-line react/exhaustive-deps -- see comment above
-  }, [open])
-
-  const handleSync = async () => {
-    setIsSyncing(true)
-    try {
-      setSyncWizardOptions({ locale, source })
-      const previewRes = await previewUpstreamDiff({ locale, source })
-
-      if (!previewRes.success) {
-        throw new Error(previewRes.message || 'Failed to preview upstream diff')
-      }
-
-      const conflicts = previewRes.data?.conflicts || []
-
-      if (conflicts.length > 0) {
-        toast.warning(
-          `Found ${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''}. Please resolve them first.`
-        )
-        setUpstreamConflicts(conflicts)
-        setOpen('upstream-conflict')
-        return
-      }
-
-      // No conflicts, proceed with sync
-      const response = await syncUpstream({ locale, source })
-
-      if (response.success) {
-        const { created_models, created_vendors, updated_models } =
-          response.data || {}
-        toast.success(
-          `Sync completed! Created ${created_models || 0} models, updated ${updated_models || 0}, and added ${created_vendors || 0} vendors.`
-        )
-        queryClient.invalidateQueries({ queryKey: modelsQueryKeys.lists() })
-        queryClient.invalidateQueries({ queryKey: vendorsQueryKeys.lists() })
-        onOpenChange(false)
-      } else {
-        toast.error(response.message || 'Sync failed')
-      }
-    } catch (error: unknown) {
-      toast.error((error as Error)?.message || 'Sync failed')
-    } finally {
-      setIsSyncing(false)
-=======
     if (field === 'status') {
       return t(
         'Changes visibility in the model square. Channel status and existing API access are unchanged.'
       )
->>>>>>> upstream/main
     }
     if (field === 'endpoints') {
       return t(

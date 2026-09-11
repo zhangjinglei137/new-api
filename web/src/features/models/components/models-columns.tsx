@@ -102,20 +102,6 @@ export function useModelsColumns(
         const vendor = vendorMap.get(model.vendor_id ?? 0)
         const iconKey = model.icon || vendor?.icon || model.model_name[0]
         return (
-<<<<<<< HEAD
-          <div className='flex min-w-0 max-w-full flex-col items-start gap-1'>
-            <div className='flex max-w-full min-w-0 items-center gap-2'>
-              <div className='flex size-5 shrink-0 items-center justify-center overflow-hidden'>
-                {icon}
-              </div>
-              <StatusBadge
-                label={name}
-                variant='neutral'
-                copyText={name}
-                size='sm'
-                className='-ml-1.5 font-mono'
-              />
-=======
           <div className='flex max-w-[320px] min-w-0 items-start gap-2.5 py-1'>
             <span className='mt-1 flex size-6 shrink-0 items-center justify-center'>
               {getLobeIcon(iconKey, 24)}
@@ -151,7 +137,6 @@ export function useModelsColumns(
                   </span>
                 )}
               </div>
->>>>>>> upstream/main
             </div>
           </div>
         )

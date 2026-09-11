@@ -54,10 +54,8 @@ import {
 } from '@/lib/currency'
 import { formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
-import { createServerError } from '@/lib/server-error-message'
 import { truncateText } from '@/lib/utils'
 
-<<<<<<< HEAD
 import {
   getCodexUsage,
   getCommandCodeUsage,
@@ -76,12 +74,7 @@ import {
   CHANNEL_TYPE_OPENCODE_GO,
   CHANNEL_TYPE_RADEON_CLOUD,
   CHANNEL_TYPE_SENSENOVA,
-=======
-import { getCodexUsage, updateChannelBalance } from '../api'
-import {
-  CHANNEL_STATUS_CONFIG,
   CHANNEL_TYPE_TASK_PLUGIN,
->>>>>>> upstream/main
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
 import {
@@ -748,25 +741,6 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
 
     setIsUpdating(true)
-<<<<<<< HEAD
-=======
-    if (channel.type === 57) {
-      try {
-        const res = await getCodexUsage(channel.id)
-        if (!res.success) {
-          throw createServerError(res, t('Failed to fetch usage'))
-        }
-        setCodexUsageResponse(res)
-        setCodexUsageOpen(true)
-      } catch (error) {
-        handleServerError(error, t('Failed to fetch usage'))
-      } finally {
-        setIsUpdating(false)
-      }
-      return
-    }
-
->>>>>>> upstream/main
     try {
       const response = await updateChannelBalance(channel.id)
       if (response.success && response.balance !== undefined) {
@@ -876,7 +850,6 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelDisplayName={sensitiveVisible ? undefined : SENSITIVE_MASK}
         channelDisplayId={sensitiveVisible ? undefined : SENSITIVE_MASK}
         response={codexUsageResponse}
-<<<<<<< HEAD
         onRefresh={() => fetchCodexUsage(false)}
         isRefreshing={isUpdating}
       />
@@ -941,25 +914,6 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelId={channel.id}
         response={radeonCloudUsageResponse}
         onRefresh={() => fetchRadeonCloudUsage(false)}
-=======
-        onRefresh={async () => {
-          if (isUpdating) {
-            return
-          }
-          setIsUpdating(true)
-          try {
-            const res = await getCodexUsage(channel.id)
-            if (!res.success) {
-              throw createServerError(res, t('Failed to fetch usage'))
-            }
-            setCodexUsageResponse(res)
-          } catch (error) {
-            handleServerError(error, t('Failed to fetch usage'))
-          } finally {
-            setIsUpdating(false)
-          }
-        }}
->>>>>>> upstream/main
         isRefreshing={isUpdating}
       />
       {rawBalanceResponse !== null && (

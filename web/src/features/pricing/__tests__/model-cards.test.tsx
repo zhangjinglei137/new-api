@@ -418,7 +418,7 @@ describe('model cards', () => {
     expect(onModelClick).toHaveBeenCalledWith('example-model')
   })
 
-  it('paginates the model cards and disables navigation at both boundaries', async () => {
+  it('renders all model cards on a single page without pagination controls', async () => {
     queryClient.setQueryData(['perf-metrics-summary', 24], {
       success: true,
       data: { models: [] },
@@ -426,20 +426,16 @@ describe('model cards', () => {
     const models = Array.from({ length: 21 }, (_, index) =>
       pricingModel({ id: index + 1, model_name: `model-${index + 1}` })
     )
-    const user = userEvent.setup()
     render(
       <QueryClientProvider client={queryClient}>
         <ModelCardGrid models={models} onModelClick={vi.fn()} />
       </QueryClientProvider>
     )
-    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled()
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(20)
-    await user.click(screen.getByRole('button', { name: 'Next page' }))
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1)
+    // The local fork renders the whole model square on one page
+    // (MODEL_CARD_GRID_PAGE_SIZE = 1000), so no pagination controls exist.
+    expect(screen.queryByRole('button', { name: 'Previous page' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(21)
     expect(screen.getByRole('heading', { name: 'model-21' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Previous page' }))
-    expect(screen.getByRole('heading', { name: 'model-1' })).toBeVisible()
   })
 
   it('switches the card grid to three columns at the xl breakpoint instead of 2xl', () => {

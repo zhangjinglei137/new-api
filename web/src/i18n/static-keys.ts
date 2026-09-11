@@ -617,8 +617,7 @@ export const STATIC_I18N_KEYS = [
   'The model that was requested',
   'The upstream channel that served the requests',
 
-<<<<<<< HEAD
-  // Dashboard chart metric/option labels (passed to t at runtime)
+// Dashboard chart metric/option labels (passed to t at runtime)
   'Quota',
   'Tokens',
   'Count',
@@ -627,7 +626,7 @@ export const STATIC_I18N_KEYS = [
   'Call Ranking',
   'Bar Chart',
   'Area Chart',
-=======
+
   // API token audit events
   'Create API token',
   'Create API token “{{name}}”',
@@ -652,7 +651,6 @@ export const STATIC_I18N_KEYS = [
   'View audit records from user and admin roles. Root records are always excluded.',
   'Updated channel status (ID: {{id}})',
   'Batch updated channel status ({{count}}/{{total}} changed)',
->>>>>>> upstream/main
 
   // Misc
   'Cancel',

@@ -22,11 +22,7 @@ import { MissingModelsDialog } from './dialogs/missing-models-dialog'
 import { PrefillGroupManagement } from './dialogs/prefill-group-management'
 import { PriceSyncDialog } from './dialogs/price-sync-dialog'
 import { SyncWizardDialog } from './dialogs/sync-wizard-dialog'
-<<<<<<< HEAD
-import { UpstreamConflictDialog } from './dialogs/upstream-conflict-dialog'
 import { VendorManagementDialog } from './dialogs/vendor-management-dialog'
-=======
->>>>>>> upstream/main
 import { VendorMutateDialog } from './dialogs/vendor-mutate-dialog'
 import { ModelMutateDrawer } from './drawers/model-mutate-drawer'
 import { useModels } from './models-provider'

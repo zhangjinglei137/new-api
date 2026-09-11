@@ -16,19 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-<<<<<<< HEAD
 import {
   Plus,
   MoreHorizontal,
-  RefreshCw,
   List,
   Building2,
   Cable,
   AlertCircle,
 } from 'lucide-react'
-=======
-import { Plus, MoreHorizontal, List, AlertCircle } from 'lucide-react'
->>>>>>> upstream/main
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -66,7 +61,6 @@ export function ModelsPrimaryButtons() {
     setOpen('prefill-groups')
   }
 
-<<<<<<< HEAD
   const handleManageVendors = () => {
     setOpen('manage-vendors')
   }
@@ -75,8 +69,6 @@ export function ModelsPrimaryButtons() {
     setOpen('manage-endpoints')
   }
 
-=======
->>>>>>> upstream/main
   return (
     <div className='flex flex-wrap items-center gap-2'>
       <Button onClick={handleSync} variant='outline' size='sm'>
@@ -122,7 +114,6 @@ export function ModelsPrimaryButtons() {
               <List className='h-4 w-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
-<<<<<<< HEAD
 
           <DropdownMenuItem onClick={handleManageVendors}>
             {t('Manage Vendors')}
@@ -137,8 +128,6 @@ export function ModelsPrimaryButtons() {
               <Cable className='h-4 w-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
-=======
->>>>>>> upstream/main
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

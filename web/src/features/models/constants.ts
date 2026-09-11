@@ -229,7 +229,6 @@ export function getSyncSourceOptions(t: TFunction) {
       description: t('Sync from the public upstream metadata repository.'),
       disabled: false,
     },
-<<<<<<< HEAD
     {
       label: t('OpenCode Go'),
       value: 'opencode-go' as SyncSource,
@@ -242,7 +241,5 @@ export function getSyncSourceOptions(t: TFunction) {
       description: t('Upload or reference a local configuration file.'),
       disabled: true,
     },
-=======
->>>>>>> upstream/main
   ] as const
 }

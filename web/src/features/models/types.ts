@@ -401,11 +401,7 @@ export type SyncLocale = 'zh' | 'zh-CN' | 'en' | 'ja'
 /**
  * Sync upstream source
  */
-<<<<<<< HEAD
 export type SyncSource = 'official' | 'config' | 'opencode-go'
-=======
-export type SyncSource = 'official'
->>>>>>> upstream/main
 
 // ============================================================================
 // Model Deployments Types
