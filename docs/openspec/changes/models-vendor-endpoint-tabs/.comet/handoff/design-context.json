@@ -1,0 +1,14 @@
+{
+  "change": "models-vendor-endpoint-tabs",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "9f6e24599e6d095efc28dbbed4a25936ffc8b564cc19cf7685b93a18f7ebab10",
+  "files": [
+    { "path": "docs/openspec/changes/models-vendor-endpoint-tabs/proposal.md", "sha256": "984e2f151f2ac2a72d2033f093214ef164529a026ba610b7ab2310d0dc005bc8" },
+    { "path": "docs/openspec/changes/models-vendor-endpoint-tabs/design.md", "sha256": "15e1441ead6e38f0781c1ffb3b2af0462138c8c1528645888a0c83bea36619fc" },
+    { "path": "docs/openspec/changes/models-vendor-endpoint-tabs/tasks.md", "sha256": "22c15d2b62b1b854c77f1c8c7080176ebd505d93ad2ec9c381500b1b92814e89" },
+    { "path": "docs/openspec/changes/models-vendor-endpoint-tabs/specs/models-page-navigation/spec.md", "sha256": "4983861cd9dddf94482c24b0f79f6846f9a7e46a8f96b2a8f77015355e7ea10b" }
+  ]
+}
