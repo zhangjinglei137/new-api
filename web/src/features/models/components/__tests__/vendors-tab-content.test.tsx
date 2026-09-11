@@ -21,8 +21,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { VendorManagementDialog } from '../vendor-management-dialog'
-import { getVendors, searchVendors } from '../../../api'
+import { VendorsTabContent } from '../vendors-tab-content'
+import { getVendors, searchVendors } from '../../api'
 
 // Passthrough t() with {{var}} interpolation. Real i18next is avoided because
 // its default nsSeparator (":") makes t('Total:') return "" with the empty
@@ -38,7 +38,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-vi.mock('../../../api', () => ({
+vi.mock('../../api', () => ({
   getVendors: vi.fn(),
   searchVendors: vi.fn(),
   deleteVendor: vi.fn(),
@@ -69,11 +69,11 @@ function vendorPageResponse(page: number) {
   }
 }
 
-function renderDialog() {
+function renderTab() {
   const queryClient = new QueryClient()
   render(
     <QueryClientProvider client={queryClient}>
-      <VendorManagementDialog open onOpenChange={vi.fn()} />
+      <VendorsTabContent />
     </QueryClientProvider>
   )
 }
@@ -83,13 +83,13 @@ beforeEach(() => {
   vi.mocked(searchVendors).mockResolvedValue(vendorPageResponse(1))
 })
 
-describe('VendorManagementDialog pagination', () => {
+describe('VendorsTabContent pagination', () => {
   test('renders the pagination bar with total, page buttons, and page-size select', async () => {
-    renderDialog()
+    renderTab()
 
     await screen.findByText('Vendor 1')
 
-    // Total count (dialog badge + pagination's own Total:).
+    // Total count (toolbar badge + pagination's own Total:).
     expect(screen.getByText('25 vendors')).toBeInTheDocument()
     expect(screen.getByText('Total:')).toBeInTheDocument()
 
@@ -115,7 +115,7 @@ describe('VendorManagementDialog pagination', () => {
 
   test('clicking a page number refetches with the new page param', async () => {
     const user = userEvent.setup()
-    renderDialog()
+    renderTab()
 
     await screen.findByText('Vendor 1')
     expect(vi.mocked(getVendors)).toHaveBeenLastCalledWith({
@@ -135,7 +135,7 @@ describe('VendorManagementDialog pagination', () => {
 
   test('next/previous navigation refetches with the page param', async () => {
     const user = userEvent.setup()
-    renderDialog()
+    renderTab()
 
     await screen.findByText('Vendor 1')
 
@@ -158,7 +158,7 @@ describe('VendorManagementDialog pagination', () => {
 
   test('changing the page size resets to the first page', async () => {
     const user = userEvent.setup()
-    renderDialog()
+    renderTab()
 
     await screen.findByText('Vendor 1')
 
@@ -184,9 +184,9 @@ describe('VendorManagementDialog pagination', () => {
   })
 })
 
-describe('VendorManagementDialog pagination layout contract', () => {
+describe('VendorsTabContent pagination layout contract', () => {
   test('pagination sits in block flow so it is not collapsed or clipped', async () => {
-    renderDialog()
+    renderTab()
 
     await screen.findByText('Vendor 1')
 
@@ -200,8 +200,9 @@ describe('VendorManagementDialog pagination layout contract', () => {
     // ...but it must NOT be a flex item: a flex item with
     // `container-type: inline-size` collapses to zero width (contents cannot
     // influence its size) and the whole bar is clipped by its own
-    // `overflow-clip`. Block-level flow (direct child of the dialog body)
-    // makes it fill the body width so every control stays visible.
+    // `overflow-clip`. Block-level flow (direct child of the tab content
+    // container) makes it fill the container width so every control stays
+    // visible.
     const parent = pagination?.parentElement
     expect(parent?.className).toContain('space-y-3')
     expect(parent?.className).not.toContain('flex')

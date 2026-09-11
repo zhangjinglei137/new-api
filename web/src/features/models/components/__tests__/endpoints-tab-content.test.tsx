@@ -26,10 +26,10 @@ import {
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { EndpointManagementDialog } from '../endpoint-management-dialog'
-import { getEndpointDefinitions } from '../../../api'
+import { EndpointsTabContent } from '../endpoints-tab-content'
+import { getEndpointDefinitions, updateEndpointDefinitions } from '../../api'
 
-vi.mock('../../../api', () => ({
+vi.mock('../../api', () => ({
   getEndpointDefinitions: vi.fn(),
   updateEndpointDefinitions: vi.fn(),
 }))
@@ -63,11 +63,11 @@ const NPM_OPTIONS = [
   '@ai-sdk/openai-compatible',
 ]
 
-function renderDialog() {
+function renderTab() {
   const queryClient = new QueryClient()
   render(
     <QueryClientProvider client={queryClient}>
-      <EndpointManagementDialog open onOpenChange={vi.fn()} />
+      <EndpointsTabContent />
     </QueryClientProvider>
   )
 }
@@ -86,9 +86,9 @@ beforeEach(() => {
   })
 })
 
-describe('EndpointManagementDialog npm combobox', () => {
+describe('EndpointsTabContent npm combobox', () => {
   test('renders an npm ComboboxInput per row once definitions load', async () => {
-    renderDialog()
+    renderTab()
 
     await screen.findByText('openai')
 
@@ -101,7 +101,7 @@ describe('EndpointManagementDialog npm combobox', () => {
 
   test('dropdown options include values from the backend npm_options', async () => {
     const user = userEvent.setup()
-    renderDialog()
+    renderTab()
 
     await screen.findByText('openai')
 
@@ -124,7 +124,7 @@ describe('EndpointManagementDialog npm combobox', () => {
 
   test('selecting an npm suggestion writes it to the corresponding row', async () => {
     const user = userEvent.setup()
-    renderDialog()
+    renderTab()
 
     await screen.findByText('openai')
 
@@ -144,7 +144,7 @@ describe('EndpointManagementDialog npm combobox', () => {
 
   test('types a custom npm value not present in the suggestions', async () => {
     const user = userEvent.setup()
-    renderDialog()
+    renderTab()
 
     await screen.findByText('openai')
 
@@ -158,18 +158,15 @@ describe('EndpointManagementDialog npm combobox', () => {
   })
 })
 
-describe('EndpointManagementDialog layout contract', () => {
-  test('uses a wide dialog and reserves enough width for the npm column', async () => {
-    renderDialog()
+describe('EndpointsTabContent layout contract', () => {
+  test('keeps a wide table and reserves enough width for the npm column', async () => {
+    renderTab()
 
     await screen.findByText('openai')
 
-    // Stable structure classes: wide content + table min width + npm column
-    // width. No fragile snapshot of rendered markup.
-    const content = document.querySelector('[data-slot="dialog-content"]')
-    expect(content?.className).toContain('sm:max-w-[68rem]')
-
-    const table = content?.querySelector('table')
+    // Stable structure classes: table min width + npm column width. No fragile
+    // snapshot of rendered markup.
+    const table = document.querySelector('table')
     expect(table?.className).toContain('min-w-[900px]')
 
     const npmHeader = screen.getByRole('columnheader', { name: 'NPM' })
@@ -177,7 +174,7 @@ describe('EndpointManagementDialog layout contract', () => {
   })
 
   test('npm cells override the table overflow so the dropdown is not clipped', async () => {
-    renderDialog()
+    renderTab()
 
     await screen.findByText('openai')
 
@@ -194,5 +191,30 @@ describe('EndpointManagementDialog layout contract', () => {
     await user.click(npmInput)
     const listbox = await screen.findByRole('listbox')
     expect(listbox).toBeInTheDocument()
+  })
+})
+
+describe('EndpointsTabContent save', () => {
+  test('top toolbar Save button submits the edited rows', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateEndpointDefinitions).mockResolvedValue({
+      success: true,
+      message: '',
+    })
+    renderTab()
+
+    await screen.findByText('openai')
+
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    expect(saveButton).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+
+    await user.click(saveButton)
+
+    await waitFor(() => {
+      expect(vi.mocked(updateEndpointDefinitions)).toHaveBeenCalledWith({
+        endpoints: ENDPOINTS,
+      })
+    })
   })
 })

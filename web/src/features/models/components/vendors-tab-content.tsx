@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Loader2, Plus, SearchIcon, X } from 'lucide-react'
+import { Loader2, Plus, SearchIcon, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -26,7 +26,6 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { StaticDataTable } from '@/components/data-table/static/static-data-table'
 import { StaticRowActions } from '@/components/data-table/static/static-row-actions'
 import { DataTablePagination } from '@/components/data-table/core/pagination'
-import { Dialog } from '@/components/dialog'
 import { ReactIconByName } from '@/components/react-icon-by-name'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
@@ -34,17 +33,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
-import { getVendors, searchVendors, deleteVendor } from '../../api'
-import { vendorsQueryKeys, modelsQueryKeys } from '../../lib'
-import type { Vendor } from '../../types'
-import { VendorMutateDialog } from './vendor-mutate-dialog'
+import { getVendors, searchVendors, deleteVendor } from '../api'
+import { vendorsQueryKeys, modelsQueryKeys } from '../lib'
+import type { Vendor } from '../types'
+import { VendorMutateDialog } from './dialogs/vendor-mutate-dialog'
 
 const VENDOR_PAGE_SIZE = 10
-
-type VendorManagementDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
 
 type VendorRow = {
   vendor: Vendor
@@ -60,10 +54,7 @@ function getVendorCount(
   return typeof count === 'number' && count > 0 ? count : 0
 }
 
-export function VendorManagementDialog({
-  open,
-  onOpenChange,
-}: VendorManagementDialogProps) {
+export function VendorsTabContent() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [keyword, setKeyword] = useState('')
@@ -87,7 +78,7 @@ export function VendorManagementDialog({
       shouldSearch
         ? searchVendors({ keyword: keyword.trim(), p: page, page_size: pageSize })
         : getVendors({ p: page, page_size: pageSize }),
-    enabled: open,
+    enabled: true,
   })
 
   const rows = useMemo<VendorRow[]>(
@@ -135,22 +126,7 @@ export function VendorManagementDialog({
 
   return (
     <>
-      <Dialog
-        open={open}
-        onOpenChange={onOpenChange}
-        title={
-          <>
-            <Building2 className='text-foreground/80 h-5 w-5' />
-            {t('Vendor Management')}
-          </>
-        }
-        description={t(
-          'Create, edit, and remove the vendors that models reference.'
-        )}
-        contentClassName='w-[calc(100vw-2rem)] sm:max-w-[52rem]'
-        contentHeight='auto'
-        bodyClassName='space-y-3'
-      >
+      <div className='space-y-3'>
         <div className='flex flex-wrap items-center gap-2'>
           <div className='relative min-w-0 flex-1'>
             <SearchIcon className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2' />
@@ -293,14 +269,14 @@ export function VendorManagementDialog({
           />
         </div>
 
-        {/* Pagination must stay in block-level flow (direct child of the dialog
-            body), NOT inside the flex row above: its root uses
+        {/* Pagination must stay in block-level flow (direct child of the tab
+            content container), NOT inside the flex row above: its root uses
             `@container/pagination` (= `container-type: inline-size`), and a flex
             item with inline-size containment gets a flex base size of 0 — the
             bar would collapse to zero width and be clipped by its own
             `overflow-clip`, making the controls invisible. As a block element it
-            fills the dialog body width and the container queries resolve
-            against that width. */}
+            fills the container width and the container queries resolve against
+            that width. */}
         <DataTablePagination
           table={
             {
@@ -323,7 +299,7 @@ export function VendorManagementDialog({
             {t('Loading...')}
           </div>
         )}
-      </Dialog>
+      </div>
 
       <VendorMutateDialog
         open={mutateState.open}
