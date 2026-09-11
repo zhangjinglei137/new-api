@@ -8,8 +8,8 @@
 
 ## 2. tab 内容组件抽取
 
-- [ ] 2.1 将 `VendorManagementDialog` 表格主体抽为页面内嵌组件（参照历史 `VendorsTable`），支持分页/搜索/创建/编辑/删除/引用计数；验证 `/models/vendors` 渲染供应商表格且增删改查可用
-- [ ] 2.2 将 `EndpointManagementDialog` 表格主体抽为页面内嵌组件，支持端点定义列表/编辑/保存；验证 `/models/endpoints` 渲染端点表格且编辑保存生效
+- [x] 2.1 将 `VendorManagementDialog` 表格主体抽为页面内嵌组件（参照历史 `VendorsTable`），支持分页/搜索/创建/编辑/删除/引用计数；验证 `/models/vendors` 渲染供应商表格且增删改查可用
+- [x] 2.2 将 `EndpointManagementDialog` 表格主体抽为页面内嵌组件，支持端点定义列表/编辑/保存；验证 `/models/endpoints` 渲染端点表格且编辑保存生效
 - [ ] 2.3 在 `index.tsx` 按 section 挂载对应内容并调整主操作区（metadata 保留现有按钮组，vendors 显示 Add Vendor，endpoints/deployments 显示对应动作）；验证四个 tab 内容切换正确
 - [ ] 2.4 迁移 `vendor-management-dialog.test.tsx`、`endpoint-management-dialog.test.tsx` 到新组件挂载形态并保持既有行为断言；验证相关测试通过
 

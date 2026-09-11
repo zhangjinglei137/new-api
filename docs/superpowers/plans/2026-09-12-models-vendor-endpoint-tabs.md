@@ -100,19 +100,19 @@ Expected: PASS（此时 index.tsx 仍引用旧结构，若 typecheck 报 `ModelT
 - Consumes: `useModels()`（`setOpen`/`setCurrentVendor`）、`VendorMutateDialog`、`ConfirmDialog`、api（`getVendors`/`searchVendors`/`deleteVendor`/`getEndpointDefinitions`/`updateEndpointDefinitions`）、queryKeys
 - Produces: `<VendorsTabContent />`、`<EndpointsTabContent />`（无 props，挂载即启用数据加载）
 
-- [ ] **Step 1: 创建 VendorsTabContent**
+- [x] **Step 1: 创建 VendorsTabContent**
 
 新建 `vendors-tab-content.tsx`：将 `vendor-management-dialog.tsx` 的 Dialog 外壳移除（去掉 `open`/`onOpenChange` props、`<Dialog>` 包裹、标题/描述/宽度类），保留：keyword/page/pageSize state、`useQuery`（去掉 `enabled: open`，改为 `enabled: true`）、`VendorRow` 映射、搜索输入框与清除按钮、`Add Vendor`/`Refresh` 按钮、`StatusBadge` 计数、错误 `Alert`、`StaticDataTable` 各列、`DataTablePagination`（保持块级流布局）、loading 指示、`VendorMutateDialog` 与 `ConfirmDialog` 挂载。组件导出 `export function VendorsTabContent()`。
 
-- [ ] **Step 2: 创建 EndpointsTabContent**
+- [x] **Step 2: 创建 EndpointsTabContent**
 
 新建 `endpoints-tab-content.tsx`：将 `endpoint-management-dialog.tsx` 的 Dialog 外壳移除，保留 rows state、`useQuery`（`enabled: true`）、`updateRow`、`buildNpmOptions`、`validate`、`handleSave`、`StaticDataTable`（含 overflow 处理注释）、错误/loading 分支。保存动作由父级主操作区按钮触发：通过 `useModels()` 上下文或组件内自持 `isSaving` 并暴露保存方法。**决策：** 保存按钮放在 tab 内容组件内部顶部操作行（与 VendorsTabContent 的 Add/Refresh 行对齐），避免父级回调复杂度。导出 `export function EndpointsTabContent()`。
 
-- [ ] **Step 3: 删除旧对话框文件**
+- [x] **Step 3: 删除旧对话框文件**
 
 删除 `vendor-management-dialog.tsx`、`endpoint-management-dialog.tsx`。
 
-- [ ] **Step 4: 运行既有测试迁移验证**
+- [x] **Step 4: 运行既有测试迁移验证**
 
 Run: `cd web && bun run typecheck`
 Expected: PASS
