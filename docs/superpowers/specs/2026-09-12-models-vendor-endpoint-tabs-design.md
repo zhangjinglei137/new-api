@@ -2,6 +2,8 @@
 comet_change: models-vendor-endpoint-tabs
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-09-12-models-vendor-endpoint-tabs
+status: final
 ---
 
 # Design Doc: 模型管理页导航重构与同步流程恢复

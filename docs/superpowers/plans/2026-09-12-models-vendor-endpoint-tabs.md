@@ -1,3 +1,7 @@
+---
+archived-with: 2026-09-12-models-vendor-endpoint-tabs
+status: final
+---
 # 模型管理页导航重构与同步流程恢复 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
