@@ -89,9 +89,10 @@ describe('SyncWizardDialog source selection', () => {
     const configRadio = getSourceRadio('Configuration File')
     await user.click(configRadio)
 
-    expect(
-      getSourceRadio('Official Repository').getAttribute('aria-checked')
-    ).toBe('true')
+    // 默认选中 source 为 opencode-go（provider 同步向导默认值）
+    expect(getSourceRadio('OpenCode Go').getAttribute('aria-checked')).toBe(
+      'true'
+    )
     expect(configRadio.getAttribute('aria-checked')).toBe('false')
   })
 })

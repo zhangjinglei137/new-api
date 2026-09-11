@@ -37,8 +37,6 @@ type DialogType =
   | 'update-model'
   | 'create-vendor'
   | 'update-vendor'
-  | 'manage-vendors'
-  | 'manage-endpoints'
   | 'missing-models'
   | 'sync-wizard'
   | 'upstream-conflict'
@@ -96,7 +94,7 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
     source: SyncSource
   }>({
     locale: 'zh',
-    source: 'official',
+    source: 'opencode-go',
   })
   const [tabCategory, setTabCategory] = useState<ModelTabCategory>('metadata')
 

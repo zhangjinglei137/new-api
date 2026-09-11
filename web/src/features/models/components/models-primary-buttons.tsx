@@ -16,15 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  Plus,
-  MoreHorizontal,
-  RefreshCw,
-  List,
-  Building2,
-  Cable,
-  AlertCircle,
-} from 'lucide-react'
+import { Plus, MoreHorizontal, List, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -52,24 +44,17 @@ export function ModelsPrimaryButtons() {
     setOpen('missing-models')
   }
 
-  const handleSync = () => {
-    setOpen('sync-wizard')
-  }
-
   const handlePrefillGroups = () => {
     setOpen('prefill-groups')
   }
 
-  const handleManageVendors = () => {
-    setOpen('manage-vendors')
-  }
-
-  const handleManageEndpoints = () => {
-    setOpen('manage-endpoints')
-  }
-
   return (
     <div className='flex items-center gap-2'>
+      {/* Sync metadata（常驻入口，同步向导） */}
+      <Button onClick={() => setOpen('sync-wizard')} variant='outline' size='sm'>
+        {t('Sync metadata')}
+      </Button>
+
       {/* Create Model */}
       <Button onClick={handleCreateModel} size='sm'>
         <Plus className='h-4 w-4' />
@@ -78,7 +63,10 @@ export function ModelsPrimaryButtons() {
 
       {/* More Actions */}
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant='outline' size='sm' />}>
+        <DropdownMenuTrigger
+          render={<Button variant='outline' size='sm' />}
+          aria-label={t('Open menu')}
+        >
           <MoreHorizontal className='h-4 w-4' />
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-56'>
@@ -89,33 +77,12 @@ export function ModelsPrimaryButtons() {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          <DropdownMenuItem onClick={handleSync}>
-            {t('Sync Upstream')}
-            <DropdownMenuShortcut>
-              <RefreshCw className='h-4 w-4' />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-
           <DropdownMenuSeparator />
 
           <DropdownMenuItem onClick={handlePrefillGroups}>
             {t('Prefill Groups')}
             <DropdownMenuShortcut>
               <List className='h-4 w-4' />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem onClick={handleManageVendors}>
-            {t('Manage Vendors')}
-            <DropdownMenuShortcut>
-              <Building2 className='h-4 w-4' />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem onClick={handleManageEndpoints}>
-            {t('Manage Endpoints')}
-            <DropdownMenuShortcut>
-              <Cable className='h-4 w-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
         </DropdownMenuContent>
