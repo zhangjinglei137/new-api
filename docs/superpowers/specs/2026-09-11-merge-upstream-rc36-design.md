@@ -2,6 +2,8 @@
 comet_change: merge-upstream-rc36
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-09-11-merge-upstream-rc36
+status: final
 ---
 
 # 技术设计：合并上游 rc.32→rc.36
