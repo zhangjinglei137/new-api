@@ -98,6 +98,8 @@ jobs:
               echo "merge=failed" >> "$GITHUB_OUTPUT"
               git diff --name-only --diff-filter=U > /tmp/conflicted-files.txt 2>/dev/null || true
               git merge --abort 2>/dev/null || true
+              # 必须非零退出：否则 run 显示 success，failure() 兜底（issue 通知）永不触发
+              exit 1
             fi
           fi
 
@@ -134,7 +136,14 @@ jobs:
             echo '--- relaykit ---' >> "$GITHUB_STEP_SUMMARY"
             tail -40 /tmp/vet-relaykit.log >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
+            # 记录冲突文件列表，便于人工排查 merge 需要处理的范围
+            echo "### Conflicted files" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/conflicted-files.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "unknown" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
             git merge --abort 2>/dev/null || true
+            # 必须非零退出：否则 run 显示 success，failure() 兜底（issue 通知）永不触发
+            exit 1
           else
             echo "verify=passed" >> "$GITHUB_OUTPUT"
           fi
