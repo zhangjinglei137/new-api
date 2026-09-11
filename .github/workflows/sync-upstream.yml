@@ -90,6 +90,8 @@ jobs:
             echo "merge=success" >> "$GITHUB_OUTPUT"
           else
             echo "Default merge had conflicts, applying -X ours fallback..."
+            # 先保存冲突文件列表（abort 后 diff 无法再列出未合并路径），供 verify 失败时排查
+            git diff --name-only --diff-filter=U > /tmp/conflicted-files.txt 2>/dev/null || true
             git merge --abort 2>/dev/null || true
             # 第二层：-X ours 全局兜底（rerere 命中优先重放已解决的方案，未命中取本地侧）
             if git merge --no-edit -X ours upstream/main >/tmp/merge-ours.log 2>&1; then
