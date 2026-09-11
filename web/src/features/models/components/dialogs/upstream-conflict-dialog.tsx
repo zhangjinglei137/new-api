@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+<<<<<<< HEAD
 import { useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table'
 import {
@@ -625,3 +626,7 @@ export function UpstreamConflictDialog({
     </Dialog>
   )
 }
+=======
+// Compatibility export: conflict selection is now part of the preview wizard.
+export { SyncWizardDialog as UpstreamConflictDialog } from './sync-wizard-dialog'
+>>>>>>> upstream/main

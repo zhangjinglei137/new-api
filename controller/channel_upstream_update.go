@@ -439,7 +439,10 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 			// 正确端点为 /api/coding/v1/models。
 			url = fmt.Sprintf("%s/v1/models", plan.ClaudeBaseURL)
 		} else {
-			url = fmt.Sprintf("%s/v1/models", baseURL)
+			// 火山方舟 OpenAI 兼容 API 根路径是 /api/v3（chat/embeddings 均为
+			// {base}/api/v3/...，见 relay/channel/volcengine 的 GetRequestURL），
+			// 不存在 /v1/models 端点。原拼接会导致「获取模型列表」固定 404 失败。
+			url = fmt.Sprintf("%s/api/v3/models", baseURL)
 		}
 	case constant.ChannelTypeMoonshot:
 		if plan, _, ok := constant.ResolveSpecialPlan(channel.Type, baseURL, channel.GetOtherSettings().EndpointProfile); ok && plan.OpenAIBaseURL != "" {

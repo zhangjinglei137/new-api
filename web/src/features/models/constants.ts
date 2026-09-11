@@ -73,8 +73,8 @@ export function getNameRuleConfig(
 export function getModelStatusOptions(t: TFunction) {
   return [
     { label: t('All Status'), value: 'all' },
-    { label: t('Enabled'), value: 'enabled' },
-    { label: t('Disabled'), value: 'disabled' },
+    { label: t('Shown'), value: 'enabled' },
+    { label: t('Not shown'), value: 'disabled' },
   ] as const
 }
 
@@ -82,8 +82,8 @@ export function getModelStatusConfig(
   t: TFunction
 ): Record<ModelStatus, { label: string; variant: 'success' | 'neutral' }> {
   return {
-    1: { label: t('Enabled'), variant: 'success' },
-    0: { label: t('Disabled'), variant: 'neutral' },
+    1: { label: t('Shown'), variant: 'success' },
+    0: { label: t('Not shown'), variant: 'neutral' },
   }
 }
 
@@ -229,6 +229,7 @@ export function getSyncSourceOptions(t: TFunction) {
       description: t('Sync from the public upstream metadata repository.'),
       disabled: false,
     },
+<<<<<<< HEAD
     {
       label: t('OpenCode Go'),
       value: 'opencode-go' as SyncSource,
@@ -241,5 +242,7 @@ export function getSyncSourceOptions(t: TFunction) {
       description: t('Upload or reference a local configuration file.'),
       disabled: true,
     },
+=======
+>>>>>>> upstream/main
   ] as const
 }

@@ -53,8 +53,11 @@ import {
   getCurrencyLabel,
 } from '@/lib/currency'
 import { formatTimestampToDate } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
+import { createServerError } from '@/lib/server-error-message'
 import { truncateText } from '@/lib/utils'
 
+<<<<<<< HEAD
 import {
   getCodexUsage,
   getCommandCodeUsage,
@@ -73,6 +76,12 @@ import {
   CHANNEL_TYPE_OPENCODE_GO,
   CHANNEL_TYPE_RADEON_CLOUD,
   CHANNEL_TYPE_SENSENOVA,
+=======
+import { getCodexUsage, updateChannelBalance } from '../api'
+import {
+  CHANNEL_STATUS_CONFIG,
+  CHANNEL_TYPE_TASK_PLUGIN,
+>>>>>>> upstream/main
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
 import {
@@ -97,6 +106,7 @@ import {
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
+import { TaskPluginChannelBadge } from './channel-type-badge'
 import { useChannels } from './channels-provider'
 import { DataTableRowActions } from './data-table-row-actions'
 import { DataTableTagRowActions } from './data-table-tag-row-actions'
@@ -738,6 +748,25 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     }
 
     setIsUpdating(true)
+<<<<<<< HEAD
+=======
+    if (channel.type === 57) {
+      try {
+        const res = await getCodexUsage(channel.id)
+        if (!res.success) {
+          throw createServerError(res, t('Failed to fetch usage'))
+        }
+        setCodexUsageResponse(res)
+        setCodexUsageOpen(true)
+      } catch (error) {
+        handleServerError(error, t('Failed to fetch usage'))
+      } finally {
+        setIsUpdating(false)
+      }
+      return
+    }
+
+>>>>>>> upstream/main
     try {
       const response = await updateChannelBalance(channel.id)
       if (response.success && response.balance !== undefined) {
@@ -757,12 +786,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         setCurrentRow(channel)
         setRawBalanceResponse(response.raw_response)
       } else {
-        toast.error(response.message || t('Failed to update balance'))
+        handleServerError(response, t('Failed to update balance'))
       }
     } catch (error: unknown) {
-      toast.error(
-        error instanceof Error ? error.message : t('Failed to update balance')
-      )
+      handleServerError(error, t('Failed to update balance'))
     } finally {
       setIsUpdating(false)
     }
@@ -849,6 +876,7 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelDisplayName={sensitiveVisible ? undefined : SENSITIVE_MASK}
         channelDisplayId={sensitiveVisible ? undefined : SENSITIVE_MASK}
         response={codexUsageResponse}
+<<<<<<< HEAD
         onRefresh={() => fetchCodexUsage(false)}
         isRefreshing={isUpdating}
       />
@@ -913,6 +941,25 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelId={channel.id}
         response={radeonCloudUsageResponse}
         onRefresh={() => fetchRadeonCloudUsage(false)}
+=======
+        onRefresh={async () => {
+          if (isUpdating) {
+            return
+          }
+          setIsUpdating(true)
+          try {
+            const res = await getCodexUsage(channel.id)
+            if (!res.success) {
+              throw createServerError(res, t('Failed to fetch usage'))
+            }
+            setCodexUsageResponse(res)
+          } catch (error) {
+            handleServerError(error, t('Failed to fetch usage'))
+          } finally {
+            setIsUpdating(false)
+          }
+        }}
+>>>>>>> upstream/main
         isRefreshing={isUpdating}
       />
       {rawBalanceResponse !== null && (
@@ -1168,26 +1215,34 @@ export function useChannelsColumns(
                   </Tooltip>
                 </TooltipProvider>
               )}
-              <TooltipProvider delay={300}>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <div className='max-w-full min-w-0 overflow-hidden' />
-                    }
-                  >
-                    <ProviderBadge
-                      iconKey={`${iconName}.Color`}
-                      iconSize={18}
-                      label={typeName}
-                      colorText={false}
-                      copyable={false}
-                      showDot={false}
-                      className='max-w-full min-w-0 overflow-hidden'
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side='top'>{typeName}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {type === CHANNEL_TYPE_TASK_PLUGIN ? (
+                <TaskPluginChannelBadge
+                  pluginKey={
+                    parseChannelSettings(channel.setting)?.task_plugin_key
+                  }
+                />
+              ) : (
+                <TooltipProvider delay={300}>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <div className='max-w-full min-w-0 overflow-hidden' />
+                      }
+                    >
+                      <ProviderBadge
+                        iconKey={`${iconName}.Color`}
+                        iconSize={18}
+                        label={typeName}
+                        colorText={false}
+                        copyable={false}
+                        showDot={false}
+                        className='max-w-full min-w-0 overflow-hidden'
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent side='top'>{typeName}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isIonet && (
                 <TooltipProvider delay={100}>
                   <Tooltip>
