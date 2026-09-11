@@ -27,6 +27,8 @@ import {
   OFFICIAL_CHANNEL_NAME,
   MODELS_DEV_PRESET_ID,
   MODELS_DEV_PRESET_NAME,
+  OPENCODE_GO_PRESET_ID,
+  OPENCODE_GO_PRESET_NAME,
 } from './constants'
 import { formatPricingNumber } from './pricing-format'
 
@@ -48,6 +50,12 @@ export function getUpstreamDisplayName(
     sourceName === `${MODELS_DEV_PRESET_NAME}(${MODELS_DEV_PRESET_ID})`
   ) {
     return t('models.dev pricing preset')
+  }
+  if (
+    sourceName === OPENCODE_GO_PRESET_NAME ||
+    sourceName === `${OPENCODE_GO_PRESET_NAME}(${OPENCODE_GO_PRESET_ID})`
+  ) {
+    return t('OpenCode Go pricing preset')
   }
   return sourceName
 }

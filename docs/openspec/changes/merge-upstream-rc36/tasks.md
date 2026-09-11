@@ -17,6 +17,7 @@
 - [x] 融合 `model-mutate-drawer.tsx`：上游骨架（initialSection 分段）+ 重挂本地 endpoint/CapabilityGroupsEditor；zod schema 逐字段比对
 - [x] 融合 `models-dialogs.tsx`：上游 PriceSyncDialog/price-model + 本地 Endpoint/VendorManagement 注册
 - [x] 取上游 `sync-wizard-dialog.tsx`、`upstream-conflict-dialog.tsx`、`upstream-ratio-sync-helpers.ts`、`models-columns.tsx`；处理本地测试改向（SyncDiffData→MetadataSyncField/Candidate）
+  - [x] verify 修复：`upstream-ratio-sync-helpers.ts` 取上游后重挂本地 opencode-go 预设显示（`OpenCode Go pricing preset`），补 i18n 7 语言 + 回归测试（3 用例通过）
 - [x] 处理 vendor 命名碰撞：确认本地 `vendor-management-dialog` vs 上游 `vendors-management-dialog` 职责，弃一保一
 - [x] 融合 `channels-columns.tsx`：本地优先 + 吸收上游错误通知统一/插件图标
 - [x] `static-keys.ts` 并集 + `bun run i18n:sync` 补 zh 翻译
