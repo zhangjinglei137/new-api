@@ -266,15 +266,15 @@ Expected: PASS
 - Consumes: `VendorsTabContent`、`EndpointsTabContent`、`Models`、section-registry、`getSyncSourceOptions`
 - Produces: 回归测试覆盖 tab 顺序、URL 切换、菜单清理、来源顺序/默认
 
-- [ ] **Step 1: 迁移供应商测试**
+- [x] **Step 1: 迁移供应商测试**
 
 将 `vendor-management-dialog.test.tsx` 复制为 `components/__tests__/vendors-tab-content.test.tsx`，替换 import 为 `VendorsTabContent`，`renderDialog` 改为 `render(<QueryClientProvider client={queryClient}><VendorsTabContent /></QueryClientProvider>)`，删除 `open onOpenChange` props。保留分页/搜索/删除断言。删除旧测试文件。
 
-- [ ] **Step 2: 迁移端点测试**
+- [x] **Step 2: 迁移端点测试**
 
 同理迁移为 `components/__tests__/endpoints-tab-content.test.tsx`：import `EndpointsTabContent`，无 props 渲染，保留保存/校验断言。删除旧测试文件。
 
-- [ ] **Step 3: 新建导航回归测试**
+- [x] **Step 3: 新建导航回归测试**
 
 `components/__tests__/models-navigation.test.tsx`：
 - 测试 1「section 顺序」：断言 `MODELS_SECTION_IDS` 等于 `['metadata', 'vendors', 'endpoints', 'deployments']`
@@ -283,7 +283,7 @@ Expected: PASS
 
 遵循 mock 模式：mock `react-i18next`、`../../api`（按相对路径），等待明确界面状态。
 
-- [ ] **Step 4: 运行全部相关测试**
+- [x] **Step 4: 运行全部相关测试**
 
 Run: `cd web && bun run test -- features/models`
 Expected: 全部通过
