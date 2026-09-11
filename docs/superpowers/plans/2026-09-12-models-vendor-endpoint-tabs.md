@@ -206,7 +206,7 @@ Expected: PASS
 - Consumes: `getSyncSourceOptions(t)`、`SyncSource`
 - Produces: 来源顺序 `opencode-go → official → config(禁用)`；向导默认选中 opencode-go
 
-- [ ] **Step 1: 调整来源顺序**
+- [x] **Step 1: 调整来源顺序**
 
 `constants.ts` `getSyncSourceOptions` 返回数组顺序改为：
 
@@ -233,22 +233,22 @@ Expected: PASS
 
 将「Official」项的 `Default` 徽标逻辑（sync-wizard-dialog.tsx 中 `option.value === 'official'`）改为 `option.value === 'opencode-go'`。
 
-- [ ] **Step 2: 默认来源改 opencode-go**
+- [x] **Step 2: 默认来源改 opencode-go**
 
 `sync-wizard-dialog.tsx` 初始 `useState<SyncSource>('official')` 改为 `useState<SyncSource>('opencode-go')`；`models-provider.tsx`（Task 3 已改）保持一致。
 
-- [ ] **Step 3: 更新单测**
+- [x] **Step 3: 更新单测**
 
 `sync-source-options.test.ts`：
 - 新测试「orders opencode-go first, official second, config last」：断言 `options.map((o) => o.value)` 等于 `['opencode-go', 'official', 'config']`
 - 保留 opencode-go selectable 断言（更新：官方项不再断言为第一）
 - 保留 config disabled 断言
 
-- [ ] **Step 4: 补充 i18n 键**
+- [x] **Step 4: 补充 i18n 键**
 
 检查 `web/src/i18n/locales/en.json` 是否存在 `Sync metadata`、`Vendors`、`Endpoints` 键；缺失则补 en，运行 `cd web && bun run i18n:sync` 补齐其余语言。
 
-- [ ] **Step 5: 验证测试与构建**
+- [x] **Step 5: 验证测试与构建**
 
 Run: `cd web && bun run typecheck && bun run test sync-source-options`
 Expected: PASS

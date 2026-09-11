@@ -17,12 +17,12 @@
 
 - [x] 3.1 从 `models-primary-buttons.tsx` 更多菜单移除「Manage Vendors」「Manage Endpoints」项及对应 handler；验证菜单不再含两项
 - [x] 3.2 在主操作区新增常驻「Sync metadata」按钮打开 sync-wizard，并移除菜单中 Sync Upstream 项；验证点击按钮打开同步向导
-- [ ] 3.3 同步更新 `models-dialogs.tsx` 挂载（若对话框保留）与 i18n locale（en/zh/zh-TW/fr/ru/ja/vi）文案；验证 `bun run i18n:sync` 无缺失键
+- [x] 3.3 同步更新 `models-dialogs.tsx` 挂载（若对话框保留）与 i18n locale（en/zh/zh-TW/fr/ru/ja/vi）文案；验证 `bun run i18n:sync` 无缺失键
 
 ## 4. 同步来源顺序与默认值
 
-- [ ] 4.1 调整 `getSyncSourceOptions`：`opencode-go` 置顶，随后 `official`，最后 `config`（禁用）；更新 `sync-source-options.test.ts` 断言顺序，验证测试通过
-- [ ] 4.2 将 `sync-wizard-dialog.tsx` 默认 `source` 与 `models-provider.tsx` `syncWizardOptions` 初始值改为 `opencode-go`；验证向导打开时默认选中 OpenCode Go
+- [x] 4.1 调整 `getSyncSourceOptions`：`opencode-go` 置顶，随后 `official`，最后 `config`（禁用）；更新 `sync-source-options.test.ts` 断言顺序，验证测试通过
+- [x] 4.2 将 `sync-wizard-dialog.tsx` 默认 `source` 与 `models-provider.tsx` `syncWizardOptions` 初始值改为 `opencode-go`；验证向导打开时默认选中 OpenCode Go
 
 ## 5. 集成验证
 
