@@ -16,15 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { TFunction } from 'i18next'
 import { describe, expect, test, vi } from 'vitest'
 
-import { MODELS_SECTION_IDS } from '../../section-registry'
+import {
+  getModelsSectionNavItems,
+  MODELS_DEFAULT_SECTION,
+  MODELS_SECTION_IDS,
+} from '../../section-registry'
 
 // Identity translation: navigation titles are i18n keys, so components
 // under test receive the keys themselves (see Task 4 for title assertions).
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
+
+const t = ((key: string) => key) as TFunction
 
 describe('MODELS_SECTION_IDS', () => {
   test('orders model page sections as metadata, vendors, endpoints, deployments', () => {
@@ -34,5 +41,24 @@ describe('MODELS_SECTION_IDS', () => {
       'endpoints',
       'deployments',
     ])
+  })
+})
+
+describe('models navigation URLs', () => {
+  test('maps every section to its /models/<section> URL in tab order', () => {
+    // 每个 tab 对应一个独立 URL（path 风格），点击 tab 即切换 URL，这是
+    // tab 顺序与 URL 切换契约的单一事实来源。
+    const navItems = getModelsSectionNavItems(t)
+
+    expect(navItems.map((item) => item.url)).toEqual([
+      '/models/metadata',
+      '/models/vendors',
+      '/models/endpoints',
+      '/models/deployments',
+    ])
+  })
+
+  test('falls back to the metadata section when the URL has no section', () => {
+    expect(MODELS_DEFAULT_SECTION).toBe('metadata')
   })
 })
