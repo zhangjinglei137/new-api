@@ -17,12 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { DescriptionDialog } from './dialogs/description-dialog'
-import { EndpointManagementDialog } from './dialogs/endpoint-management-dialog'
 import { MissingModelsDialog } from './dialogs/missing-models-dialog'
 import { PrefillGroupManagement } from './dialogs/prefill-group-management'
 import { PriceSyncDialog } from './dialogs/price-sync-dialog'
 import { SyncWizardDialog } from './dialogs/sync-wizard-dialog'
-import { VendorManagementDialog } from './dialogs/vendor-management-dialog'
 import { VendorMutateDialog } from './dialogs/vendor-mutate-dialog'
 import { ModelMutateDrawer } from './drawers/model-mutate-drawer'
 import { useModels } from './models-provider'
@@ -61,18 +59,6 @@ export function ModelsDialogs() {
         open={open === 'create-vendor' || open === 'update-vendor'}
         onOpenChange={(v) => !v && setOpen(null)}
         currentVendor={open === 'update-vendor' ? currentVendor : null}
-      />
-
-      {/* Vendor Management Dialog */}
-      <VendorManagementDialog
-        open={open === 'manage-vendors'}
-        onOpenChange={(v) => !v && setOpen(null)}
-      />
-
-      {/* Endpoint Management Dialog */}
-      <EndpointManagementDialog
-        open={open === 'manage-endpoints'}
-        onOpenChange={(v) => !v && setOpen(null)}
       />
 
       {/* Missing Models Dialog */}

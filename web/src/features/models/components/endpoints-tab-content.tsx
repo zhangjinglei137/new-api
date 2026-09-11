@@ -17,13 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Cable, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { StaticDataTable } from '@/components/data-table/static/static-data-table'
-import { Dialog } from '@/components/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,12 +32,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-import {
-  getEndpointDefinitions,
-  updateEndpointDefinitions,
-} from '../../api'
-import { endpointDefinitionsQueryKeys } from '../../lib'
-import type { EndpointDefinition } from '../../types'
+import { getEndpointDefinitions, updateEndpointDefinitions } from '../api'
+import { endpointDefinitionsQueryKeys } from '../lib'
+import type { EndpointDefinition } from '../types'
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const
 const HTTP_METHODS_SET = new Set<string>(HTTP_METHODS)
@@ -48,11 +44,6 @@ const HTTP_METHODS_SET = new Set<string>(HTTP_METHODS)
  * the global endpoint definition.
  */
 const PATH_OPTIONAL_ENDPOINT_TYPES = new Set<string>(['openai-video'])
-
-type EndpointManagementDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
 
 /**
  * Build the npm suggestion list for the combobox: the server-provided
@@ -78,10 +69,7 @@ function buildNpmOptions(
   return options
 }
 
-export function EndpointManagementDialog({
-  open,
-  onOpenChange,
-}: EndpointManagementDialogProps) {
+export function EndpointsTabContent() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [rows, setRows] = useState<EndpointDefinition[]>([])
@@ -90,14 +78,14 @@ export function EndpointManagementDialog({
   const { data, isLoading, error } = useQuery({
     queryKey: endpointDefinitionsQueryKeys.list(),
     queryFn: getEndpointDefinitions,
-    enabled: open,
+    enabled: true,
   })
 
   useEffect(() => {
-    if (open && data?.data?.endpoints) {
+    if (data?.data?.endpoints) {
       setRows(data.data.endpoints)
     }
-  }, [open, data])
+  }, [data])
 
   const updateRow = (type: string, patch: Partial<EndpointDefinition>) => {
     setRows((previous) =>
@@ -145,7 +133,6 @@ export function EndpointManagementDialog({
         queryClient.invalidateQueries({
           queryKey: endpointDefinitionsQueryKeys.lists(),
         })
-        onOpenChange(false)
       } else {
         toast.error(response.message || t('Failed to save endpoint definitions'))
       }
@@ -157,33 +144,14 @@ export function EndpointManagementDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={
-        <>
-          <Cable className='text-foreground/80 h-5 w-5' />
-          {t('Endpoint Management')}
-        </>
-      }
-      description={t(
-        'Configure the endpoint definitions offered by the model editor template list.'
-      )}
-      contentClassName='w-[calc(100vw-2rem)] sm:max-w-[68rem]'
-      contentHeight='auto'
-      bodyClassName='space-y-3'
-      footer={
-        <>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
-            {t('Cancel')}
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-            {t('Save')}
-          </Button>
-        </>
-      }
-    >
+    <div className='space-y-3'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
+          {t('Save')}
+        </Button>
+      </div>
+
       {error && (
         <div className='text-destructive text-sm'>
           {t('Unable to load endpoint definitions')}
@@ -219,10 +187,7 @@ export function EndpointManagementDialog({
                         {type}
                       </span>
                       {PATH_OPTIONAL_ENDPOINT_TYPES.has(type) && (
-                        <Badge
-                          variant='warning'
-                          className='font-normal'
-                        >
+                        <Badge variant='warning' className='font-normal'>
                           {t('path in model endpoint config')}
                         </Badge>
                       )}
@@ -310,6 +275,6 @@ export function EndpointManagementDialog({
           </p>
         </>
       )}
-    </Dialog>
+    </div>
   )
 }

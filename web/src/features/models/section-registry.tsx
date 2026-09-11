@@ -30,7 +30,12 @@ const MODELS_SECTIONS = [
   {
     id: 'vendors',
     titleKey: 'Vendors',
-    build: () => null,
+    build: () => null, // Content is rendered directly in the page component
+  },
+  {
+    id: 'endpoints',
+    titleKey: 'Endpoints',
+    build: () => null, // Content is rendered directly in the page component
   },
   {
     id: 'deployments',

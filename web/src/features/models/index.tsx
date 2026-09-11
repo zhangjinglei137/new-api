@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
@@ -31,11 +31,12 @@ import { listDeployments } from './api'
 import { DeploymentAccessGuard } from './components/deployment-access-guard'
 import { DeploymentsTable } from './components/deployments-table'
 import { CreateDeploymentDrawer } from './components/dialogs/create-deployment-drawer'
+import { EndpointsTabContent } from './components/endpoints-tab-content'
 import { ModelsDialogs } from './components/models-dialogs'
 import { ModelsPrimaryButtons } from './components/models-primary-buttons'
 import { ModelsProvider, useModels } from './components/models-provider'
 import { ModelsTable } from './components/models-table'
-import { VendorsTable } from './components/vendors-table'
+import { VendorsTabContent } from './components/vendors-tab-content'
 import { useModelDeploymentSettings } from './hooks/use-model-deployment-settings'
 import { deploymentsQueryKeys } from './lib'
 import {
@@ -54,7 +55,14 @@ const SECTION_META: Record<
     titleKey: 'Model management',
     tabKey: 'Models',
   },
-  vendors: { titleKey: 'Vendor management', tabKey: 'Vendors' },
+  vendors: {
+    titleKey: 'Vendor management',
+    tabKey: 'Vendors',
+  },
+  endpoints: {
+    titleKey: 'Endpoint management',
+    tabKey: 'Endpoints',
+  },
   deployments: {
     titleKey: 'Deployments',
     tabKey: 'Deployments',
@@ -64,7 +72,7 @@ const SECTION_META: Record<
 function ModelsContent() {
   const { t } = useTranslation()
   const navigate = useNavigate({ from: '/models/$section' })
-  const { tabCategory, setTabCategory, setOpen, setCurrentVendor } = useModels()
+  const { tabCategory, setTabCategory } = useModels()
   const params = route.useParams()
   const activeSection = (params.section ??
     MODELS_DEFAULT_SECTION) as ModelsSectionId
@@ -92,30 +100,31 @@ function ModelsContent() {
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.metadata
 
-  let actions = <ModelsPrimaryButtons />
-  let content = <ModelsTable />
-  if (activeSection === 'vendors') {
-    actions = (
-      <Button
-        size='sm'
-        onClick={() => {
-          setCurrentVendor(null)
-          setOpen('create-vendor')
-        }}
-      >
-        <Plus className='size-4' />
-        {t('Add Vendor')}
-      </Button>
-    )
-    content = <VendorsTable />
-  } else if (activeSection === 'deployments') {
-    actions = (
-      <Button onClick={() => setCreateDeploymentOpen(true)} size='sm'>
-        <Plus className='size-4' />
-        {t('Create deployment')}
-      </Button>
-    )
-    content = <DeploymentsSection />
+  let actions: ReactNode
+  let content: ReactNode
+  switch (activeSection) {
+    case 'vendors':
+      // VendorsTabContent 自带顶部 Add/Refresh/Search 操作行，页面级操作区留空
+      actions = null
+      content = <VendorsTabContent />
+      break
+    case 'endpoints':
+      // EndpointsTabContent 自带顶部 Save 操作行，页面级操作区留空
+      actions = null
+      content = <EndpointsTabContent />
+      break
+    case 'deployments':
+      actions = (
+        <Button onClick={() => setCreateDeploymentOpen(true)} size='sm'>
+          <Plus className='h-4 w-4' />
+          {t('Create deployment')}
+        </Button>
+      )
+      content = <DeploymentsSection />
+      break
+    default:
+      actions = <ModelsPrimaryButtons />
+      content = <ModelsTable />
   }
 
   return (

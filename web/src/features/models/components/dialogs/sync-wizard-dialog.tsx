@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Select,
   SelectContent,
@@ -41,13 +42,14 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { createServerError } from '@/lib/server-error-message'
 
 import { previewUpstreamDiff, syncUpstream } from '../../api'
-import { getSyncLocaleOptions } from '../../constants'
+import { getSyncLocaleOptions, getSyncSourceOptions } from '../../constants'
 import type {
   MetadataSyncCandidate,
   MetadataSyncField,
   MetadataSyncPreview,
   MetadataSyncSelection,
   SyncLocale,
+  SyncSource,
 } from '../../types'
 
 const FIELD_LABELS: Record<MetadataSyncField, string> = {
@@ -86,6 +88,7 @@ export function SyncWizardDialog(props: {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [locale, setLocale] = useState<SyncLocale>('zh')
+  const [source, setSource] = useState<SyncSource>('opencode-go')
   const [preview, setPreview] = useState<MetadataSyncPreview | null>(null)
   const [scope, setScope] = useState('site')
   const [search, setSearch] = useState('')
@@ -103,7 +106,7 @@ export function SyncWizardDialog(props: {
       setPage(0)
     },
     mutationFn: async () => {
-      const response = await previewUpstreamDiff({ locale })
+      const response = await previewUpstreamDiff({ locale, source })
       if (!response.success || !response.data) {
         throw createServerError(response, t('Failed to preview metadata'))
       }
@@ -377,6 +380,44 @@ export function SyncWizardDialog(props: {
       </ol>
       {step === 0 && (
         <div className='space-y-4'>
+          <div className='space-y-1'>
+            <Label>{t('Select Sync Source')}</Label>
+            <RadioGroup
+              value={source}
+              onValueChange={(value) => {
+                const selected = getSyncSourceOptions(t).find(
+                  (option) => option.value === value
+                )
+                if (!selected || selected.disabled) return
+                setSource(selected.value as SyncSource)
+                setPreview(null)
+                setSelection({})
+                setPage(0)
+                load.reset()
+              }}
+              className='grid gap-2 sm:grid-cols-3'
+            >
+              {getSyncSourceOptions(t).map((option) => (
+                <Label
+                  key={option.value}
+                  htmlFor={`sync-source-${option.value}`}
+                  className='flex cursor-pointer items-start gap-2 rounded-lg border p-3 font-normal'
+                >
+                  <RadioGroupItem
+                    value={option.value}
+                    id={`sync-source-${option.value}`}
+                    disabled={option.disabled}
+                  />
+                  <span>
+                    <span className='block font-medium'>{option.label}</span>
+                    <span className='text-muted-foreground block text-sm'>
+                      {option.description}
+                    </span>
+                  </span>
+                </Label>
+              ))}
+            </RadioGroup>
+          </div>
           <div className='flex flex-wrap items-end gap-3'>
             <div className='space-y-1'>
               <Label>{t('Metadata language')}</Label>

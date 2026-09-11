@@ -16,14 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  Plus,
-  MoreHorizontal,
-  List,
-  Building2,
-  Cable,
-  AlertCircle,
-} from 'lucide-react'
+import { Plus, MoreHorizontal, List, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -53,25 +46,14 @@ export function ModelsPrimaryButtons() {
     setOpen('missing-models')
   }
 
-  const handleSync = () => {
-    setOpen('sync-wizard')
-  }
-
   const handlePrefillGroups = () => {
     setOpen('prefill-groups')
   }
 
-  const handleManageVendors = () => {
-    setOpen('manage-vendors')
-  }
-
-  const handleManageEndpoints = () => {
-    setOpen('manage-endpoints')
-  }
-
   return (
     <div className='flex flex-wrap items-center gap-2'>
-      <Button onClick={handleSync} variant='outline' size='sm'>
+      {/* Sync metadata（常驻入口，同步向导） */}
+      <Button onClick={() => setOpen('sync-wizard')} variant='outline' size='sm'>
         {t('Sync metadata')}
       </Button>
       {canPrice && (
@@ -112,20 +94,6 @@ export function ModelsPrimaryButtons() {
             {t('Prefill Groups')}
             <DropdownMenuShortcut>
               <List className='h-4 w-4' />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem onClick={handleManageVendors}>
-            {t('Manage Vendors')}
-            <DropdownMenuShortcut>
-              <Building2 className='h-4 w-4' />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem onClick={handleManageEndpoints}>
-            {t('Manage Endpoints')}
-            <DropdownMenuShortcut>
-              <Cable className='h-4 w-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
         </DropdownMenuContent>

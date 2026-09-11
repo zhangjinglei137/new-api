@@ -224,15 +224,15 @@ export function getSyncLocaleOptions(t: TFunction) {
 export function getSyncSourceOptions(t: TFunction) {
   return [
     {
-      label: t('Official Repository'),
-      value: 'official' as SyncSource,
-      description: t('Sync from the public upstream metadata repository.'),
-      disabled: false,
-    },
-    {
       label: t('OpenCode Go'),
       value: 'opencode-go' as SyncSource,
       description: t('Sync from the official opencode-go catalog.'),
+      disabled: false,
+    },
+    {
+      label: t('Official Repository'),
+      value: 'official' as SyncSource,
+      description: t('Sync from the public upstream metadata repository.'),
       disabled: false,
     },
     {
