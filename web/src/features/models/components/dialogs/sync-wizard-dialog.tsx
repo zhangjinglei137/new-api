@@ -55,7 +55,7 @@ export function SyncWizardDialog({
   } = useModels()
   const isMobile = useIsMobile()
   const [locale, setLocale] = useState<SyncLocale>('zh')
-  const [source, setSource] = useState<SyncSource>('official')
+  const [source, setSource] = useState<SyncSource>('opencode-go')
   const [isSyncing, setIsSyncing] = useState(false)
 
   // Get translated options
@@ -77,7 +77,7 @@ export function SyncWizardDialog({
       setSource(
         preferredSource && !preferredSource.disabled
           ? (preferredSource.value as SyncSource)
-          : 'official'
+          : 'opencode-go'
       )
     }
     // eslint-disable-next-line react/exhaustive-deps -- see comment above
@@ -194,7 +194,7 @@ export function SyncWizardDialog({
                   <div className='space-y-1'>
                     <div className='flex items-center gap-2'>
                       <span className='font-medium'>{option.label}</span>
-                      {option.value === 'official' && (
+                      {option.value === 'opencode-go' && (
                         <StatusBadge
                           label='Default'
                           variant='neutral'

@@ -27,6 +27,16 @@ import type { SyncSource } from '../types'
 const t = ((key: string) => key) as TFunction
 
 describe('getSyncSourceOptions', () => {
+  test('orders opencode-go first, official second, configuration file last', () => {
+    const options = getSyncSourceOptions(t)
+
+    expect(options.map((option) => option.value)).toEqual([
+      'opencode-go',
+      'official',
+      'config',
+    ])
+  })
+
   test('offers the opencode-go source as a selectable option', () => {
     const options = getSyncSourceOptions(t)
     const opencodeGo = options.find((option) => option.value === 'opencode-go')
