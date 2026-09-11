@@ -31,6 +31,15 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
+// The setup guide cards use framer-motion entrance animations whose initial
+// `opacity: 0` state is not guaranteed to advance in jsdom, making
+// `toBeVisible()` assertions flaky. Prefer reduced motion in tests so the
+// cards render without animation.
+vi.mock('motion/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('motion/react')>()
+  return { ...actual, useReducedMotion: () => true }
+})
+
 import { OverviewDashboard } from '../overview-dashboard'
 
 const storageKey = 'dashboard_overview_setup_guide_expanded'
