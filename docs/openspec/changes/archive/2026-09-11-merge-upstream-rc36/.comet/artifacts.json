@@ -1,0 +1,8 @@
+{
+  "openspec_proposal": "docs/openspec/changes/merge-upstream-rc36/proposal.md",
+  "openspec_design": "docs/openspec/changes/merge-upstream-rc36/design.md",
+  "openspec_tasks": "docs/openspec/changes/merge-upstream-rc36/tasks.md",
+  "handoff_context": "docs/openspec/changes/archive/2026-09-11-merge-upstream-rc36/.comet/handoff/design-context.json",
+  "handoff_markdown": "docs/openspec/changes/archive/2026-09-11-merge-upstream-rc36/.comet/handoff/design-context.md",
+  "archive_directory": "docs/openspec/changes/archive/2026-09-11-merge-upstream-rc36"
+}

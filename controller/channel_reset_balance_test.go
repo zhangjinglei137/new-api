@@ -17,6 +17,9 @@ import (
 func TestResetChannelBalanceZerosBalanceAndUsedQuota(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	// The merged audit pipeline writes manage audits to the separated
+	// `audit_logs` table (LOG_DB), not the legacy `logs` table.
+	require.NoError(t, model.MigrateAuditLogs())
 
 	channel := &model.Channel{
 		Type:               constant.ChannelTypeOpenAI,
@@ -48,7 +51,7 @@ func TestResetChannelBalanceZerosBalanceAndUsedQuota(t *testing.T) {
 	assert.Equal(t, int64(0), stored.UsedQuota)
 	assert.Equal(t, int64(123456), stored.BalanceUpdatedTime)
 
-	var auditLog model.Log
+	var auditLog model.AuditLog
 	require.NoError(t, db.Order("id desc").First(&auditLog).Error)
 	var auditData struct {
 		Operation struct {
@@ -56,7 +59,9 @@ func TestResetChannelBalanceZerosBalanceAndUsedQuota(t *testing.T) {
 			Params map[string]any `json:"params"`
 		} `json:"op"`
 	}
-	require.NoError(t, common.UnmarshalJsonStr(auditLog.Other, &auditData))
+	otherBytes, err := common.Marshal(auditLog.Other)
+	require.NoError(t, err)
+	require.NoError(t, common.Unmarshal(otherBytes, &auditData))
 	assert.Equal(t, "channel.reset_balance", auditData.Operation.Action)
 	assert.Equal(t, float64(channel.Id), auditData.Operation.Params["id"])
 	assert.Equal(t, "reset-me", auditData.Operation.Params["name"])

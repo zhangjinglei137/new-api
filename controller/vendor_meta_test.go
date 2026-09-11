@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
@@ -16,6 +17,13 @@ func deleteVendorViaController(t *testing.T, id int) (bool, string) {
 	t.Helper()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	// The merged handler records a manage audit log (recordManageAudit) which
+	// reads ClientIP()/operator id/role from the request context. Provide a
+	// minimal request and operator context so the audit path does not panic.
+	c.Request = httptest.NewRequest(http.MethodDelete, "/api/vendor/", nil)
+	c.Request.RemoteAddr = "127.0.0.1:1234"
+	c.Set("id", 1)
+	c.Set("role", 100)
 	c.Params = gin.Params{{Key: "id", Value: strconv.Itoa(id)}}
 	DeleteVendorMeta(c)
 	var body struct {

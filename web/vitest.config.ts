@@ -31,6 +31,14 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // CI 批量运行（143 个文件并发）在 jsdom 环境下单个重量级集成测试
+    // 会超过 vitest 默认的 5000ms 超时（如 model 抽屉类用例）；放宽到
+    // 30s 使超时反映真实故障而非 CI 负载，语义不变。
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    server: {
+      deps: { inline: [/@lobehub\//, /antd-style/] },
+    },
     setupFiles: ['./src/test-setup.ts'],
     clearMocks: true,
     restoreMocks: true,

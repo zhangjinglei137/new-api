@@ -105,6 +105,47 @@ func (mi *Model) Delete() error {
 	return DB.Delete(mi).Error
 }
 
+// MatchesName applies a metadata rule to a concrete channel model name.
+// （自上游移植，供 resolveModelMetadata / pricing 元数据解析使用）
+func (mi *Model) MatchesName(name string) bool {
+	switch mi.NameRule {
+	case NameRulePrefix:
+		return strings.HasPrefix(name, mi.ModelName)
+	case NameRuleSuffix:
+		return strings.HasSuffix(name, mi.ModelName)
+	case NameRuleContains:
+		return strings.Contains(name, mi.ModelName)
+	default:
+		return name == mi.ModelName
+	}
+}
+
+// resolveModelMetadata preserves catalog precedence: exact, prefix, suffix,
+// then contains. The first matching record within a rule type wins.
+// （自上游移植，纯函数，不依赖富元数据字段）
+func resolveModelMetadata(records []Model, names []string) map[string]*Model {
+	resolved := make(map[string]*Model)
+	for i := range records {
+		if records[i].NameRule == NameRuleExact {
+			resolved[records[i].ModelName] = &records[i]
+		}
+	}
+	for _, rule := range []int{NameRulePrefix, NameRuleSuffix, NameRuleContains} {
+		for i := range records {
+			metadata := &records[i]
+			if metadata.NameRule != rule {
+				continue
+			}
+			for _, name := range names {
+				if _, exists := resolved[name]; !exists && metadata.MatchesName(name) {
+					resolved[name] = metadata
+				}
+			}
+		}
+	}
+	return resolved
+}
+
 func GetVendorModelCounts() (map[int64]int64, error) {
 	var stats []struct {
 		VendorID int64
