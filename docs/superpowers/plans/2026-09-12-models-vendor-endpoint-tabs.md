@@ -294,22 +294,22 @@ Expected: 全部通过
 
 **Files:** 无（验证任务）
 
-- [ ] **Step 1: typecheck**
+- [x] **Step 1: typecheck**
 
 Run: `cd web && bun run typecheck`
 Expected: 无错误
 
-- [ ] **Step 2: lint**
+- [x] **Step 2: lint**
 
 Run: `cd web && bun run lint`（若全仓 lint 过慢，仅对涉及文件 `bunx oxlint web/src/features/models web/src/routes/_authenticated/models web/src/i18n`）
 Expected: 无 error
 
-- [ ] **Step 3: 生产构建**
+- [x] **Step 3: 生产构建**
 
 Run: `cd web && bun run build`
 Expected: 构建成功
 
-- [ ] **Step 4: 勾选 tasks.md 并提交**
+- [x] **Step 4: 勾选 tasks.md 并提交**
 
 在 `<classic-change-dir>/tasks.md` 勾选全部任务，然后：
 

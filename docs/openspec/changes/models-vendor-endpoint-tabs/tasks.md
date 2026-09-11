@@ -4,7 +4,7 @@
 
 - [x] 1.1 在 `section-registry.tsx` 的 `MODELS_SECTIONS` 中新增 `vendors`、`endpoints`，顺序固定为 `metadata → vendors → endpoints → deployments`；验证 `MODELS_SECTION_IDS` 输出该顺序
 - [x] 1.2 扩展 `types.ts` 的 `ModelTabCategory` 为四值联合（metadata/vendors/endpoints/deployments）；验证 typecheck 通过
-- [ ] 1.3 在 `$section.tsx` search schema 中为 vendors/endpoints 补充所需筛选参数（如 `vPage`、`vPageSize`、`vFilter`、`eFilter` 等，按实际需要）；验证 `/models/vendors`、`/models/endpoints` 路由可解析且非法 section 仍回退默认
+- [x] 1.3 在 `$section.tsx` search schema 中为 vendors/endpoints 补充所需筛选参数（如 `vPage`、`vPageSize`、`vFilter`、`eFilter` 等，按实际需要）；验证 `/models/vendors`、`/models/endpoints` 路由可解析且非法 section 仍回退默认
 
 ## 2. tab 内容组件抽取
 
@@ -26,7 +26,7 @@
 
 ## 5. 集成验证
 
-- [ ] 5.1 运行 `bun run typecheck` 且无错误
-- [ ] 5.2 运行受影响测试文件（models 相关 `__tests__`）全部通过
-- [ ] 5.3 运行涉及文件的 lint 无 error
-- [ ] 5.4 运行 `bun run build` 生产构建成功
+- [x] 5.1 运行 `bun run typecheck` 且无错误
+- [x] 5.2 运行受影响测试文件（models 相关 `__tests__`）全部通过
+- [x] 5.3 运行涉及文件的 lint 无 error
+- [x] 5.4 运行 `bun run build` 生产构建成功
