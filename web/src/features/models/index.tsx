@@ -71,7 +71,7 @@ const SECTION_META: Record<
 function ModelsContent() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { tabCategory, setTabCategory, setOpen, setCurrentVendor } = useModels()
+  const { tabCategory, setTabCategory } = useModels()
   const params = route.useParams()
   const activeSection = (params.section ??
     MODELS_DEFAULT_SECTION) as ModelsSectionId
@@ -102,18 +102,8 @@ function ModelsContent() {
   let content: ReactNode
   switch (activeSection) {
     case 'vendors':
-      actions = (
-        <Button
-          size='sm'
-          onClick={() => {
-            setCurrentVendor(null)
-            setOpen('create-vendor')
-          }}
-        >
-          <Plus className='h-4 w-4' />
-          {t('Add Vendor')}
-        </Button>
-      )
+      // VendorsTabContent 自带顶部 Add/Refresh/Search 操作行，页面级操作区留空
+      actions = null
       content = <VendorsTabContent />
       break
     case 'endpoints':

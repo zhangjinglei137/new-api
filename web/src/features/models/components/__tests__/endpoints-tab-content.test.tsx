@@ -195,7 +195,7 @@ describe('EndpointsTabContent layout contract', () => {
 })
 
 describe('EndpointsTabContent save', () => {
-  test('top toolbar Save button submits the edited rows', async () => {
+  test('top toolbar Save button submits the current rows', async () => {
     const user = userEvent.setup()
     vi.mocked(updateEndpointDefinitions).mockResolvedValue({
       success: true,

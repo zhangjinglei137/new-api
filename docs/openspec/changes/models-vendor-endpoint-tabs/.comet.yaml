@@ -8,13 +8,13 @@ subagent_dispatch: confirmed
 tdd_mode: tdd
 review_mode: standard
 isolation: worktree
-verify_mode: null
+verify_mode: full
 auto_transition: true
 base_ref: 8e0a063a7cc0fa6061746f04d3850e04fc5d0edf
 design_doc: docs/superpowers/specs/2026-09-12-models-vendor-endpoint-tabs-design.md
 plan: docs/superpowers/plans/2026-09-12-models-vendor-endpoint-tabs.md
-verify_result: pending
-verify_failures: 0
+verify_result: fail
+verify_failures: 1
 verification_report: null
 branch_status: pending
 created_at: 2026-09-11
