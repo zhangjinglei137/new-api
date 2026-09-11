@@ -10,13 +10,13 @@
 
 - [x] 2.1 将 `VendorManagementDialog` 表格主体抽为页面内嵌组件（参照历史 `VendorsTable`），支持分页/搜索/创建/编辑/删除/引用计数；验证 `/models/vendors` 渲染供应商表格且增删改查可用
 - [x] 2.2 将 `EndpointManagementDialog` 表格主体抽为页面内嵌组件，支持端点定义列表/编辑/保存；验证 `/models/endpoints` 渲染端点表格且编辑保存生效
-- [ ] 2.3 在 `index.tsx` 按 section 挂载对应内容并调整主操作区（metadata 保留现有按钮组，vendors 显示 Add Vendor，endpoints/deployments 显示对应动作）；验证四个 tab 内容切换正确
+- [x] 2.3 在 `index.tsx` 按 section 挂载对应内容并调整主操作区（metadata 保留现有按钮组，vendors 显示 Add Vendor，endpoints/deployments 显示对应动作）；验证四个 tab 内容切换正确
 - [ ] 2.4 迁移 `vendor-management-dialog.test.tsx`、`endpoint-management-dialog.test.tsx` 到新组件挂载形态并保持既有行为断言；验证相关测试通过
 
 ## 3. 菜单与常驻入口
 
-- [ ] 3.1 从 `models-primary-buttons.tsx` 更多菜单移除「Manage Vendors」「Manage Endpoints」项及对应 handler；验证菜单不再含两项
-- [ ] 3.2 在主操作区新增常驻「Sync metadata」按钮打开 sync-wizard，并移除菜单中 Sync Upstream 项；验证点击按钮打开同步向导
+- [x] 3.1 从 `models-primary-buttons.tsx` 更多菜单移除「Manage Vendors」「Manage Endpoints」项及对应 handler；验证菜单不再含两项
+- [x] 3.2 在主操作区新增常驻「Sync metadata」按钮打开 sync-wizard，并移除菜单中 Sync Upstream 项；验证点击按钮打开同步向导
 - [ ] 3.3 同步更新 `models-dialogs.tsx` 挂载（若对话框保留）与 i18n locale（en/zh/zh-TW/fr/ru/ja/vi）文案；验证 `bun run i18n:sync` 无缺失键
 
 ## 4. 同步来源顺序与默认值

@@ -132,7 +132,7 @@ Expected: PASS
 - Consumes: `VendorsTabContent`、`EndpointsTabContent`、`MODELS_SECTION_IDS`、`useModels`
 - Produces: 四 tab 页面；主操作区常驻 Sync metadata 按钮
 
-- [ ] **Step 1: index.tsx 按 section 挂载内容与操作区**
+- [x] **Step 1: index.tsx 按 section 挂载内容与操作区**
 
 将 `SECTION_META` 扩展为四 section（titleKey 用 `Models`/`Vendors`/`Endpoints`/`Deployments`）。`ModelsContent` 中：
 
@@ -161,11 +161,11 @@ switch (activeSection) {
 
 注意：`models-provider.tsx` 的 `open` state 需新增 `endpoints-save` 触发（或改用 context 传递保存函数，见 Step 3 决策），确保 `EndpointsTabContent` 能收到保存指令。
 
-- [ ] **Step 2: models-dialogs.tsx 移除两个挂载**
+- [x] **Step 2: models-dialogs.tsx 移除两个挂载**
 
 删除 `VendorManagementDialog` / `EndpointManagementDialog` 的 import 与 JSX 挂载块。
 
-- [ ] **Step 3: models-primary-buttons.tsx 移除菜单项 + 新增常驻按钮**
+- [x] **Step 3: models-primary-buttons.tsx 移除菜单项 + 新增常驻按钮**
 
 - 删除 `handleManageVendors`、`handleManageEndpoints`、`handleSync` 与对应 `DropdownMenuItem`（Sync Upstream / Manage Vendors / Manage Endpoints 三项），保留 Missing Models、Prefill Groups
 - 删除 `RefreshCw`、`Building2`、`Cable` 图标 import（不再使用）
@@ -179,15 +179,15 @@ switch (activeSection) {
 
 - 保存触发决策：为 `EndpointsTabContent` 增加对外保存能力，采用 context 通道——在 `ModelsContextType` 增加 `endpointsSaveSignal: number` 与 `triggerEndpointsSave: () => void`，`EndpointsTabContent` 用 `useEffect` 监听信号执行 `handleSave`；index.tsx 的 endpoints actions 按钮调用 `triggerEndpointsSave()`。
 
-- [ ] **Step 4: models-provider.tsx 类型清理**
+- [x] **Step 4: models-provider.tsx 类型清理**
 
 `DialogType` 移除 `'manage-vendors' | 'manage-endpoints'`；新增 `endpointsSaveSignal` state（初始 0）与 `triggerEndpointsSave`（`setEndpointsSaveSignal((s) => s + 1)`）；`syncWizardOptions` 初始值改为 `{ locale: 'zh', source: 'opencode-go' }`。
 
-- [ ] **Step 5: $section.tsx search schema 扩展**
+- [x] **Step 5: $section.tsx search schema 扩展**
 
 为 vendors 补充 `vPage`/`vPageSize`/`vFilter`（Zod：`z.number().optional().catch(1)` / `z.number().optional().catch(10)` / `z.string().optional().catch('')`）；endpoints 无需参数。若 VendorsTabContent 采用本地 state（Task 2 决策），此步仅保留 schema 空扩展说明，不引入未用参数——**最终以 Task 2 实现的 state 形态为准，二者保持一致**。
 
-- [ ] **Step 6: 验证**
+- [x] **Step 6: 验证**
 
 Run: `cd web && bun run typecheck`
 Expected: PASS
