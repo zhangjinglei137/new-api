@@ -25,5 +25,8 @@
 
 ### 验证
 - [ ] 三数据库验证：SQLite/MySQL/PostgreSQL 新鲜库 + 升级库迁移、幂等性（user.access_token_created_at 列）
-- [ ] 计费用例：`pkg/billingexpr` 测试 + `frontend_simulation.json`
+  - [x] SQLite：新鲜库 + 模拟旧 schema 升级 + 幂等 + 数据/唯一索引保留（临时测试，通过）
+  - [x] PostgreSQL：生产库（14.19）备份库 `new_api_backup_20260911_202912` 上升级迁移 + 幂等 + 数据/唯一索引保留（通过）
+  - [ ] MySQL：无可用实例（3306 不可达），验证 blocker，待提供实例后补验
+- [x] 计费用例：`pkg/billingexpr` 测试 + `frontend_simulation.json`（全套通过，含 fixed-pricing 边界/Clamp 用例）
 - [ ] 记录数据库版本、命令、结果到 handoff
