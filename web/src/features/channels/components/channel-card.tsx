@@ -74,6 +74,7 @@ function ChannelCardComponent({
   const actionsCell = renderCell('actions')
   const priorityCell = renderCell('priority')
   const weightCell = renderCell('weight')
+  const sortCell = renderCell('sort')
   const balanceCell = renderCell('balance')
   const responseCell = renderCell('response_time')
   const testCell = renderCell('test_time')
@@ -141,6 +142,8 @@ function ChannelCardComponent({
             <span className={labelClass}>{t('Weight')}</span>
             <div className='flex justify-start'>{priorityCell}</div>
             <div className='flex justify-start'>{weightCell}</div>
+            <span className={labelClass}>{t('Sort')}</span>
+            <div className='flex justify-start'>{sortCell}</div>
             <span className={cn('mt-2', labelClass)}>
               {fieldLabels.response_time}
             </span>

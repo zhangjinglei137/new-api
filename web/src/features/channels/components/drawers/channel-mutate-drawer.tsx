@@ -4354,6 +4354,30 @@ export function ChannelMutateDrawer({
                                   </FormItem>
                                 )}
                               />
+
+                              <FormField
+                                control={form.control}
+                                name='sort'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>{t('Sort')}</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type='number'
+                                        placeholder='0'
+                                        {...field}
+                                        onChange={(e) =>
+                                          field.onChange(Number(e.target.value))
+                                        }
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {t('Used to order channels in the list')}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             </div>
 
                             <FormField

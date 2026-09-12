@@ -314,6 +314,7 @@ export const DEFAULT_CHANNEL_VALUES = {
   status: CHANNEL_STATUS.ENABLED,
   priority: 0,
   weight: 0,
+  sort: 0,
   auto_ban: 1,
   remark: '',
 } as const
