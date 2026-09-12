@@ -30,6 +30,14 @@ func testChannelSortMigration(t *testing.T, db *gorm.DB) {
 			require.NoError(t, db.Table(tableName).AutoMigrate(&Channel{}))
 		}
 		assert.True(t, db.Migrator().HasColumn(tableName, "sort"))
+
+		// sort 默认值 0：插入未显式设置 Sort 的最小行，DB 默认应落 0
+		created := Channel{Key: "preserved-key"}
+		require.NoError(t, db.Table(tableName).Create(&created).Error)
+		var saved Channel
+		require.NoError(t, db.Table(tableName).Where("key = ?", created.Key).First(&saved).Error)
+		require.NotNil(t, saved.Sort)
+		assert.EqualValues(t, 0, *saved.Sort)
 	})
 
 	t.Run("legacy_database", func(t *testing.T) {
@@ -54,6 +62,14 @@ func testChannelSortMigration(t *testing.T, db *gorm.DB) {
 			require.NoError(t, db.Table(legacyTableName).AutoMigrate(&Channel{}))
 		}
 		assert.True(t, db.Migrator().HasColumn(legacyTableName, "sort"))
+
+		// 升级后 sort 默认值 0：插入未显式设置 Sort 的最小行，DB 默认应落 0
+		created := Channel{Key: "preserved-key"}
+		require.NoError(t, db.Table(legacyTableName).Create(&created).Error)
+		var saved Channel
+		require.NoError(t, db.Table(legacyTableName).Where("key = ?", created.Key).First(&saved).Error)
+		require.NotNil(t, saved.Sort)
+		assert.EqualValues(t, 0, *saved.Sort)
 	})
 }
 
