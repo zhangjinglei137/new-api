@@ -285,7 +285,7 @@ function ChannelFieldCell({
 }: {
   channelId: number
   value: number | null | undefined
-  field: 'priority' | 'weight'
+  field: 'priority' | 'weight' | 'sort'
   min: number
 }) {
   const queryClient = useQueryClient()
@@ -305,6 +305,23 @@ function ChannelFieldCell({
       onChange={fieldUpdateScheduler.schedule}
       onCommit={fieldUpdateScheduler.flush}
       min={min}
+    />
+  )
+}
+
+/**
+ * Sort cell component with inline editing
+ */
+export function SortCell({ channel }: { channel: Channel }) {
+  if (isTagAggregateRow(channel)) {
+    return null // tag 行不展示/编辑序号，tag 聚合行排序保持现状
+  }
+  return (
+    <ChannelFieldCell
+      channelId={channel.id}
+      value={channel.sort}
+      field='sort'
+      min={-999}
     />
   )
 }
@@ -1474,6 +1491,15 @@ export function useChannelsColumns(
         header: t('Priority'),
         meta: { mobileHidden: true },
         cell: ({ row }) => <PriorityCell channel={row.original} />,
+        size: 100,
+      },
+
+      // Sort column
+      {
+        accessorKey: 'sort',
+        header: t('Sort'),
+        meta: { mobileHidden: true },
+        cell: ({ row }) => <SortCell channel={row.original} />,
         size: 100,
       },
 
