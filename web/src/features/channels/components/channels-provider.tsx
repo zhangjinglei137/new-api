@@ -60,6 +60,8 @@ type ChannelsContextType = {
   setEnableTagMode: (enabled: boolean) => void
   idSort: boolean
   setIdSort: (enabled: boolean) => void
+  sortSort: boolean
+  setSortSort: (enabled: boolean) => void
   batchMode: boolean
   setBatchMode: (enabled: boolean) => void
   sensitiveVisible: boolean
@@ -89,6 +91,9 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
   const [idSort, setIdSort] = useState(() => {
     return localStorage.getItem('channels-id-sort') === 'true'
   })
+  const [sortSort, setSortSort] = useState(() => {
+    return localStorage.getItem('channels-sort-sort') === 'true'
+  })
   const [batchMode, setBatchMode] = useState(false)
   const [sensitiveVisible, setSensitiveVisible] = useState(true)
 
@@ -113,6 +118,8 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
       setEnableTagMode,
       idSort,
       setIdSort,
+      sortSort,
+      setSortSort,
       batchMode,
       setBatchMode,
       sensitiveVisible,
@@ -125,6 +132,7 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
       currentTag,
       enableTagMode,
       idSort,
+      sortSort,
       batchMode,
       sensitiveVisible,
       upstream,

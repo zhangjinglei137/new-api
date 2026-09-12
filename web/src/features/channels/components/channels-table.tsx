@@ -74,6 +74,7 @@ const CHANNELS_STATUS_FILTER_STORAGE_KEY = 'channel-status-filter'
 
 const CHANNEL_SORTABLE_COLUMNS = new Set<ChannelSortBy>([
   'id',
+  'sort',
   'name',
   'priority',
   'balance',
@@ -92,6 +93,7 @@ export function ChannelsTable() {
   const {
     enableTagMode,
     idSort,
+    sortSort,
     batchMode,
     sensitiveVisible,
     setSensitiveVisible,
@@ -238,6 +240,7 @@ export function ChannelsTable() {
           : undefined,
       tag_mode: enableTagMode,
       id_sort: idSort,
+      sort_sort: sortSort,
       ...sortParams,
       p: pagination.pageIndex + 1,
       page_size: pagination.pageSize,
@@ -262,6 +265,7 @@ export function ChannelsTable() {
                 : undefined,
             tag_mode: enableTagMode,
             id_sort: idSort,
+            sort_sort: sortSort,
             ...sortParams,
             p: pagination.pageIndex + 1,
             page_size: pagination.pageSize,
@@ -284,6 +288,7 @@ export function ChannelsTable() {
                 : undefined,
             tag_mode: enableTagMode,
             id_sort: idSort,
+            sort_sort: sortSort,
             ...sortParams,
             p: pagination.pageIndex + 1,
             page_size: pagination.pageSize,
