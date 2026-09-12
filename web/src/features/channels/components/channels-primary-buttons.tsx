@@ -75,6 +75,8 @@ export function ChannelsPrimaryButtons() {
     setEnableTagMode,
     idSort,
     setIdSort,
+    sortSort,
+    setSortSort,
     batchMode,
     setBatchMode,
     upstream,
@@ -98,6 +100,11 @@ export function ChannelsPrimaryButtons() {
   const handleIdSortToggle = (checked: boolean) => {
     localStorage.setItem('channels-id-sort', String(checked))
     setIdSort(checked)
+  }
+
+  const handleSortSortToggle = (checked: boolean) => {
+    localStorage.setItem('channels-sort-sort', String(checked))
+    setSortSort(checked)
   }
 
   const handleBatchModeToggle = (checked: boolean) => {
@@ -144,6 +151,18 @@ export function ChannelsPrimaryButtons() {
             id='id-sort'
             checked={idSort}
             onCheckedChange={handleIdSortToggle}
+          />
+        </div>
+
+        <div className='hidden items-center gap-2 rounded-md border px-3 py-1.5 sm:flex'>
+          <SortAsc className='text-muted-foreground h-4 w-4' />
+          <Label htmlFor='sort-sort' className='cursor-pointer text-sm'>
+            {t('Sort by Sort')}
+          </Label>
+          <Switch
+            id='sort-sort'
+            checked={sortSort}
+            onCheckedChange={handleSortSortToggle}
           />
         </div>
 
@@ -203,6 +222,15 @@ export function ChannelsPrimaryButtons() {
             >
               <SortAsc className='mr-2 h-4 w-4' />
               {t('Sort by ID')}
+            </DropdownMenuCheckboxItem>
+
+            <DropdownMenuCheckboxItem
+              className='sm:hidden'
+              checked={sortSort}
+              onCheckedChange={handleSortSortToggle}
+            >
+              <SortAsc className='mr-2 h-4 w-4' />
+              {t('Sort by Sort')}
             </DropdownMenuCheckboxItem>
 
             <DropdownMenuSeparator className='sm:hidden' />
