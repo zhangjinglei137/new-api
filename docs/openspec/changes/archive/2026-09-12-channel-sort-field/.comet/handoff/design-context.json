@@ -1,0 +1,14 @@
+{
+  "change": "channel-sort-field",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "d41deb3be9ac01e6ecf1d9e67dc2518297f84ddfa8503706628c437c418fe549",
+  "files": [
+    { "path": "docs/openspec/changes/channel-sort-field/proposal.md", "sha256": "84914c2c889caf6f904d5e771cc362fe2aedaa6208958b36e2a910d3ecc1cb69" },
+    { "path": "docs/openspec/changes/channel-sort-field/design.md", "sha256": "dabf8f151fb807d1b5539cb06d4057dfa3f01e94997e5d41a0465033d9c7c355" },
+    { "path": "docs/openspec/changes/channel-sort-field/tasks.md", "sha256": "c4f908652b69e80492f780049662b6c4e941b08b66c69d77ea66e53deba837fb" },
+    { "path": "docs/openspec/changes/channel-sort-field/specs/channels/spec.md", "sha256": "825bcc0da34eeca361550100371b01d110a6d14a6c2e03c64c660cda6a1a95d9" }
+  ]
+}

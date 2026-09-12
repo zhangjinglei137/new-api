@@ -2,6 +2,7 @@
 change: channel-sort-field
 design-doc: docs/superpowers/specs/2026-09-12-channel-sort-field-design.md
 base-ref: 74d703b269e1c5a1b3f789f9b9d4e2556b25f091
+archived-with: 2026-09-12-channel-sort-field
 ---
 
 # 渠道序号字段与排序 实施计划
