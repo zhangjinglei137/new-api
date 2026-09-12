@@ -174,13 +174,14 @@ func TestOpenCodeGoVendorForModelAndProvider(t *testing.T) {
 
 // setupSyncUpstreamServer 将 SYNC_UPSTREAM_BASE 指向本地 httptest server，
 // 按路径返回模型/供应商 envelope JSON，避免测试访问真实上游。
+// normalizeLocale 会把空 locale 归一到 "zh"，故响应 /api/i18n/zh/newapi/ 路径。
 func setupSyncUpstreamServer(t *testing.T, modelsJSON, vendorsJSON string) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/newapi/models.json":
+		case "/api/i18n/zh/newapi/models.json":
 			_, _ = w.Write([]byte(modelsJSON))
-		case "/api/newapi/vendors.json":
+		case "/api/i18n/zh/newapi/vendors.json":
 			_, _ = w.Write([]byte(vendorsJSON))
 		default:
 			http.NotFound(w, r)
@@ -199,37 +200,115 @@ func setupSyncUpstreamServer(t *testing.T, modelsJSON, vendorsJSON string) {
 	})
 }
 
-type syncUpstreamResponse struct {
+type syncPreviewResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
-		CreatedModels int `json:"created_models"`
-		UpdatedModels int `json:"updated_models"`
-		FilledModels  int `json:"filled_models"`
+		Candidates []metadataSyncCandidate `json:"candidates"`
+		Source     metadataSyncSource      `json:"source"`
 	} `json:"data"`
 }
 
-func runSyncUpstreamModels(t *testing.T, body string) syncUpstreamResponse {
+func runSyncUpstreamPreview(t *testing.T, query string) syncPreviewResponse {
 	t.Helper()
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/model/sync", strings.NewReader(body))
-	ctx.Request.Header.Set("Content-Type", "application/json")
-	SyncUpstreamModels(ctx)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/models/sync_upstream/preview?"+query, nil)
+	SyncUpstreamPreview(ctx)
 	require.Equal(t, http.StatusOK, recorder.Code)
-	var resp syncUpstreamResponse
+	var resp syncPreviewResponse
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.True(t, resp.Success)
 	return resp
 }
 
-func TestSyncUpstreamModelsCreatesModelWithSyncOfficial(t *testing.T) {
+type syncApplyResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		CreatedModels  []string                          `json:"created_models"`
+		UpdatedModels  []model.MetadataSyncSelection     `json:"updated_models"`
+		CreatedVendors []string                          `json:"created_vendors"`
+	} `json:"data"`
+}
+
+func runSyncUpstreamApply(t *testing.T, body string) (*httptest.ResponseRecorder, syncApplyResponse) {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/models/sync_upstream", strings.NewReader(body))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	SyncUpstreamModels(ctx)
+	var resp syncApplyResponse
+	if recorder.Code == http.StatusOK {
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &resp))
+	}
+	return recorder, resp
+}
+
+// findCandidate 返回指定模型的预览候选。
+func findCandidate(t *testing.T, resp syncPreviewResponse, modelName string) metadataSyncCandidate {
+	t.Helper()
+	for _, candidate := range resp.Data.Candidates {
+		if candidate.ModelName == modelName {
+			return candidate
+		}
+	}
+	require.FailNowf(t, "candidate not found", "model %s not in preview", modelName)
+	return metadataSyncCandidate{}
+}
+
+func TestSyncPreviewExposesCandidatesAndVersion(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
-	// 先建渠道再建能力：指向不存在渠道的能力是孤儿，会被 GetMissingModels
-	// 排除（缺失模型误报修复），不会进入缺失创建路径
+	// 渠道引用本地元数据不存在的模型 → GetMissingModels 返回它（site 范围）
 	require.NoError(t, db.Create(&model.Channel{Name: "zz-sync-ch", Type: 1, Status: common.ChannelStatusEnabled}).Error)
 	var ch model.Channel
 	require.NoError(t, db.Where("name = ?", "zz-sync-ch").First(&ch).Error)
-	// abilities 引用一个本地元数据表中不存在的模型 → 进入缺失创建路径
+	require.NoError(t, db.Create(&model.Ability{
+		Group:     "default",
+		Model:     "zz-sync-create-model",
+		ChannelId: ch.Id,
+		Enabled:   true,
+	}).Error)
+	// 已有模型（上游有差异 → update）
+	require.NoError(t, db.Create(&model.Model{
+		ModelName:    "zz-sync-update-model",
+		Description:  "old desc",
+		Status:       1,
+		SyncOfficial: 1,
+	}).Error)
+	// 本地存在但上游没有 → missing_upstream
+	require.NoError(t, db.Create(&model.Model{
+		ModelName:    "zz-sync-local-only",
+		Description:  "local only",
+		Status:       1,
+		SyncOfficial: 1,
+	}).Error)
+
+	modelsJSON := `{"success":true,"message":"","data":[
+		{"model_name":"zz-sync-create-model","description":"upstream desc","status":1,"vendor_name":"OpenAI"},
+		{"model_name":"zz-sync-update-model","description":"new desc","status":1,"vendor_name":"OpenAI"}
+	]}`
+	vendorsJSON := `{"success":true,"message":"","data":[{"name":"OpenAI","status":1}]}`
+	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
+
+	resp := runSyncUpstreamPreview(t, "locale=zh&source=official")
+
+	require.NotEmpty(t, resp.Data.Source.Version, "preview must return a version fingerprint")
+	require.NotEmpty(t, resp.Data.Source.ModelsURL)
+	create := findCandidate(t, resp, "zz-sync-create-model")
+	assert.Equal(t, "create", create.Kind)
+	assert.Equal(t, "site", create.Scope)
+	assert.NotEmpty(t, create.RecordVersion)
+	update := findCandidate(t, resp, "zz-sync-update-model")
+	assert.Equal(t, "update", update.Kind)
+	missingUp := findCandidate(t, resp, "zz-sync-local-only")
+	assert.Equal(t, "missing_upstream", missingUp.Kind)
+}
+
+func TestSyncUpstreamApplyCreatesMissingModelWithRichFields(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.Channel{Name: "zz-sync-ch", Type: 1, Status: common.ChannelStatusEnabled}).Error)
+	var ch model.Channel
+	require.NoError(t, db.Where("name = ?", "zz-sync-ch").First(&ch).Error)
 	require.NoError(t, db.Create(&model.Ability{
 		Group:     "default",
 		Model:     "zz-sync-create-model",
@@ -241,26 +320,81 @@ func TestSyncUpstreamModelsCreatesModelWithSyncOfficial(t *testing.T) {
 	vendorsJSON := `{"success":true,"message":"","data":[{"name":"OpenAI","status":1}]}`
 	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
 
-	resp := runSyncUpstreamModels(t, "")
+	preview := runSyncUpstreamPreview(t, "locale=zh&source=official")
+	create := findCandidate(t, preview, "zz-sync-create-model")
+	body, err := common.Marshal(map[string]any{
+		"locale":        "zh",
+		"source":        "official",
+		"source_version": preview.Data.Source.Version,
+		"selections": []model.MetadataSyncSelection{{
+			ModelName:     create.ModelName,
+			RecordVersion: create.RecordVersion,
+			Create:        true,
+			Fields:        []string{},
+		}},
+	})
+	require.NoError(t, err)
+	_, resp := runSyncUpstreamApply(t, string(body))
 
-	assert.Equal(t, 1, resp.Data.CreatedModels)
-
+	assert.Equal(t, []string{"zz-sync-create-model"}, resp.Data.CreatedModels)
 	var created model.Model
 	require.NoError(t, db.Where("model_name = ?", "zz-sync-create-model").First(&created).Error)
 	assert.Equal(t, 1, created.SyncOfficial)
 	assert.Equal(t, "upstream desc", created.Description)
 }
 
-func TestSyncUpstreamModelsOverwriteSkipsSyncDisabledAndKeepsOfficial(t *testing.T) {
+func TestSyncUpstreamApplyUpdatesSelectedFields(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.Model{
-		ModelName:    "zz-sync-overwrite-model",
+		ModelName:    "zz-sync-update-model",
 		Description:  "old desc",
 		Status:       1,
 		SyncOfficial: 1,
 	}).Error)
-	// 注意: gorm:"default:1" 会把 Create 的零值 sync_official 替换为 1，
-	// 因此 sync_official = 0 的模型必须先 Create 再显式 Update。
+
+	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-update-model","description":"new desc","status":1,"vendor_name":"OpenAI"}]}`
+	vendorsJSON := `{"success":true,"message":"","data":[{"name":"OpenAI","status":1}]}`
+	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
+
+	preview := runSyncUpstreamPreview(t, "locale=zh&source=official")
+	update := findCandidate(t, preview, "zz-sync-update-model")
+	require.Equal(t, "update", update.Kind)
+
+	body, err := common.Marshal(map[string]any{
+		"locale":         "zh",
+		"source":         "official",
+		"source_version": preview.Data.Source.Version,
+		"selections": []model.MetadataSyncSelection{{
+			ModelName:     update.ModelName,
+			RecordVersion: update.RecordVersion,
+			Create:        false,
+			Fields:        []string{"description"},
+		}},
+	})
+	require.NoError(t, err)
+	_, resp := runSyncUpstreamApply(t, string(body))
+
+	require.Len(t, resp.Data.UpdatedModels, 1)
+	assert.Equal(t, "zz-sync-update-model", resp.Data.UpdatedModels[0].ModelName)
+	var stored model.Model
+	require.NoError(t, db.Where("model_name = ?", "zz-sync-update-model").First(&stored).Error)
+	assert.Equal(t, "new desc", stored.Description)
+	assert.Equal(t, 1, stored.SyncOfficial)
+}
+
+func TestSyncUpstreamApplyRejectsVersionMismatch(t *testing.T) {
+	setupModelListControllerTestDB(t)
+	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-mismatch","description":"d","status":1,"vendor_name":"OpenAI"}]}`
+	vendorsJSON := `{"success":true,"message":"","data":[{"name":"OpenAI","status":1}]}`
+	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
+
+	body := `{"locale":"zh","source":"official","source_version":"stale-version","selections":[{"model_name":"zz-sync-mismatch","record_version":"x","create":true,"fields":[]}]}`
+	recorder, _ := runSyncUpstreamApply(t, body)
+	assert.Equal(t, http.StatusConflict, recorder.Code)
+}
+
+func TestSyncUpstreamApplyRejectsSyncDisabledModel(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
 	skipModel := &model.Model{
 		ModelName:   "zz-sync-skip-model",
 		Description: "keep desc",
@@ -269,136 +403,36 @@ func TestSyncUpstreamModelsOverwriteSkipsSyncDisabledAndKeepsOfficial(t *testing
 	require.NoError(t, db.Create(skipModel).Error)
 	require.NoError(t, db.Model(&model.Model{}).Where("id = ?", skipModel.Id).Update("sync_official", 0).Error)
 
-	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-overwrite-model","description":"new desc","status":1,"vendor_name":"OpenAI"},{"model_name":"zz-sync-skip-model","description":"should not apply","status":1,"vendor_name":"OpenAI"}]}`
+	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-skip-model","description":"should not apply","status":1,"vendor_name":"OpenAI"}]}`
 	vendorsJSON := `{"success":true,"message":"","data":[{"name":"OpenAI","status":1}]}`
 	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
 
-	body := `{"overwrite":[{"model_name":"zz-sync-overwrite-model","fields":["description"]},{"model_name":"zz-sync-skip-model","fields":["description"]}]}`
-	resp := runSyncUpstreamModels(t, body)
+	preview := runSyncUpstreamPreview(t, "locale=zh&source=official")
+	blocked := findCandidate(t, preview, "zz-sync-skip-model")
+	assert.Equal(t, "blocked", blocked.Kind)
 
-	// sync_official = 0 的模型被跳过，仅 1 个模型被更新
-	assert.Equal(t, 1, resp.Data.UpdatedModels)
-
-	var overwritten model.Model
-	require.NoError(t, db.Where("model_name = ?", "zz-sync-overwrite-model").First(&overwritten).Error)
-	assert.Equal(t, "new desc", overwritten.Description)
-	assert.Equal(t, 1, overwritten.SyncOfficial)
-
-	var skipped model.Model
-	require.NoError(t, db.Where("model_name = ?", "zz-sync-skip-model").First(&skipped).Error)
-	assert.Equal(t, "keep desc", skipped.Description)
-	assert.Equal(t, 0, skipped.SyncOfficial)
-}
-
-func TestSyncUpstreamModelsOverwriteSkipsIdenticalEndpoints(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-	// 本地端点为前端 UI 保存的带缩进、键序不同的 JSON，与上游紧凑 JSON 语义相同
-	require.NoError(t, db.Create(&model.Model{
-		ModelName: "zz-sync-endpoint-model",
-		Endpoints: "{\n  \"openai\": {\n    \"method\": \"POST\",\n    \"path\": \"/v1/chat/completions\"\n  }\n}",
-		Status:    1,
-		SyncOfficial: 1,
-	}).Error)
-
-	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-sync-endpoint-model","status":1,"endpoints":{"openai":{"path":"/v1/chat/completions","method":"POST"}}}]}`
-	vendorsJSON := `{"success":true,"message":"","data":[]}`
-	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
-
-	body := `{"overwrite":[{"model_name":"zz-sync-endpoint-model","fields":["endpoints"]}]}`
-	resp := runSyncUpstreamModels(t, body)
-
-	// 语义相等时不写库、不计入更新
-	assert.Equal(t, 0, resp.Data.UpdatedModels)
+	body, err := common.Marshal(map[string]any{
+		"locale":         "zh",
+		"source":         "official",
+		"source_version": preview.Data.Source.Version,
+		"selections": []model.MetadataSyncSelection{{
+			ModelName:     blocked.ModelName,
+			RecordVersion: blocked.RecordVersion,
+			Create:        false,
+			Fields:        []string{"description"},
+		}},
+	})
+	require.NoError(t, err)
+	recorder, _ := runSyncUpstreamApply(t, string(body))
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	var stored model.Model
-	require.NoError(t, db.Where("model_name = ?", "zz-sync-endpoint-model").First(&stored).Error)
-	assert.Equal(t, "{\n  \"openai\": {\n    \"method\": \"POST\",\n    \"path\": \"/v1/chat/completions\"\n  }\n}", stored.Endpoints)
+	require.NoError(t, db.Where("model_name = ?", "zz-sync-skip-model").First(&stored).Error)
+	assert.Equal(t, "keep desc", stored.Description)
 }
 
-// TestSyncUpstreamModelsRemapsFallbackVendor 验证存量误映射修复：模型当前归属
-// 兜底供应商 "OpenCode Go"，上游按新判定顺序推导出真实供应商 → vendor_id 被
-// 重映射到真实供应商（复用 DB 已存在的同名供应商）。
-func TestSyncUpstreamModelsRemapsFallbackVendor(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-
-	fallback := &model.Vendor{Name: "OpenCode Go"}
-	require.NoError(t, db.Create(fallback).Error)
-	anthropic := &model.Vendor{Name: "Anthropic"}
-	require.NoError(t, db.Create(anthropic).Error)
-
-	require.NoError(t, db.Create(&model.Model{
-		ModelName: "zz-remap-model",
-		VendorID:  fallback.Id,
-		Status:    1,
-	}).Error)
-
-	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-remap-model","description":"","status":1,"vendor_name":"Anthropic","provider_npm":"@ai-sdk/anthropic"}]}`
-	vendorsJSON := `{"success":true,"message":"","data":[{"name":"Anthropic","status":1}]}`
-	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
-
-	// 触发同步（overwrite 非空 → 拉取上游并走 step 4 补齐/重映射路径）
-	body := `{"overwrite":[{"model_name":"zz-remap-model","fields":["description"]}]}`
-	resp := runSyncUpstreamModels(t, body)
-
-	assert.Equal(t, 1, resp.Data.FilledModels, "vendor remap should be counted as filled")
-
-	var stored model.Model
-	require.NoError(t, db.Where("model_name = ?", "zz-remap-model").First(&stored).Error)
-	assert.Equal(t, anthropic.Id, stored.VendorID, "vendor_id should be remapped from fallback to real vendor")
-}
-
-// TestSyncUpstreamModelsKeepsFallbackWhenNoRealVendorDerived 验证无法推导真实
-// 供应商时保持兜底，不做重映射。
-func TestSyncUpstreamModelsKeepsFallbackWhenNoRealVendorDerived(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-
-	fallback := &model.Vendor{Name: "OpenCode Go"}
-	require.NoError(t, db.Create(fallback).Error)
-
-	require.NoError(t, db.Create(&model.Model{
-		ModelName: "zz-noderive-model",
-		VendorID:  fallback.Id,
-		Status:    1,
-	}).Error)
-
-	// provider_npm 为空且模型 ID 无匹配正则 → 上游 vendor_name 仍为兜底，不重映射
-	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-noderive-model","description":"","status":1,"vendor_name":"OpenCode Go"}]}`
-	vendorsJSON := `{"success":true,"message":"","data":[]}`
-	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
-
-	body := `{"overwrite":[{"model_name":"zz-noderive-model","fields":["description"]}]}`
-	runSyncUpstreamModels(t, body)
-
-	var stored model.Model
-	require.NoError(t, db.Where("model_name = ?", "zz-noderive-model").First(&stored).Error)
-	assert.Equal(t, fallback.Id, stored.VendorID, "vendor_id should stay on fallback when no real vendor is derivable")
-}
-
-// TestSyncUpstreamModelsDoesNotRemapUserSetVendor 验证非兜底供应商的模型不受
-// 重映射影响（用户手动指定过的供应商不动）。
-func TestSyncUpstreamModelsDoesNotRemapUserSetVendor(t *testing.T) {
-	db := setupModelListControllerTestDB(t)
-
-	fallback := &model.Vendor{Name: "OpenCode Go"}
-	require.NoError(t, db.Create(fallback).Error)
-	openAI := &model.Vendor{Name: "OpenAI"}
-	require.NoError(t, db.Create(openAI).Error)
-
-	// 模型已归属 OpenAI（非兜底），即便上游可推导出 Anthropic 也不改
-	require.NoError(t, db.Create(&model.Model{
-		ModelName: "zz-user-set-vendor",
-		VendorID:  openAI.Id,
-		Status:    1,
-	}).Error)
-
-	modelsJSON := `{"success":true,"message":"","data":[{"model_name":"zz-user-set-vendor","description":"","status":1,"vendor_name":"Anthropic","provider_npm":"@ai-sdk/anthropic"}]}`
-	vendorsJSON := `{"success":true,"message":"","data":[]}`
-	setupSyncUpstreamServer(t, modelsJSON, vendorsJSON)
-
-	body := `{"overwrite":[{"model_name":"zz-user-set-vendor","fields":["description"]}]}`
-	runSyncUpstreamModels(t, body)
-
-	var stored model.Model
-	require.NoError(t, db.Where("model_name = ?", "zz-user-set-vendor").First(&stored).Error)
-	assert.Equal(t, openAI.Id, stored.VendorID, "non-fallback vendor must not be overwritten")
+func TestSyncUpstreamApplyRequiresSelectionsAndVersion(t *testing.T) {
+	setupModelListControllerTestDB(t)
+	recorder, _ := runSyncUpstreamApply(t, `{}`)
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 }

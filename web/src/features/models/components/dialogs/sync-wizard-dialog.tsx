@@ -123,6 +123,7 @@ export function SyncWizardDialog(props: {
       if (!preview) throw new Error(t('Preview metadata first'))
       const response = await syncUpstream({
         locale: preview.source.locale,
+        source,
         source_version: preview.source.version,
         selections,
       })

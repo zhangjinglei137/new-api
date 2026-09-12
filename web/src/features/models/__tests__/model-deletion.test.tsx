@@ -20,6 +20,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
@@ -161,6 +162,22 @@ describe('model deletion', () => {
       data: { success: true, data: { deleted_count: 1, updated_channels: 2 } },
     })
     await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce())
+  })
+
+  it('tolerates a null data payload from the single-delete endpoint', async () => {
+    const remove = vi.spyOn(api, 'delete').mockResolvedValue({
+      data: { success: true, data: null },
+    })
+    const successToast = vi.spyOn(toast, 'success')
+    const { onSuccess } = mount()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce())
+    expect(successToast).toHaveBeenCalledOnce()
+    expect(remove).toHaveBeenCalledWith('/api/models/7', {
+      params: { remove_from_channels: false, remove_pricing: false },
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 })
 

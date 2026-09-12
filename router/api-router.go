@@ -399,6 +399,7 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.GET("/:id", controller.GetModelMeta)
 			modelsRoute.POST("/", controller.CreateModelMeta)
 			modelsRoute.PUT("/", controller.UpdateModelMeta)
+			modelsRoute.POST("/delete", controller.BatchDeleteModels)
 			modelsRoute.DELETE("/:id", controller.DeleteModelMeta)
 		}
 

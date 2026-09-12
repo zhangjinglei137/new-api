@@ -238,6 +238,7 @@ export type MetadataSyncSelection = {
 }
 export type MetadataSyncRequest = {
   locale: SyncLocale
+  source: SyncSource
   source_version: string
   selections: MetadataSyncSelection[]
 }

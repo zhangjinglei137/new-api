@@ -59,6 +59,9 @@ type MetadataSyncSelection struct {
 type MetadataSyncUpdate struct {
 	MetadataSyncSelection
 	Values MetadataValues
+	// RichFields 携带 opencode-go 来源的富元数据（display_name/family/能力等），
+	// 仅用于 create 时一并写入；上游七字段契约保持不变。
+	RichFields map[string]any
 }
 
 type MetadataSyncResult struct {
@@ -257,6 +260,11 @@ func ApplyMetadataSync(updates []MetadataSyncUpdate, upstreamVendors map[string]
 				fields["model_name"] = update.ModelName
 				fields["sync_official"] = 1
 				fields["created_time"] = common.GetTimestamp()
+				if len(update.RichFields) > 0 {
+					for key, value := range update.RichFields {
+						fields[key] = value
+					}
+				}
 				if err := tx.Model(&Model{}).Create(fields).Error; err != nil {
 					return err
 				}

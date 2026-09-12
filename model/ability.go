@@ -258,6 +258,18 @@ func (channel *Channel) DeleteAbilities() error {
 	return DB.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
 }
 
+// DeleteAbilitiesByModel 删除指定模型在所有渠道上的能力，返回受影响的去重渠道数。
+func DeleteAbilitiesByModel(modelName string) (int64, error) {
+	var count int64
+	if err := DB.Model(&Ability{}).Where("model = ?", modelName).Distinct("channel_id").Count(&count).Error; err != nil {
+		return 0, err
+	}
+	if err := DB.Where("model = ?", modelName).Delete(&Ability{}).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // UpdateAbilities updates abilities of this channel.
 // Make sure the channel is completed before calling this function.
 func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {

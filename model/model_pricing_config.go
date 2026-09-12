@@ -306,6 +306,16 @@ func UpdateModelPricing(changes []ModelPricingChange) error {
 	})
 }
 
+// DeleteModelPricingConfig 删除指定模型的全部自定义价格配置，恢复内置定价。
+func DeleteModelPricingConfig(modelName string) error {
+	return mutateModelPricingOptions(func(_ *gorm.DB, values map[string]map[string]any) error {
+		for _, key := range modelPricingOptionKeys {
+			delete(values[key], modelName)
+		}
+		return nil
+	})
+}
+
 // UpdateModelPricingOptions keeps legacy single-option callers on the same
 // locking, validation and transaction path as the model-level API.
 func UpdateModelPricingOptions(updates map[string]string) error {

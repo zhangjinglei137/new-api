@@ -251,12 +251,88 @@ func DeleteModelMeta(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	removeFromChannels, _ := strconv.ParseBool(c.Query("remove_from_channels"))
+	removePricing, _ := strconv.ParseBool(c.Query("remove_pricing"))
+
+	// 先取模型名，供按模型删除 abilities / 价格配置使用
+	var m model.Model
+	if err := model.DB.First(&m, id).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	if err := model.DB.Delete(&model.Model{}, id).Error; err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	var updatedChannels int64
+	if removeFromChannels {
+		updatedChannels, err = model.DeleteAbilitiesByModel(m.ModelName)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
+	if removePricing {
+		if err := model.DeleteModelPricingConfig(m.ModelName); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	model.RefreshPricing()
-	common.ApiSuccess(c, nil)
+	common.ApiSuccess(c, gin.H{"deleted_count": 1, "updated_channels": updatedChannels})
+}
+
+// BatchDeleteModels 批量删除模型
+func BatchDeleteModels(c *gin.Context) {
+	var req struct {
+		ModelIDs           []int `json:"model_ids"`
+		RemoveFromChannels bool  `json:"remove_from_channels"`
+		RemovePricing      bool  `json:"remove_pricing"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(req.ModelIDs) == 0 {
+		common.ApiErrorMsg(c, "model_ids 不能为空")
+		return
+	}
+	for _, id := range req.ModelIDs {
+		if id <= 0 {
+			common.ApiErrorMsg(c, "model_ids 包含非法 id")
+			return
+		}
+	}
+	deletedCount := 0
+	var updatedChannels int64
+	for _, id := range req.ModelIDs {
+		var m model.Model
+		if err := model.DB.First(&m, id).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if err := model.DB.Delete(&model.Model{}, id).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		deletedCount++
+		if req.RemoveFromChannels {
+			count, err := model.DeleteAbilitiesByModel(m.ModelName)
+			if err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			updatedChannels += count
+		}
+		if req.RemovePricing {
+			if err := model.DeleteModelPricingConfig(m.ModelName); err != nil {
+				common.ApiError(c, err)
+				return
+			}
+		}
+	}
+	model.RefreshPricing()
+	common.ApiSuccess(c, gin.H{"deleted_count": deletedCount, "updated_channels": updatedChannels})
 }
 
 // enrichModels 批量填充附加信息：端点、渠道、分组、计费类型，避免 N+1 查询

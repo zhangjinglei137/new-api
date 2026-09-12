@@ -133,6 +133,7 @@ describe('metadata sync preview', () => {
     await screen.findByText('Metadata sync completed')
     expect(post).toHaveBeenCalledWith('/api/models/sync_upstream', {
       locale: 'en',
+      source: 'opencode-go',
       source_version: 'source-v1',
       selections: [
         {
@@ -260,6 +261,7 @@ describe('metadata sync preview', () => {
     await screen.findByText('Metadata sync completed')
     expect(post).toHaveBeenCalledWith('/api/models/sync_upstream', {
       locale: 'en',
+      source: 'opencode-go',
       source_version: 'source-v1',
       selections: syncable.map((item) => ({
         model_name: item.model_name,
