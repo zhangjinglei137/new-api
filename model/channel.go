@@ -88,7 +88,7 @@ var channelSortColumns = map[string]string{
 	"sort":          "sort",
 }
 
-func NewChannelSortOptions(sortBy string, sortOrder string, idSort bool, sortSort ...bool) ChannelSortOptions {
+func NewChannelSortOptions(sortBy string, sortOrder string, idSort bool, sortSort bool) ChannelSortOptions {
 	normalizedSortBy := strings.ToLower(strings.TrimSpace(sortBy))
 	normalizedSortOrder := strings.ToLower(strings.TrimSpace(sortOrder))
 	if _, ok := channelSortColumns[normalizedSortBy]; !ok {
@@ -98,15 +98,11 @@ func NewChannelSortOptions(sortBy string, sortOrder string, idSort bool, sortSor
 		normalizedSortOrder = "desc"
 	}
 
-	sortSortFlag := false
-	if len(sortSort) > 0 {
-		sortSortFlag = sortSort[0]
-	}
 	return ChannelSortOptions{
 		SortBy:    normalizedSortBy,
 		SortOrder: normalizedSortOrder,
 		IDSort:    idSort,
-		SortSort:  sortSortFlag,
+		SortSort:  sortSort,
 	}
 }
 
