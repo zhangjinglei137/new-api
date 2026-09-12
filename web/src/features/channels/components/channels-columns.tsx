@@ -1485,21 +1485,21 @@ export function useChannelsColumns(
         enableSorting: false,
       },
 
-      // Priority column
-      {
-        accessorKey: 'priority',
-        header: t('Priority'),
-        meta: { mobileHidden: true },
-        cell: ({ row }) => <PriorityCell channel={row.original} />,
-        size: 100,
-      },
-
       // Sort column
       {
         accessorKey: 'sort',
         header: t('Sort Number'),
         meta: { mobileHidden: true },
         cell: ({ row }) => <SortCell channel={row.original} />,
+        size: 100,
+      },
+
+      // Priority column
+      {
+        accessorKey: 'priority',
+        header: t('Priority'),
+        meta: { mobileHidden: true },
+        cell: ({ row }) => <PriorityCell channel={row.original} />,
         size: 100,
       },
 

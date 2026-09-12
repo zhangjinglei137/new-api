@@ -92,7 +92,7 @@ describe('SortCell', () => {
 })
 
 describe('sort column definition', () => {
-  test('places the sort column right after the priority column', () => {
+  test('places the sort column right before the priority column', () => {
     const getColumns = collectColumns()
     const columns = getColumns()
 
@@ -103,8 +103,8 @@ describe('sort column definition', () => {
       (column) => 'accessorKey' in column && column.accessorKey === 'sort'
     )
 
-    expect(priorityIndex).toBeGreaterThanOrEqual(0)
-    expect(sortIndex).toBe(priorityIndex + 1)
+    expect(sortIndex).toBeGreaterThanOrEqual(0)
+    expect(priorityIndex).toBe(sortIndex + 1)
   })
 
   test('configures sortable header, mobile hidden and size', () => {
