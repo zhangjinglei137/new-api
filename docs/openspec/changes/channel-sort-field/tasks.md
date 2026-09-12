@@ -15,7 +15,7 @@
 ## 3. 前端 UI：序号列、表单与开关
 
 - [x] 3.1 在 `web/src/features/channels/components/channels-columns.tsx` 的 `PriorityCell` 附近新增 `sort` 列（`header: t('Sort')`，单元格复用内联编辑模式，`meta: { mobileHidden: true }`），并确认 `ChannelFieldCell` 的 `field` 类型或调用能覆盖 `'sort'`；运行 `bun run typecheck` 与 lint 验证
-- [ ] 3.2 在 `web/src/features/channels/components/channels-primary-buttons.tsx` 桌面工具栏与移动端下拉菜单中加入「使用序号排序」开关（复用 `SortAsc` 图标与 `Switch`/`DropdownMenuCheckboxItem`），绑定 `sortSort` / `setSortSort` 并持久化 localStorage；运行 lint 与既有渠道组件测试验证
+- [x] 3.2 在 `web/src/features/channels/components/channels-primary-buttons.tsx` 桌面工具栏与移动端下拉菜单中加入「使用序号排序」开关（复用 `SortAsc` 图标与 `Switch`/`DropdownMenuCheckboxItem`），绑定 `sortSort` / `setSortSort` 并持久化 localStorage；运行 lint 与既有渠道组件测试验证
 - [ ] 3.3 在 `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`（及相应的新增/编辑表单 schema）中加入「序号」（sort）输入字段，支持整数、默认 0；校验提交时携带 `sort` 字段；运行 `bun run typecheck` 验证
 
 ## 4. 国际化

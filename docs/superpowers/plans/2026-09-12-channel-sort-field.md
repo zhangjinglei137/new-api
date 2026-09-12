@@ -429,6 +429,8 @@ git commit -m "feat(channels): 新增序号列并支持内联编辑"
 
 ### Task 7: 使用序号排序开关
 
+- [x] Task 7: 使用序号排序开关
+
 **Files:**
 - Modify: `web/src/features/channels/components/channels-primary-buttons.tsx`
 - Test: `web/src/features/channels/components/__tests__/sort-toggle.test.tsx`（新建）
@@ -437,7 +439,7 @@ git commit -m "feat(channels): 新增序号列并支持内联编辑"
 - Consumes: context `sortSort` / `setSortSort`
 - Produces: 桌面 `Switch` + 移动端 `DropdownMenuCheckboxItem`「使用序号排序」，持久化 `channels-sort-sort`
 
-- [ ] **Step 1: 实现开关**
+- [x] **Step 1: 实现开关**
 
 `channels-primary-buttons.tsx`（仿 `handleIdSortToggle` / id-sort 开关）：
 
@@ -450,16 +452,16 @@ const handleSortSortToggle = (checked: boolean) => {
 
 桌面在「使用ID排序」开关块后复制一块（`SortAsc` 图标、`htmlFor='sort-sort'`、`t('Sort by Sort')`）；移动端下拉菜单同理加 `DropdownMenuCheckboxItem`。
 
-- [ ] **Step 2: 写前端测试**
+- [x] **Step 2: 写前端测试**
 
 `web/src/features/channels/components/__tests__/sort-toggle.test.tsx`：渲染 `ChannelsPrimaryButtons`（包 Provider），点击开关断言 `localStorage` 写入 `channels-sort-sort` 且 `sortSort` 状态翻转。
 
-- [ ] **Step 3: 验证**
+- [x] **Step 3: 验证**
 
 Run: `bun run typecheck && bun run lint && bun run test sort-toggle`
 Expected: 全部通过
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add web/src/features/channels/components/channels-primary-buttons.tsx web/src/features/channels/components/__tests__/sort-toggle.test.tsx
