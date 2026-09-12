@@ -216,3 +216,9 @@ func TestChannelSatisfiesFilters(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, dto.FilterRequestPath, kind)
 }
+
+func TestChannelHasSortField(t *testing.T) {
+	require := require.New(t)
+	ch := &Channel{}
+	require.Nil(ch.Sort) // 指针字段零值为 nil；新建渠道默认 0 由请求归一化处理
+}
