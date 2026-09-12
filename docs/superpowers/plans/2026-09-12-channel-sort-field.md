@@ -470,6 +470,8 @@ git commit -m "feat(channels): 新增使用序号排序开关"
 
 ### Task 8: 渠道表单与卡片视图
 
+- [x] Task 8: 渠道表单与卡片视图
+
 **Files:**
 - Modify: `web/src/features/channels/lib/channel-form.ts`（schema + 默认值 + 提交映射）、`web/src/features/channels/lib/channel-form-errors.ts`、`web/src/features/channels/constants.ts`（默认值）、`web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`（表单字段）、`web/src/features/channels/components/channel-card.tsx`（卡片显示）
 
@@ -477,7 +479,7 @@ git commit -m "feat(channels): 新增使用序号排序开关"
 - Consumes: `ChannelFieldCell`（卡片经 `renderCell('sort')` 复用）
 - Produces: 表单「序号」输入（默认 0，整数）；提交载荷含 `sort`；卡片视图显示序号并可内联编辑
 
-- [ ] **Step 1: 表单 schema 与默认值**
+- [x] **Step 1: 表单 schema 与默认值**
 
 `web/src/features/channels/lib/channel-form.ts`（仿 `priority`）：
 - schema：`sort: z.number().optional()`
@@ -488,7 +490,7 @@ git commit -m "feat(channels): 新增使用序号排序开关"
 `web/src/features/channels/lib/channel-form-errors.ts` 字段列表加 `'sort'`。
 `web/src/features/channels/constants.ts` 的 `channelTypeDefaults`（~line 315）加 `sort: 0`。
 
-- [ ] **Step 2: 抽屉表单字段**
+- [x] **Step 2: 抽屉表单字段**
 
 `channel-mutate-drawer.tsx` 在 priority `FormField`（~line 4310）后新增：
 
@@ -516,18 +518,18 @@ git commit -m "feat(channels): 新增使用序号排序开关"
 
 （`grid gap-4 sm:grid-cols-2` 布局内新增一个字段即可，或按需调整 grid 结构。）
 
-- [ ] **Step 3: 卡片视图**
+- [x] **Step 3: 卡片视图**
 
 `channel-card.tsx`：
 - `const sortCell = renderCell('sort')`
 - 在 Priority/Weight 网格加一行：`<span className={labelClass}>{t('Sort')}</span>` 与 `<div className='flex justify-start'>{sortCell}</div>`（放在 priority 行附近）
 
-- [ ] **Step 4: 验证**
+- [x] **Step 4: 验证**
 
 Run: `bun run typecheck && bun run lint`
 Expected: 无错误
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/features/channels/lib/channel-form.ts web/src/features/channels/lib/channel-form-errors.ts web/src/features/channels/constants.ts web/src/features/channels/components/drawers/channel-mutate-drawer.tsx web/src/features/channels/components/channel-card.tsx
