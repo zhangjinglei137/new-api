@@ -26,4 +26,4 @@
 
 - [x] 5.1 补充/更新后端排序单元测试：覆盖 `sort` 白名单、默认按 `sort` 升序、`sort_sort` 优先级高于 `id_sort`、列头排序优先于开关；运行 `go test ./model/... ./controller/...` 验证通过
 - [x] 5.2 补充/更新前端渠道列表与开关的回归测试（排序列交互、开关切换与持久化）；运行 `bun run test`（受影响用例）与 `bun run lint`、`bun run typecheck` 验证
-- [ ] 5.3 按项目数据库兼容规则对 SQLite、MySQL、PostgreSQL 三库执行迁移验证（启动 AutoMigrate 新增 `sort` 列，覆盖新建库与升级库并确认幂等），并记录数据库版本与结果；确认默认排序行为（无排序时按序号升序）
+- [x] 5.3 按项目数据库兼容规则对 SQLite、MySQL、PostgreSQL 三库执行迁移验证（启动 AutoMigrate 新增 `sort` 列，覆盖新建库与升级库并确认幂等），并记录数据库版本与结果；确认默认排序行为（无排序时按序号升序）

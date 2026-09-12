@@ -622,18 +622,20 @@ Expected: 无错误
 
 ### Task 12: 三库迁移验证
 
+- [x] Task 12: 三库迁移验证
+
 **Files:**
 - 验证：SQLite / MySQL / PostgreSQL
 
-- [ ] **Step 1: SQLite 迁移验证**
+- [x] **Step 1: SQLite 迁移验证**
 
 用项目启动逻辑（或 `common.SetupDB` 测试路径）执行 AutoMigrate：新建库 + 存量库各跑一次启动迁移，各两次确认幂等；确认 `channels` 表含 `sort` 列且默认 0。
 
-- [ ] **Step 2: MySQL / PostgreSQL 迁移验证**
+- [x] **Step 2: MySQL / PostgreSQL 迁移验证**
 
 在可用实例上重复 Step 1；如无可用实例，记录 blocker 并如实上报，不声称完成。
 
-- [ ] **Step 3: 记录结果**
+- [x] **Step 3: 记录结果**
 
 在最终 handoff / PR 记录：数据库版本、迁移命令、新建/升级/幂等验证结果。
 
