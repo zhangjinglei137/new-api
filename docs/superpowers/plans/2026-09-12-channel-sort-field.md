@@ -542,13 +542,15 @@ git commit -m "feat(channels): 表单与卡片视图支持序号字段"
 
 ### Task 9: i18n 文案
 
+- [x] Task 9: i18n 文案
+
 **Files:**
 - Modify: `web/src/i18n/locales/en.json`、`web/src/i18n/locales/zh.json`（及 zh-TW、fr、ru、ja、vi 如 i18n:sync 支持）
 
 **Interfaces:**
 - Produces: `Sort`（列头/字段名）、`Sort by Sort`（开关）、`Used to order channels in the list`（表单描述）key
 
-- [ ] **Step 1: 添加源串**
+- [x] **Step 1: 添加源串**
 
 `web/src/i18n/locales/en.json` 添加：
 
@@ -566,12 +568,12 @@ git commit -m "feat(channels): 表单与卡片视图支持序号字段"
 "Used to order channels in the list": "用于在列表中排列渠道的顺序"
 ```
 
-- [ ] **Step 2: 同步并验证**
+- [x] **Step 2: 同步并验证**
 
 Run: `bun run i18n:sync`（如可用）
 Expected: key 无缺失
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add web/src/i18n/locales/

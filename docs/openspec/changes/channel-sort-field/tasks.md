@@ -20,7 +20,7 @@
 
 ## 4. 国际化
 
-- [ ] 4.1 在 `web/src/i18n/locales/en.json` 添加 `Sort`（序号/排序）相关文案源串（如 `Sort`、`Sort by Sort`），并同步 `zh.json` 等既有语言文件；运行 `bun run i18n:sync`（如可用）验证 key 同步
+- [x] 4.1 在 `web/src/i18n/locales/en.json` 添加 `Sort`（序号/排序）相关文案源串（如 `Sort`、`Sort by Sort`），并同步 `zh.json` 等既有语言文件；运行 `bun run i18n:sync`（如可用）验证 key 同步
 
 ## 5. 验证与交付
 
