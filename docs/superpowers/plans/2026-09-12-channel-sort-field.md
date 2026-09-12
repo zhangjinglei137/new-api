@@ -586,32 +586,36 @@ git commit -m "feat(i18n): 渠道序号相关文案"
 
 ### Task 10: 后端排序回归测试
 
+- [x] Task 10: 后端排序回归测试
+
 **Files:**
 - Modify: `model/channel_constraint_test.go`（Task 2 已覆盖核心；此处补充 controller 参数解析或收尾）
 
 **Interfaces:**
 - 验证：sort 白名单、默认 sort ASC、SortSort 优先于 IDSort、列头排序优先于开关
 
-- [ ] **Step 1: 运行后端全部渠道相关测试**
+- [x] **Step 1: 运行后端全部渠道相关测试**
 
 Run: `go test ./model/... ./controller/... -run 'Channel' -count=1`
 Expected: 全部 PASS
 
-- [ ] **Step 2: 确认排序语义断言完整**
+- [x] **Step 2: 确认排序语义断言完整**
 
 检查 Task 2 的表驱动测试已覆盖：默认分支 `sort ASC`、`SortSort` 优先于 `IDSort`、`SortBy` 优先于开关；如 controller 层已有排序测试模式，补充 `sort_sort` 参数解析断言。
 
 ### Task 11: 前端回归测试
 
+- [x] Task 11: 前端回归测试
+
 **Files:**
 - Modify: `web/src/features/channels/components/__tests__/`（Task 6/7 已建）
 
-- [ ] **Step 1: 运行前端受影响测试**
+- [x] **Step 1: 运行前端受影响测试**
 
 Run: `bun run test`
 Expected: 全部通过
 
-- [ ] **Step 2: 类型与 lint**
+- [x] **Step 2: 类型与 lint**
 
 Run: `bun run typecheck && bun run lint`
 Expected: 无错误
