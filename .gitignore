@@ -64,6 +64,8 @@ CLAUDE.md
 .superpowers/
 # Superpowers artifacts (design docs, plans, verify reports).
 docs/superpowers/
+# OpenSpec CLI artifacts (change docs, main specs, config).
+docs/openspec/
 # Comet per-change runtime state inside OpenSpec changes.
 docs/openspec/changes/**/.comet/
 docs/openspec/changes/**/.comet.yaml
