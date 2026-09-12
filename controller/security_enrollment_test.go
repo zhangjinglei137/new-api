@@ -31,6 +31,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
@@ -38,6 +39,27 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// newSecurityTestDatabase creates an isolated test database for the security
+// enrollment suite. Unlike the shared newAuditTestDatabase, the SQLite
+// connection enables BEGIN IMMEDIATE (_txlock=immediate) plus a busy timeout:
+// tests here intentionally race two concurrent proof-consuming requests and
+// rely on writers serializing (one wins, the other fails with
+// SECURITY_PROOF_CONSUMED) instead of both dying on SQLITE_BUSY. The shared
+// helper must stay default-deferred for tests like
+// TestManageUserQuotaConcurrentSnapshots, which synchronize two transactions
+// inside a gorm query callback that BEGIN IMMEDIATE would block.
+func newSecurityTestDatabase(t *testing.T, kind, dsn string) (*gorm.DB, string) {
+	t.Helper()
+	if kind == "sqlite" {
+		path := t.TempDir() + "/audit.db"
+		dsn := path + "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_txlock=immediate"
+		db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+		require.NoError(t, err)
+		return db, path
+	}
+	return newAuditTestDatabase(t, kind, dsn)
+}
 
 func setupSecurityEnrollmentTest(t *testing.T) (*model.User, service.AuthIdentity) {
 	t.Helper()
@@ -53,8 +75,8 @@ func setupSecurityEnrollmentTest(t *testing.T) (*model.User, service.AuthIdentit
 		dialect = "sqlite"
 	}
 	dsn := os.Getenv("TEST_" + strings.ToUpper(dialect) + "_DSN")
-	db, _ := newAuditTestDatabase(t, dialect, dsn)
-	logDB, _ := newAuditTestDatabase(t, dialect, dsn)
+	db, _ := newSecurityTestDatabase(t, dialect, dsn)
+	logDB, _ := newSecurityTestDatabase(t, dialect, dsn)
 	db.Logger = logger.Default.LogMode(logger.Silent)
 	logDB.Logger = logger.Default.LogMode(logger.Silent)
 	versionQuery := "SELECT VERSION()"
