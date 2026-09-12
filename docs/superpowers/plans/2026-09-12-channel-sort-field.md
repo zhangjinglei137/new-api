@@ -32,6 +32,8 @@ base-ref: 74d703b269e1c5a1b3f789f9b9d4e2556b25f091
 
 ### Task 1: Channel 模型新增 sort 字段
 
+- [x] Task 1: Channel 模型新增 sort 字段
+
 **Files:**
 - Modify: `model/channel.go`（`Channel` 结构体，`Priority` 字段后）
 - Test: `model/channel_constraint_test.go`（就近扩展）
