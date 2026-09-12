@@ -82,6 +82,8 @@ git commit -m "feat(channel): 新增 sort 序号字段"
 
 ### Task 2: 排序白名单与 ChannelSortOptions 扩展
 
+- [x] Task 2: 排序白名单与 ChannelSortOptions 扩展
+
 **Files:**
 - Modify: `model/channel.go`（`channelSortColumns`、`ChannelSortOptions`、`NewChannelSortOptions`、`Apply`、`resolveChannelSortOptions`）
 - Test: `model/channel_constraint_test.go`
