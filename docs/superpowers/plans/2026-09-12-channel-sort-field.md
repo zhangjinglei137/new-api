@@ -357,6 +357,8 @@ git commit -m "feat(channels): provider 新增序号排序状态并接入表格�
 
 ### Task 6: 序号列（内联编辑 + 列头排序）
 
+- [x] Task 6: 序号列（内联编辑 + 列头排序）
+
 **Files:**
 - Modify: `web/src/features/channels/components/channels-columns.tsx`
 - Test: `web/src/features/channels/components/__tests__/sort-column.test.tsx`（新建）
@@ -365,7 +367,7 @@ git commit -m "feat(channels): provider 新增序号排序状态并接入表格�
 - Consumes: `ChannelFieldCell`（field 类型扩展 `'sort'`）；`NumericSpinnerInput`
 - Produces: 序号列 `accessorKey: 'sort'`，位于 Priority 列旁，`header: t('Sort')`，`meta: { mobileHidden: true }`；tag 行返回 null
 
-- [ ] **Step 1: 扩展 ChannelFieldCell field 类型**
+- [x] **Step 1: 扩展 ChannelFieldCell field 类型**
 
 `channels-columns.tsx`：
 
@@ -373,7 +375,7 @@ git commit -m "feat(channels): provider 新增序号排序状态并接入表格�
 field: 'priority' | 'weight' | 'sort'
 ```
 
-- [ ] **Step 2: 新增 SortCell 组件与列**
+- [x] **Step 2: 新增 SortCell 组件与列**
 
 在 `PriorityCell` 附近：
 
@@ -409,16 +411,16 @@ function SortCell({ channel }: { channel: Channel }) {
 },
 ```
 
-- [ ] **Step 3: 写前端测试**
+- [x] **Step 3: 写前端测试**
 
 `web/src/features/channels/components/__tests__/sort-column.test.tsx`（参照仓库既有 RTL 测试模式，如 `data-table-row-actions-reset.test.tsx` 的 fixture 与渲染方式）：断言普通渠道行渲染序号编辑控件、tag 行不渲染序号编辑。
 
-- [ ] **Step 4: 验证**
+- [x] **Step 4: 验证**
 
 Run: `bun run typecheck && bun run lint && bun run test sort-column`
 Expected: 全部通过
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/features/channels/components/channels-columns.tsx web/src/features/channels/components/__tests__/sort-column.test.tsx
