@@ -306,6 +306,8 @@ git commit -m "feat(channels): 类型新增 sort 字段与 sort_sort 参数"
 
 ### Task 5: Provider 状态与表格接线
 
+- [x] Task 5: Provider 状态与表格接线
+
 **Files:**
 - Modify: `web/src/features/channels/components/channels-provider.tsx`、`web/src/features/channels/components/channels-table.tsx`
 - Test: `web/src/features/channels/components/__tests__/`（开关持久化交互在 Task 8 覆盖）
@@ -313,7 +315,7 @@ git commit -m "feat(channels): 类型新增 sort 字段与 sort_sort 参数"
 **Interfaces:**
 - Produces: context `sortSort: boolean` / `setSortSort`；localStorage key `channels-sort-sort`；查询参数透传 `sort_sort`
 
-- [ ] **Step 1: provider 加状态**
+- [x] **Step 1: provider 加状态**
 
 `channels-provider.tsx`（仿 `idSort`）：
 
@@ -330,19 +332,19 @@ const [sortSort, setSortSort] = useState(() => {
 
 加入 `value` 与 memo 依赖数组。
 
-- [ ] **Step 2: 表格接线**
+- [x] **Step 2: 表格接线**
 
 `channels-table.tsx`：
 - `const { sortSort } = useChannels()`
 - `CHANNEL_SORTABLE_COLUMNS` 加 `'sort'`
 - 三处查询参数（`searchChannels` / `getChannels` / 主 `useQuery` queryKey）加 `sort_sort: sortSort`
 
-- [ ] **Step 3: 验证**
+- [x] **Step 3: 验证**
 
 Run: `bun run typecheck && bun run lint`
 Expected: 无错误
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add web/src/features/channels/components/channels-provider.tsx web/src/features/channels/components/channels-table.tsx
