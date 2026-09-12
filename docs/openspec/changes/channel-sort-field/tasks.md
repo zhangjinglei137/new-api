@@ -3,7 +3,7 @@
 ## 1. 后端模型与排序逻辑
 
 - [x] 1.1 在 `model/channel.go` 的 `Channel` 结构体中新增 `Sort *int64` 字段（gorm 标签 `bigint;default:0`，JSON `sort`），并在最接近字段位置补充注释说明；运行 `go build ./...` 验证编译通过
-- [ ] 1.2 在 `model/channel.go` 的 `channelSortColumns` 白名单中加入 `"sort": "sort"`，并新增 `SortSort` 字段到 `ChannelSortOptions`；调整 `NewChannelSortOptions` 签名与调用点，使 `Apply` 的优先级为：列头 `sort_by` > `sort_sort` > `id_sort` > 默认按 `sort` 升序；运行 `go test ./model/...`（或 `./model/ -run ChannelSort` 相关用例）验证排序行为
+- [x] 1.2 在 `model/channel.go` 的 `channelSortColumns` 白名单中加入 `"sort": "sort"`，并新增 `SortSort` 字段到 `ChannelSortOptions`；调整 `NewChannelSortOptions` 签名与调用点，使 `Apply` 的优先级为：列头 `sort_by` > `sort_sort` > `id_sort` > 默认按 `sort` 升序；运行 `go test ./model/...`（或 `./model/ -run ChannelSort` 相关用例）验证排序行为
 - [ ] 1.3 检查后端所有调用 `NewChannelSortOptions` / `ChannelSortOptions` 的位置（`controller/channel.go`、`model/channel.go` 等），为 `SearchChannels` 增加 `sort_sort` 查询参数解析并透传；运行 `go build ./...` 与既有渠道相关测试验证
 
 ## 2. 前端类型与数据流

@@ -89,7 +89,7 @@ git commit -m "feat(channel): 新增 sort 序号字段"
 **Interfaces:**
 - Produces: `NewChannelSortOptions(sortBy string, sortOrder string, idSort bool, sortSort bool) ChannelSortOptions`；`ChannelSortOptions` 含 `SortSort bool`；`Apply` 分支：`SortBy` → `SortSort`(sort ASC) → `IDSort`(id DESC) → 默认 sort ASC
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `model/channel_constraint_test.go` 添加表驱动测试：
 
@@ -113,12 +113,12 @@ func TestChannelSortOptionsApplyPriority(t *testing.T) {
 
 具体断言方式：`opts.Apply(DB.Session(&gorm.Session{DryRun: true}).Model(&Channel{})).Find(&[]Channel{})`，检查 `stmt.SQL.String()` 包含 `ORDER BY` 与目标列；默认分支断言 `sort` ASC、`opts2` 断言 `sort` ASC、`opts3` 断言 `name` DESC、`opts5` 断言 `id` DESC。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `go test ./model/ -run TestChannelSortOptionsApplyPriority -count=1`
 Expected: FAIL（`NewChannelSortOptions` 无 sortSort 参数 / 默认仍 priority desc）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `model/channel.go`：
 
@@ -198,17 +198,17 @@ func resolveChannelSortOptions(idSort bool, sortOptions []ChannelSortOptions) Ch
 
 （`SortSort` 在调用方构造 `NewChannelSortOptions` 时已置位，`resolveChannelSortOptions` 无需再合并。）
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `go test ./model/ -run 'TestChannelSortOptionsApplyPriority|TestChannelHasSortField' -count=1`
 Expected: PASS
 
-- [ ] **Step 5: 运行既有渠道测试确认无回归**
+- [x] **Step 5: 运行既有渠道测试确认无回归**
 
 Run: `go test ./model/ -run 'Channel' -count=1`
 Expected: 全部 PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add model/channel.go model/channel_constraint_test.go
