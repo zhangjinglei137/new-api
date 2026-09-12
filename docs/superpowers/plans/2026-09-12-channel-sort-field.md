@@ -261,6 +261,8 @@ git commit -m "feat(channel): 渠道列表接口支持 sort_sort 排序参数"
 
 ### Task 4: 前端类型扩展
 
+- [x] Task 4: 前端类型扩展
+
 **Files:**
 - Modify: `web/src/features/channels/types.ts`（`channelSchema`、`ChannelSortBy`、`GetChannelsParams`、`SearchChannelsParams`）
 - Test: `web/src/features/channels/lib/__tests__/`（类型层无独立测试则跳过，靠 typecheck）
@@ -268,7 +270,7 @@ git commit -m "feat(channel): 渠道列表接口支持 sort_sort 排序参数"
 **Interfaces:**
 - Produces: `Channel.sort?: number | null`；`ChannelSortBy` 含 `'sort'`；两 Params 含 `sort_sort?: boolean`
 
-- [ ] **Step 1: 实现类型**
+- [x] **Step 1: 实现类型**
 
 `web/src/features/channels/types.ts`：
 
@@ -290,12 +292,12 @@ export type ChannelSortBy =
 sort_sort?: boolean
 ```
 
-- [ ] **Step 2: 验证类型检查**
+- [x] **Step 2: 验证类型检查**
 
 Run: `bun run typecheck`
 Expected: 无类型错误
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add web/src/features/channels/types.ts

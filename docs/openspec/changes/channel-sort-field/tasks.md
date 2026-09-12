@@ -8,7 +8,7 @@
 
 ## 2. 前端类型与数据流
 
-- [ ] 2.1 在 `web/src/features/channels/types.ts` 的 `ChannelSortBy` 联合类型中加入 `'sort'`；在 `GetChannelsParams` / `SearchChannelsParams` 中加入可选 `sort_sort?: boolean`，并同步 `channelSchema`/`Channel` 类型中的 `sort` 字段；运行 `bun run typecheck` 验证
+- [x] 2.1 在 `web/src/features/channels/types.ts` 的 `ChannelSortBy` 联合类型中加入 `'sort'`；在 `GetChannelsParams` / `SearchChannelsParams` 中加入可选 `sort_sort?: boolean`，并同步 `channelSchema`/`Channel` 类型中的 `sort` 字段；运行 `bun run typecheck` 验证
 - [ ] 2.2 在 `web/src/features/channels/components/channels-provider.tsx` 的 context 类型与 provider 状态中加入 `sortSort: boolean` / `setSortSort`（localStorage key `channels-sort-sort`，默认 false），与 `idSort` 对称；运行 `bun run typecheck` 验证
 - [ ] 2.3 在 `web/src/features/channels/components/channels-table.tsx` 的 `CHANNEL_SORTABLE_COLUMNS` 中加入 `'sort'`，并在列表查询参数中透传 `sort_sort: sortSort`；验证排序状态能触发后端 `sort_by=sort` 请求
 
