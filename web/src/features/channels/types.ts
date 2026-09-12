@@ -56,6 +56,7 @@ export const channelSchema = z.object({
   model_mapping: z.string().nullish(),
   status_code_mapping: z.string().nullish(),
   priority: z.number().nullish(),
+  sort: z.number().nullish(),
   auto_ban: z.number().nullish(),
   other_info: z.string().default(''),
   tag: z.string().nullish(),
@@ -274,6 +275,7 @@ export type ChannelSortBy =
   | 'balance'
   | 'response_time'
   | 'test_time'
+  | 'sort'
 
 export type ChannelSortOrder = 'asc' | 'desc'
 
@@ -284,6 +286,7 @@ export interface GetChannelsParams {
   type?: number
   group?: string
   id_sort?: boolean
+  sort_sort?: boolean
   tag_mode?: boolean
   sort_by?: ChannelSortBy
   sort_order?: ChannelSortOrder
@@ -296,6 +299,7 @@ export interface SearchChannelsParams {
   status?: string
   type?: number
   id_sort?: boolean
+  sort_sort?: boolean
   tag_mode?: boolean
   sort_by?: ChannelSortBy
   sort_order?: ChannelSortOrder
