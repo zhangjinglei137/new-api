@@ -44,15 +44,28 @@ relaykit/relayconvert/chat_responses_live_local_test.go
 service/openaicompat/chat_responses_live_local_test.go
 go.work
 go.work.sum
-# >>> Comet managed project state >>>
-!/.comet/
-/.comet/*
-!/.comet/config.yaml
-# <<< Comet managed project state <<<
 
 # Local tooling state (CodeGraph index, OpenCode config).
 .codegraph/
 .opencode/
 
+# Comet/OpenCode tooling artifacts (not part of the project).
+.agents/skills/
+.agents/workflows/
+CLAUDE.md
+
 # Deepwork progress state
 .slim/deepwork/
+
+# Agent tooling runtime state — keep files locally, never track in git.
+# Comet CLI project/change state (config, artifacts, checkpoints, handoffs).
+.comet/
+# SDD/Superpowers workspace.
+.superpowers/
+# Superpowers artifacts (design docs, plans, verify reports).
+docs/superpowers/
+# Comet per-change runtime state inside OpenSpec changes.
+docs/openspec/changes/**/.comet/
+docs/openspec/changes/**/.comet.yaml
+# Git rerere local conflict-reuse cache (machine-local only).
+.github/rerere-cache/
