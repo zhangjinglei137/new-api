@@ -142,7 +142,7 @@ function ChannelCardComponent({
             <span className={labelClass}>{t('Weight')}</span>
             <div className='flex justify-start'>{priorityCell}</div>
             <div className='flex justify-start'>{weightCell}</div>
-            <span className={labelClass}>{t('Sort')}</span>
+            <span className={labelClass}>{t('Sort Number')}</span>
             <div className='flex justify-start'>{sortCell}</div>
             <span className={cn('mt-2', labelClass)}>
               {fieldLabels.response_time}

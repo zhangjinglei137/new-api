@@ -1497,7 +1497,7 @@ export function useChannelsColumns(
       // Sort column
       {
         accessorKey: 'sort',
-        header: t('Sort'),
+        header: t('Sort Number'),
         meta: { mobileHidden: true },
         cell: ({ row }) => <SortCell channel={row.original} />,
         size: 100,

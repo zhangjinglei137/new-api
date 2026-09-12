@@ -4360,7 +4360,7 @@ export function ChannelMutateDrawer({
                                 name='sort'
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel>{t('Sort')}</FormLabel>
+                                    <FormLabel>{t('Sort Number')}</FormLabel>
                                     <FormControl>
                                       <Input
                                         type='number'

@@ -121,7 +121,7 @@ describe('sort column definition', () => {
       | undefined
 
     expect(sortColumn?.accessorKey).toBe('sort')
-    expect(sortColumn?.header).toBe('Sort')
+    expect(sortColumn?.header).toBe('Sort Number')
     expect(sortColumn?.size).toBe(100)
     expect(sortColumn?.meta?.mobileHidden).toBe(true)
   })
