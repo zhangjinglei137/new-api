@@ -641,12 +641,14 @@ Expected: 无错误
 
 ### Task 13: 收尾与阶段守卫
 
-- [ ] **Step 1: 全量构建**
+- [x] Task 13: 收尾与阶段守卫
+
+- [x] **Step 1: 全量构建**
 
 Run: `go build ./... && go vet ./...`
 Expected: 成功
 
-- [ ] **Step 2: 阶段守卫**
+- [x] **Step 2: 阶段守卫**
 
 ```bash
 comet state record-check channel-sort-field build --command "go build ./... && go vet ./..." --exit-code 0
@@ -655,6 +657,6 @@ comet guard channel-sort-field build --apply
 
 Expected: guard 全部 PASS，phase 推进到 verify
 
-- [ ] **Step 3: 汇总改动**
+- [x] **Step 3: 汇总改动**
 
 列出改动文件与测试结果，供 verify 阶段使用。
