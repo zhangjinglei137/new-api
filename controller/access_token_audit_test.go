@@ -438,7 +438,12 @@ func newAuditTestDatabase(t *testing.T, kind, dsn string) (*gorm.DB, string) {
 	t.Helper()
 	if kind == "sqlite" {
 		path := t.TempDir() + "/audit.db"
-		db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+		// Match the production SQLitePath concurrency settings (see
+		// common/database.go): busy_timeout lets concurrent writers queue
+		// instead of failing with SQLITE_BUSY, WAL keeps readers unlocked,
+		// and _txlock=immediate (BEGIN IMMEDIATE) serializes writers.
+		dsn := path + "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_txlock=immediate"
+		db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 		require.NoError(t, err)
 		return db, path
 	}
