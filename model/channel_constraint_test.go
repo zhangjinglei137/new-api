@@ -7,8 +7,10 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestFilterCandidateIDs(t *testing.T) {
@@ -221,4 +223,67 @@ func TestChannelHasSortField(t *testing.T) {
 	require := require.New(t)
 	ch := &Channel{}
 	require.Nil(ch.Sort) // 指针字段零值为 nil；新建渠道默认 0 由请求归一化处理
+}
+
+func TestChannelSortOptionsApplyPriority(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB := DB
+	DB = db
+	t.Cleanup(func() { DB = previousDB })
+
+	orderBySQL := func(opts ChannelSortOptions) string {
+		stmt := opts.Apply(DB.Session(&gorm.Session{DryRun: true}).Model(&Channel{})).Find(&[]Channel{}).Statement
+		return stmt.SQL.String()
+	}
+
+	tests := []struct {
+		name string
+		opts ChannelSortOptions
+		col  string // ORDER BY 目标列
+		desc bool   // 是否 DESC
+	}{
+		{
+			name: "sort whitelist asc orders by sort",
+			opts: NewChannelSortOptions("sort", "asc", false, false),
+			col:  "sort",
+			desc: false,
+		},
+		{
+			name: "SortSort takes priority over IDSort",
+			opts: NewChannelSortOptions("", "", true, true),
+			col:  "sort",
+			desc: false,
+		},
+		{
+			name: "column header takes priority over SortSort",
+			opts: NewChannelSortOptions("name", "desc", false, true),
+			col:  "name",
+			desc: true,
+		},
+		{
+			name: "default falls back to sort asc",
+			opts: NewChannelSortOptions("", "", false, false),
+			col:  "sort",
+			desc: false,
+		},
+		{
+			name: "IDSort only keeps id desc",
+			opts: NewChannelSortOptions("", "", true, false),
+			col:  "id",
+			desc: true,
+		},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			sql := orderBySQL(testCase.opts)
+			require.Contains(t, sql, "ORDER BY")
+			require.Contains(t, sql, "`"+testCase.col+"`")
+			if testCase.desc {
+				require.Contains(t, sql, "DESC")
+			} else {
+				require.NotContains(t, sql, "DESC")
+			}
+		})
+	}
 }

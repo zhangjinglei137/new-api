@@ -75,6 +75,7 @@ type ChannelSortOptions struct {
 	SortBy    string
 	SortOrder string
 	IDSort    bool
+	SortSort  bool // 使用序号排序开关
 }
 
 var channelSortColumns = map[string]string{
@@ -84,9 +85,10 @@ var channelSortColumns = map[string]string{
 	"balance":       "balance",
 	"response_time": "response_time",
 	"test_time":     "test_time",
+	"sort":          "sort",
 }
 
-func NewChannelSortOptions(sortBy string, sortOrder string, idSort bool) ChannelSortOptions {
+func NewChannelSortOptions(sortBy string, sortOrder string, idSort bool, sortSort ...bool) ChannelSortOptions {
 	normalizedSortBy := strings.ToLower(strings.TrimSpace(sortBy))
 	normalizedSortOrder := strings.ToLower(strings.TrimSpace(sortOrder))
 	if _, ok := channelSortColumns[normalizedSortBy]; !ok {
@@ -96,10 +98,15 @@ func NewChannelSortOptions(sortBy string, sortOrder string, idSort bool) Channel
 		normalizedSortOrder = "desc"
 	}
 
+	sortSortFlag := false
+	if len(sortSort) > 0 {
+		sortSortFlag = sortSort[0]
+	}
 	return ChannelSortOptions{
 		SortBy:    normalizedSortBy,
 		SortOrder: normalizedSortOrder,
 		IDSort:    idSort,
+		SortSort:  sortSortFlag,
 	}
 }
 
@@ -110,6 +117,12 @@ func (options ChannelSortOptions) Apply(query *gorm.DB) *gorm.DB {
 			Desc:   options.SortOrder != "asc",
 		})
 	}
+	if options.SortSort {
+		return query.Order(clause.OrderByColumn{
+			Column: clause.Column{Name: "sort"},
+			Desc:   false,
+		})
+	}
 	if options.IDSort {
 		return query.Order(clause.OrderByColumn{
 			Column: clause.Column{Name: "id"},
@@ -117,14 +130,14 @@ func (options ChannelSortOptions) Apply(query *gorm.DB) *gorm.DB {
 		})
 	}
 	return query.Order(clause.OrderByColumn{
-		Column: clause.Column{Name: "priority"},
-		Desc:   true,
+		Column: clause.Column{Name: "sort"},
+		Desc:   false,
 	})
 }
 
 func resolveChannelSortOptions(idSort bool, sortOptions []ChannelSortOptions) ChannelSortOptions {
 	if len(sortOptions) == 0 {
-		return NewChannelSortOptions("", "", idSort)
+		return NewChannelSortOptions("", "", idSort, false)
 	}
 	options := sortOptions[0]
 	options.IDSort = options.IDSort || idSort
