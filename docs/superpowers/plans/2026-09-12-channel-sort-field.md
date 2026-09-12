@@ -219,6 +219,8 @@ git commit -m "feat(channel): 排序白名单新增 sort 并扩展排序优先�
 
 ### Task 3: Controller 解析 sort_sort 参数
 
+- [x] Task 3: Controller 解析 sort_sort 参数
+
 **Files:**
 - Modify: `controller/channel.go`（`GetAllChannels` line ~107、`SearchChannels` line ~285）
 - Test: `controller/channel_test_internal_test.go`（就近扩展，如已有排序测试模式）
@@ -227,7 +229,7 @@ git commit -m "feat(channel): 排序白名单新增 sort 并扩展排序优先�
 - Consumes: `model.NewChannelSortOptions(sortBy, sortOrder, idSort, sortSort)`
 - Produces: `/api/channel` 与 `/api/channel/search` 支持 `sort_sort=true|false` 查询参数
 
-- [ ] **Step 1: 实现参数解析**
+- [x] **Step 1: 实现参数解析**
 
 `controller/channel.go` 两处（`GetAllChannels` 与 `SearchChannels`）：
 
@@ -237,16 +239,16 @@ sortSort, _ := strconv.ParseBool(c.Query("sort_sort"))
 sortOptions := model.NewChannelSortOptions(c.Query("sort_by"), c.Query("sort_order"), idSort, sortSort)
 ```
 
-- [ ] **Step 2: 验证编译与测试**
+- [x] **Step 2: 验证编译与测试**
 
 Run: `go build ./... && go vet ./controller/`
 Expected: 成功
 
-- [ ] **Step 3: 手动验证（如 controller 测试环境可用）**
+- [x] **Step 3: 手动验证（如 controller 测试环境可用）**
 
 用 `curl` 或既有 controller 测试框架验证：`GET /api/channel/search?sort_sort=true` 返回按 sort 升序的数据；`GET /api/channel?sort_by=sort&sort_order=desc` 返回按 sort 降序。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add controller/channel.go
