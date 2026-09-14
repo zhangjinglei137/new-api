@@ -10,7 +10,7 @@ import (
 // TestModelMetaRichFieldsRoundTrip 覆盖富模型元数据字段的 Create→Read→Update
 // 往返，防止 Model.Update() 的 Select 白名单漏列导致新字段无法持久化。
 func TestModelMetaRichFieldsRoundTrip(t *testing.T) {
-	require.NoError(t, DB.AutoMigrate(&Model{}))
+	require.NoError(t, DB.AutoMigrate(&Model{}, &Option{}))
 	t.Cleanup(func() {
 		DB.Exec("DELETE FROM models")
 	})
@@ -84,7 +84,7 @@ func TestModelMetaRichFieldsRoundTrip(t *testing.T) {
 // TestModelMetaBoolTriState 覆盖 *bool 三态语义：未设置时（nil）必须保持 NULL，
 // 不被数据库默认值污染成 false/true。
 func TestModelMetaBoolTriState(t *testing.T) {
-	require.NoError(t, DB.AutoMigrate(&Model{}))
+	require.NoError(t, DB.AutoMigrate(&Model{}, &Option{}))
 	t.Cleanup(func() {
 		DB.Exec("DELETE FROM models")
 	})

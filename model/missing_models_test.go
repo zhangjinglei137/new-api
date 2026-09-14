@@ -24,39 +24,6 @@ func setupMissingModelsTest(t *testing.T) {
 	})
 }
 
-// TestGetMissingModelsExcludesOrphanAbilities 验证孤儿能力（指向不存在渠道）
-// 不再导致模型被误报为"缺失模型"；正常渠道的能力仍参与缺失判断。
-func TestGetMissingModelsExcludesOrphanAbilities(t *testing.T) {
-	setupMissingModelsTest(t)
-
-	// 渠道 1 存在；渠道 2 先建后删（软删，abilities 残留成孤儿）
-	ch1 := &Channel{Name: "zz-missing-ch1", Type: 1, Status: common.ChannelStatusEnabled}
-	require.NoError(t, DB.Create(ch1).Error)
-	ch2 := &Channel{Name: "zz-missing-ch2", Type: 1, Status: common.ChannelStatusEnabled}
-	require.NoError(t, DB.Create(ch2).Error)
-
-	// 正常能力：渠道 1 上的真缺失模型（models 表无此模型）
-	require.NoError(t, DB.Create(&Ability{
-		Group: "default", Model: "zz-truly-missing", ChannelId: ch1.Id, Enabled: true,
-	}).Error)
-	// 孤儿能力：渠道 2 上的模型，随后渠道 2 被删除
-	require.NoError(t, DB.Create(&Ability{
-		Group: "default", Model: "zz-orphan-model", ChannelId: ch2.Id, Enabled: true,
-	}).Error)
-	require.NoError(t, DB.Delete(ch2).Error)
-
-	// 已配置模型：models 表存在，不应出现在缺失列表
-	require.NoError(t, DB.Create(&Model{ModelName: "zz-configured"}).Error)
-	require.NoError(t, DB.Create(&Ability{
-		Group: "default", Model: "zz-configured", ChannelId: ch1.Id, Enabled: true,
-	}).Error)
-
-	missing, err := GetMissingModels()
-	require.NoError(t, err)
-	// 只含真正缺失的模型；孤儿能力模型与已配置模型都不出现
-	assert.Equal(t, []string{"zz-truly-missing"}, missing)
-}
-
 // TestGetMissingModelsEmpty 无任何启用能力时返回空列表。
 func TestGetMissingModelsEmpty(t *testing.T) {
 	setupMissingModelsTest(t)

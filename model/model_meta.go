@@ -1,6 +1,8 @@
 package model
 
 import (
+	"errors"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -16,24 +18,36 @@ const (
 	NameRuleSuffix
 )
 
+// ModelSquareState 来自上游：模型元数据在「模型广场」中的可见性状态。
+// 上一轮 rc36 merge 曾主动放弃，本次合并按 design 1.3 从上游补回（类型 + 4 常量 + 字段）。
+type ModelSquareState string
+
+const (
+	ModelSquareVisible     ModelSquareState = "visible"
+	ModelSquareUnavailable ModelSquareState = "unavailable"
+	ModelSquareHidden      ModelSquareState = "hidden"
+	ModelSquarePartial     ModelSquareState = "partial"
+)
+
 type BoundChannel struct {
 	Name string `json:"name"`
 	Type int    `json:"type"`
 }
 
 type Model struct {
-	Id           int            `json:"id"`
-	ModelName    string         `json:"model_name" gorm:"size:128;not null;uniqueIndex:uk_model_name_delete_at,priority:1"`
-	Description  string         `json:"description,omitempty" gorm:"type:text"`
-	Icon         string         `json:"icon,omitempty" gorm:"type:varchar(128)"`
-	Tags         string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
-	VendorID     int            `json:"vendor_id,omitempty" gorm:"index"`
-	Endpoints    string         `json:"endpoints,omitempty" gorm:"type:text"`
-	Status       int            `json:"status" gorm:"default:1"`
-	SyncOfficial int            `json:"sync_official" gorm:"default:1"`
-	CreatedTime  int64          `json:"created_time" gorm:"bigint"`
-	UpdatedTime  int64          `json:"updated_time" gorm:"bigint"`
-	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index;uniqueIndex:uk_model_name_delete_at,priority:2"`
+	Id                 int            `json:"id"`
+	ModelName          string         `json:"model_name" gorm:"size:128;not null;uniqueIndex:uk_model_name_delete_at,priority:1"`
+	Description        string         `json:"description,omitempty" gorm:"type:text"`
+	Icon               string         `json:"icon,omitempty" gorm:"type:varchar(128)"`
+	Tags               string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
+	VendorID           int            `json:"vendor_id,omitempty" gorm:"index"`
+	Endpoints          string         `json:"endpoints,omitempty" gorm:"type:text"`
+	SupportedEndpoints []string       `json:"supported_endpoints,omitempty" gorm:"-"`
+	Status             int            `json:"status" gorm:"default:1"`
+	SyncOfficial       int            `json:"sync_official" gorm:"default:1"`
+	CreatedTime        int64          `json:"created_time" gorm:"bigint"`
+	UpdatedTime        int64          `json:"updated_time" gorm:"bigint"`
+	DeletedAt          gorm.DeletedAt `json:"-" gorm:"index;uniqueIndex:uk_model_name_delete_at,priority:2"`
 
 	BoundChannels []BoundChannel `json:"bound_channels,omitempty" gorm:"-"`
 	EnableGroups  []string       `json:"enable_groups,omitempty" gorm:"-"`
@@ -46,39 +60,55 @@ type Model struct {
 	// 富模型元数据（/v1/models 扩展返回，后台可编辑）
 	// 注意：所有新增列一律不加 gorm:"default:..." 标签，避免三库 AutoMigrate
 	// 反复 ALTER；默认值放业务层。*bool 三态：nil=未知 / false=不支持 / true=支持。
-	DisplayName           string `json:"display_name,omitempty" gorm:"type:varchar(255)"`
-	Family                string `json:"family,omitempty" gorm:"type:varchar(128)"`
-	ProviderNpm           string `json:"provider_npm,omitempty" gorm:"type:varchar(255)"`
-	ReleaseDate           string `json:"release_date,omitempty" gorm:"type:varchar(32)"`
-	LastUpdated           string `json:"last_updated,omitempty" gorm:"type:varchar(32)"`
-	OpenWeights           *bool  `json:"open_weights,omitempty"`
-	CapAttachment         *bool  `json:"cap_attachment,omitempty"`
-	CapReasoning          *bool  `json:"cap_reasoning,omitempty"`
-	CapToolCall           *bool  `json:"cap_tool_call,omitempty"`
-	CapStructuredOutput   *bool  `json:"cap_structured_output,omitempty"`
-	CapTemperature        *bool  `json:"cap_temperature,omitempty"`
-	Capabilities          string `json:"capabilities,omitempty" gorm:"type:text"`
+	DisplayName         string `json:"display_name,omitempty" gorm:"type:varchar(255)"`
+	Family              string `json:"family,omitempty" gorm:"type:varchar(128)"`
+	ProviderNpm         string `json:"provider_npm,omitempty" gorm:"type:varchar(255)"`
+	ReleaseDate         string `json:"release_date,omitempty" gorm:"type:varchar(32)"`
+	LastUpdated         string `json:"last_updated,omitempty" gorm:"type:varchar(32)"`
+	OpenWeights         *bool  `json:"open_weights,omitempty"`
+	CapAttachment       *bool  `json:"cap_attachment,omitempty"`
+	CapReasoning        *bool  `json:"cap_reasoning,omitempty"`
+	CapToolCall         *bool  `json:"cap_tool_call,omitempty"`
+	CapStructuredOutput *bool  `json:"cap_structured_output,omitempty"`
+	CapTemperature      *bool  `json:"cap_temperature,omitempty"`
+	Capabilities        string `json:"capabilities,omitempty" gorm:"type:text"`
+
+	HasMetadata            bool             `json:"has_metadata" gorm:"-"`
+	ConfiguredChannelCount int              `json:"configured_channel_count" gorm:"-"`
+	SquareState            ModelSquareState `json:"square_state" gorm:"-"`
 }
 
 func (mi *Model) Insert() error {
-	now := common.GetTimestamp()
-	mi.CreatedTime = now
-	mi.UpdatedTime = now
+	// 自上游对齐（design 1.3）：走 metadataTransaction 统一事务（与 Vendor 变更
+	// 互斥并可回滚），并在写入前校验 VendorID 引用；保留本地 status/sync_official
+	// 零值回写语义。
+	return metadataTransaction(func(tx *gorm.DB) error {
+		if err := validateModelVendor(tx, mi.VendorID); err != nil {
+			return err
+		}
+		now := common.GetTimestamp()
+		mi.CreatedTime = now
+		mi.UpdatedTime = now
 
-	// 保存原始值（因为 Create 后可能被 GORM 的 default 标签覆盖为 1）
-	originalStatus := mi.Status
-	originalSyncOfficial := mi.SyncOfficial
+		// 保存原始值（因为 Create 后可能被 GORM 的 default 标签覆盖为 1）
+		originalStatus := mi.Status
+		originalSyncOfficial := mi.SyncOfficial
 
-	// 先创建记录（GORM 会对零值字段应用默认值）
-	if err := DB.Create(mi).Error; err != nil {
-		return err
-	}
+		// 先创建记录（GORM 会对零值字段应用默认值）
+		if err := tx.Create(mi).Error; err != nil {
+			return err
+		}
 
-	// 使用保存的原始值进行更新，确保零值能正确保存
-	return DB.Model(&Model{}).Where("id = ?", mi.Id).Updates(map[string]interface{}{
-		"status":        originalStatus,
-		"sync_official": originalSyncOfficial,
-	}).Error
+		// 恢复内存对象中的原始值（GORM 的 default 标签会在 Create 后把
+		// status/sync_official 覆盖为 1），与上游 Insert 语义一致。
+		mi.Status, mi.SyncOfficial = originalStatus, originalSyncOfficial
+
+		// 使用保存的原始值进行更新，确保零值能正确保存
+		return tx.Model(&Model{}).Where("id = ?", mi.Id).Updates(map[string]interface{}{
+			"status":        originalStatus,
+			"sync_official": originalSyncOfficial,
+		}).Error
+	})
 }
 
 func IsModelNameDuplicated(id int, name string) (bool, error) {
@@ -91,18 +121,138 @@ func IsModelNameDuplicated(id int, name string) (bool, error) {
 }
 
 func (mi *Model) Update() error {
-	mi.UpdatedTime = common.GetTimestamp()
-	// 使用 Select 强制更新所有字段，包括零值
-	return DB.Model(&Model{}).Where("id = ?", mi.Id).
-		Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "updated_time",
-			"display_name", "family", "provider_npm", "release_date", "last_updated",
-			"open_weights", "cap_attachment", "cap_reasoning", "cap_tool_call", "cap_structured_output", "cap_temperature",
-			"capabilities").
-		Updates(mi).Error
+	// 自上游对齐：metadataTransaction + validateModelVendor（VendorID 非法/引用已删
+	// 供应商时报错）；保留本地富模型元数据字段的 Select 更新列表。
+	return metadataTransaction(func(tx *gorm.DB) error {
+		if err := validateModelVendor(tx, mi.VendorID); err != nil {
+			return err
+		}
+		mi.UpdatedTime = common.GetTimestamp()
+		// 使用 Select 强制更新所有字段，包括零值
+		return tx.Model(&Model{}).Where("id = ?", mi.Id).
+			Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "updated_time",
+				"display_name", "family", "provider_npm", "release_date", "last_updated",
+				"open_weights", "cap_attachment", "cap_reasoning", "cap_tool_call", "cap_structured_output", "cap_temperature",
+				"capabilities").
+			Updates(mi).Error
+	})
 }
 
 func (mi *Model) Delete() error {
-	return DB.Delete(mi).Error
+	// 自上游对齐：走 DeleteModelMetadata 原子删除（同一 metadataTransaction 锁链，
+	// 与并发 Vendor 操作互斥；不清理渠道/价格配置）。
+	_, err := DeleteModelMetadata([]int{mi.Id}, false, false)
+	return err
+}
+
+// ModelDeleteResult 与 DeleteModelMetadata 从上游补回（design 1.3）：
+// model_management_test.go（已取上游 1669 行）直接引用该类型与函数。
+type ModelDeleteResult struct {
+	DeletedCount    int `json:"deleted_count"`
+	UpdatedChannels int `json:"updated_channels"`
+}
+
+// DeleteModelMetadata optionally removes exact model names from every channel.
+// Channel removal requires exact-match metadata records. Pricing removal
+// clears the selected names without expanding metadata matching rules.
+func DeleteModelMetadata(ids []int, removeFromChannels, removePricing bool) (ModelDeleteResult, error) {
+	result := ModelDeleteResult{}
+	if len(ids) == 0 || len(ids) > 1000 {
+		return result, errors.New("select between 1 and 1000 models")
+	}
+	selected := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return result, errors.New("invalid model ID")
+		}
+		selected[id] = struct{}{}
+	}
+	modelIDs := make([]int, 0, len(selected))
+	for id := range selected {
+		modelIDs = append(modelIDs, id)
+	}
+	sort.Ints(modelIDs)
+	names := make(map[string]struct{}, len(modelIDs))
+	deleteRecords := func(tx *gorm.DB) error {
+		var records []Model
+		if err := lockForUpdate(tx).Where("id IN ?", modelIDs).Order("id").Find(&records).Error; err != nil {
+			return err
+		}
+		if len(records) != len(modelIDs) {
+			return errors.New("selected models changed; reload before deleting")
+		}
+		for _, record := range records {
+			if removeFromChannels && record.NameRule != NameRuleExact {
+				return errors.New("only exact-match models can be removed from channels")
+			}
+			names[record.ModelName] = struct{}{}
+		}
+		if removeFromChannels {
+			var channels []Channel
+			// Read only routing fields. Lock channels in a consistent order, then
+			// update models and abilities in the same transaction as metadata.
+			if err := lockForUpdate(tx).Select("id", "models", "status", "group", "priority", "weight", "tag").Order("id").Find(&channels).Error; err != nil {
+				return err
+			}
+			for _, channel := range channels {
+				models := channel.GetModels()
+				remaining := make([]string, 0, len(models))
+				for _, name := range models {
+					if _, remove := names[strings.TrimSpace(name)]; !remove {
+						remaining = append(remaining, name)
+					}
+				}
+				if len(remaining) == len(models) {
+					continue
+				}
+				channel.Models = strings.Join(remaining, ",")
+				if err := tx.Model(&Channel{}).Where("id = ?", channel.Id).Update("models", channel.Models).Error; err != nil {
+					return err
+				}
+				if err := channel.UpdateAbilities(tx); err != nil {
+					return err
+				}
+				result.UpdatedChannels++
+			}
+		}
+		if err := tx.Where("id IN ?", modelIDs).Delete(&Model{}).Error; err != nil {
+			return err
+		}
+		result.DeletedCount = len(records)
+		return nil
+	}
+	var err error
+	if removePricing {
+		// Use the pricing mutation path so both option persistence and runtime
+		// publication stay serialized with ordinary pricing saves. All database
+		// writes share one transaction; runtime prices publish only after commit.
+		metadataMutationMu.Lock()
+		defer metadataMutationMu.Unlock()
+		err = mutateModelPricingOptions(func(tx *gorm.DB, values map[string]map[string]any) error {
+			if err := lockMetadataMutation(tx); err != nil {
+				return err
+			}
+			if err := deleteRecords(tx); err != nil {
+				return err
+			}
+			for _, entries := range values {
+				for name := range names {
+					delete(entries, name)
+				}
+			}
+			return nil
+		})
+	} else {
+		err = metadataTransaction(deleteRecords)
+	}
+	if err != nil {
+		return ModelDeleteResult{}, err
+	}
+	if result.UpdatedChannels > 0 {
+		InitChannelCache()
+	}
+	RefreshPricing()
+	return result, nil
 }
 
 // MatchesName applies a metadata rule to a concrete channel model name.
@@ -166,7 +316,7 @@ func GetVendorModelCounts() (map[int64]int64, error) {
 
 // GetAllProviderNPMs 返回 models 表里所有去重、非空的 provider_npm 值（按名称排序）。
 // 用于管理端 NPM 下拉候选项统计。PostgreSQL 下 provider_npm 可能为 NULL 或空串：
-// `<> ''` 对两者都会排除（NULL 参与比较结果为 NULL，不满足条件），
+// `<> ”` 对两者都会排除（NULL 参与比较结果为 NULL，不满足条件），
 // SQLite/MySQL 同理。仅做聚合查询，不做任何 schema 变更。
 func GetAllProviderNPMs() ([]string, error) {
 	var npms []string
@@ -265,6 +415,163 @@ func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (m
 		result[r.Model] = r.ChannelType
 	}
 	return result, nil
+}
+
+// ModelConnection 与 GetModelConnections：自上游补回，供 FillModelSquareStates
+// 计算模型可用性使用。
+type ModelConnection struct {
+	AbilityWithChannel
+	ChannelName string `json:"channel_name"`
+}
+
+func GetModelConnections() ([]ModelConnection, error) {
+	var connections []ModelConnection
+	err := DB.Table("abilities").
+		Select("abilities.*, channels.type as channel_type, channels.name as channel_name").
+		Joins("JOIN channels ON abilities.channel_id = channels.id").
+		Where("abilities.enabled = ? AND channels.status = ?", true, common.ChannelStatusEnabled).
+		Order("abilities.model, abilities.channel_id").
+		Scan(&connections).Error
+	return connections, err
+}
+
+// FillModelSquareStates applies the same metadata policy as the public catalog
+// endpoint: exact rows read their configured or explicit state, while rule rows
+// aggregate the states of every configured name they match.
+// （自上游补回，controller 层 enrichModels / square_state 过滤依赖）
+func FillModelSquareStates(rows []*Model, configured map[string][]int, connections []ModelConnection) error {
+	var metadata []Model
+	if err := DB.Find(&metadata).Error; err != nil {
+		return err
+	}
+	nameSet := make(map[string]struct{}, len(configured))
+	for name := range configured {
+		nameSet[name] = struct{}{}
+	}
+	for _, row := range rows {
+		if row != nil && row.NameRule == NameRuleExact {
+			nameSet[row.ModelName] = struct{}{}
+		}
+	}
+	names := make([]string, 0, len(nameSet))
+	for name := range nameSet {
+		names = append(names, name)
+	}
+	resolved := resolveModelMetadata(metadata, names)
+	available := make(map[string]bool)
+	for _, connection := range connections {
+		available[connection.Model] = true
+	}
+	states := make(map[string]ModelSquareState, len(names))
+	for _, name := range names {
+		state := ModelSquareUnavailable
+		if policy := resolved[name]; policy != nil && policy.Status != 1 {
+			state = ModelSquareHidden
+		} else if available[name] {
+			state = ModelSquareVisible
+		}
+		states[name] = state
+	}
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		if row.NameRule == NameRuleExact {
+			row.SquareState = states[row.ModelName]
+			continue
+		}
+		total, visible, hidden := 0, 0, 0
+		for name := range configured {
+			if !row.MatchesName(name) {
+				continue
+			}
+			total++
+			switch states[name] {
+			case ModelSquareVisible:
+				visible++
+			case ModelSquareHidden:
+				hidden++
+			}
+		}
+		row.SquareState = ModelSquareUnavailable
+		switch {
+		case total == 0:
+			if row.Status != 1 {
+				row.SquareState = ModelSquareHidden
+			}
+		case hidden == total:
+			row.SquareState = ModelSquareHidden
+		case visible == total:
+			row.SquareState = ModelSquareVisible
+		case visible > 0:
+			row.SquareState = ModelSquarePartial
+		}
+	}
+	return nil
+}
+
+// GetConfiguredModelChannels includes disabled channels and reads no credentials.
+// （自上游补回，供 SearchModelsWithChannels 使用）
+func GetConfiguredModelChannels() (map[string][]int, error) {
+	var channels []Channel
+	if err := DB.Select("id", "models").Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	configured := make(map[string][]int)
+	for _, channel := range channels {
+		for _, name := range normalizeLookupValues(channel.GetModels()) {
+			configured[name] = append(configured[name], channel.Id)
+		}
+	}
+	return configured, nil
+}
+
+// SearchModelsWithChannels augments metadata with concrete configured names.
+// Synthetic rows never persist and never affect the public pricing catalog.
+// （自上游补回，controller/model_meta.go 的 listModelsMeta 在
+// include_channel_models=true 时使用）
+func SearchModelsWithChannels(keyword, vendor, status, syncOfficial string, offset, limit int) ([]*Model, int64, error) {
+	records, _, err := SearchModels(keyword, vendor, status, syncOfficial, 0, -1)
+	if err != nil {
+		return nil, 0, err
+	}
+	_, filterStatus := parseModelStatusFilter(status)
+	_, filterSync := parseModelSyncFilter(syncOfficial)
+	if !filterStatus && !filterSync && (vendor == "" || vendor == "0") {
+		configured, err := GetConfiguredModelChannels()
+		if err != nil {
+			return nil, 0, err
+		}
+		var exactNames []string
+		if err := DB.Model(&Model{}).Where("name_rule = ?", NameRuleExact).Pluck("model_name", &exactNames).Error; err != nil {
+			return nil, 0, err
+		}
+		for _, name := range exactNames {
+			delete(configured, name)
+		}
+		names := make([]string, 0, len(configured))
+		for name := range configured {
+			if keyword == "" || strings.Contains(strings.ToLower(name), strings.ToLower(keyword)) {
+				names = append(names, name)
+			}
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			records = append(records, &Model{ModelName: name, NameRule: NameRuleExact})
+		}
+	}
+	total := len(records)
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= total {
+		return []*Model{}, int64(total), nil
+	}
+	end := total
+	if limit >= 0 && limit < total-offset {
+		end = offset + limit
+	}
+	return records[offset:end], int64(total), nil
 }
 
 func SearchModels(keyword string, vendor string, status string, syncOfficial string, offset int, limit int) ([]*Model, int64, error) {

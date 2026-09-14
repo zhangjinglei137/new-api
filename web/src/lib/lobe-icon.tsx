@@ -32,12 +32,14 @@ import { IconOpencode } from '@/assets/brand-icons/icon-opencode'
 import { IconCommandcode } from '@/assets/custom/icon-commandcode'
 import { IconRadeonCloud } from '@/assets/custom/icon-radeoncloud'
 import { IconSub2api } from '@/assets/custom/icon-sub2api'
+import { IconWan } from '@/assets/custom/icon-wan'
 
 const CUSTOM_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   Sub2API: IconSub2api,
   OpenCode: IconOpencode,
   CommandCode: IconCommandcode,
   RadeonCloud: IconRadeonCloud,
+  Wan: IconWan,
 }
 
 /**

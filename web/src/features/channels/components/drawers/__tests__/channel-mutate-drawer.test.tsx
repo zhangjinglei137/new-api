@@ -26,6 +26,8 @@ vi.mock('@/lib/lobe-icon', () => ({
 const { QueryClient, QueryClientProvider } =
   await import('@tanstack/react-query')
 const { api } = await import('@/lib/api')
+const { ROLE } = await import('@/lib/roles')
+const { useAuthStore } = await import('@/stores/auth-store')
 const { ChannelsProvider } = await import('../../channels-provider')
 const { ChannelMutateDrawer } = await import('../channel-mutate-drawer')
 
@@ -47,6 +49,8 @@ function installApiFixtures(): void {
       case '/api/channel/models':
         return { data: { success: true, data: [] } }
       case '/api/prefill_group':
+        return { data: { success: true, data: [] } }
+      case '/api/task_plugin_options':
         return { data: { success: true, data: [] } }
       case '/api/user/2fa/status':
         return { data: { success: true, data: { enabled: false } } }
@@ -105,6 +109,13 @@ function clickFooterCancel(): void {
 async function renderCreateDrawer(
   onOpenChange: (open: boolean) => void
 ): Promise<void> {
+  const originalAuth = useAuthStore.getState().auth
+  useAuthStore.setState({
+    auth: {
+      ...originalAuth,
+      user: { id: 1, username: 'root', role: ROLE.SUPER_ADMIN },
+    },
+  })
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -119,6 +130,12 @@ async function renderCreateDrawer(
       </ChannelsProvider>
     </QueryClientProvider>
   )
+  // The upstream drawer starts from the provider picker; pick one to reach
+  // the create form.
+  const providerOption = await screen.findByRole('option', {
+    name: /^OpenAI /,
+  })
+  fireEvent.click(providerOption)
   await waitFor(() => {
     expect(getControlByLabel('Name *')).toBeTruthy()
   })
