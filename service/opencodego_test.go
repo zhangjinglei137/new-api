@@ -195,9 +195,9 @@ func TestParseOpenCodeGoUsage(t *testing.T) {
 		},
 		{
 			name: "missing percent uses -1 sentinel",
-			body: `{"usage":{"monthly":{"status":"ok","resetsAt":"2026-09-13T06:06:01.287Z"}}}`,
+			body: fmt.Sprintf(`{"usage":{"monthly":{"status":"ok","resetsAt":%q}}}`, futureReset),
 			wantWindows: []OpenCodeGoWindow{
-				{Period: "monthly", Status: "ok", UsedPercent: -1, RemainingPercent: -1, ResetAt: "2026-09-13T06:06:01.287Z"},
+				{Period: "monthly", Status: "ok", UsedPercent: -1, RemainingPercent: -1, ResetAt: futureReset},
 			},
 		},
 		{
