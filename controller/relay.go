@@ -345,7 +345,10 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			AutoBan: &autoBanInt,
 		}, nil
 	}
-	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
+	effectiveRetry := service.AffinityAdjustedRetry(c, retryParam.GetRetry())
+	cloned := *retryParam
+	cloned.SetRetry(effectiveRetry)
+	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(&cloned)
 	if err != nil {
 		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}

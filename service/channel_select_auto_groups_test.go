@@ -127,3 +127,20 @@ func TestCacheGetRandomSatisfiedChannelUsesTokenAutoGroupsWhenGlobalAutoIsEmpty(
 	assert.Equal(t, "default", selectedGroup)
 	assert.Equal(t, "default", common.GetContextKeyString(ctx, constant.ContextKeyAutoGroup))
 }
+
+func TestAffinityAdjustedRetry(t *testing.T) {
+	// 未命中亲和 → 不偏移
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{RuleName: "r"})
+	require.Equal(t, 1, AffinityAdjustedRetry(ctx, 1))
+	require.Equal(t, 7, AffinityAdjustedRetry(ctx, 7))
+
+	// 亲和命中 → retry>=1 时偏移 -1，retry=0 不偏移（0 为首轮快捷路径，不进入此分支）
+	ctx2 := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{RuleName: "r2"})
+	MarkChannelAffinityUsed(ctx2, "default", 6)
+	require.Equal(t, 0, AffinityAdjustedRetry(ctx2, 1))
+	require.Equal(t, 6, AffinityAdjustedRetry(ctx2, 7))
+	require.Equal(t, 0, AffinityAdjustedRetry(ctx2, 0))
+
+	// nil ctx → 不偏移
+	require.Equal(t, 1, AffinityAdjustedRetry(nil, 1))
+}

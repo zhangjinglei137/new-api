@@ -1017,3 +1017,13 @@ func AffinityConsumedFirstTry(c *gin.Context) bool {
 	b, ok := v.(bool)
 	return ok && b
 }
+
+// AffinityAdjustedRetry 返回用于候选池选择的有效 retry 索引：
+// 亲和渠道已消耗首轮尝试（retry=0）时，重试索引前移一位，使
+// 最高优先级渠道层（layer 0）得以参与候选池选择。
+func AffinityAdjustedRetry(c *gin.Context, retry int) int {
+	if retry > 0 && AffinityConsumedFirstTry(c) {
+		return retry - 1
+	}
+	return retry
+}
