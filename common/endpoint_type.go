@@ -36,6 +36,8 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 			constant.EndpointTypeOpenAIResponse,
 			constant.EndpointTypeAnthropic,
 		}
+	case constant.ChannelTypeVLLM, constant.ChannelTypeSGLang:
+		endpointTypes = GetAdvancedCustomPreset(channelType).SupportedEndpointTypesForModel(modelName)
 	case constant.ChannelTypeSora:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
 	case constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI:

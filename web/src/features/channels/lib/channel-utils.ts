@@ -58,6 +58,8 @@ export function getChannelTypeIcon(type: number): string {
     99: 'OpenCode', // OpenCode Go
     97: 'SenseNova', // SenseNova
     95: 'RadeonCloud', // RadeonCloud
+    62: 'Vllm', // vLLM
+    63: 'SGLang', // SGLang
     3: 'Azure', // Azure
 
     // Anthropic

@@ -59,6 +59,8 @@ const (
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
 	ChannelTypeTaskPlugin     = 61
+	ChannelTypeVLLM           = 62
+	ChannelTypeSGLang         = 63
 	ChannelTypeRadeonCloud    = 95
 	ChannelTypeSenseNova      = 97
 	ChannelTypeCommandCode    = 98
@@ -242,6 +244,8 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSenseNova:      "SenseNova",
 	ChannelTypeCommandCode:    "CommandCode",
 	ChannelTypeOpenCodeGo:     "OpenCode Go",
+	ChannelTypeVLLM:           "vLLM",
+	ChannelTypeSGLang:         "SGLang",
 }
 
 func GetChannelTypeName(channelType int) string {
@@ -313,4 +317,14 @@ func ResolveSpecialPlan(channelType int, baseURL, endpointProfile string) (Chann
 
 func IsAdvancedCustomChannelType(t int) bool {
 	return t == ChannelTypeAdvancedCustom || t == ChannelTypeOpenCodeGo
+}
+
+// IsAdvancedCustomChannel includes named channels backed by route presets.
+func IsAdvancedCustomChannel(channelType int) bool {
+	switch channelType {
+	case ChannelTypeAdvancedCustom, ChannelTypeVLLM, ChannelTypeSGLang:
+		return true
+	default:
+		return false
+	}
 }
