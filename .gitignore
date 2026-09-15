@@ -69,5 +69,3 @@ docs/openspec/
 # Comet per-change runtime state inside OpenSpec changes.
 docs/openspec/changes/**/.comet/
 docs/openspec/changes/**/.comet.yaml
-# Git rerere local conflict-reuse cache (machine-local only).
-.github/rerere-cache/

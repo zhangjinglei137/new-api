@@ -1,13 +1,13 @@
 name: Sync Upstream
 
 # 每天 UTC 00:00 自动把 QuantumNous/new-api 的 main 合并进本仓库 main。
-# 策略（本地优先）：
-#   - .gitattributes 按文件策略（model/channel.go merge=ours，配合 merge.ours.driver 生效）
-#   - channel_settings.go 不设策略：依赖默认三方 merge（追加字段不重叠自动合并）+ -X ours 兜底
-#   - 全局 -X ours 兜底 + git rerere 缓存重放已人工解决的冲突
-#   - go vet 编译验证关卡（防止 ours 丢弃上游必填字段导致编译失败）
+# 策略（本地优先 + 半自动）：
+#   - 默认三方 merge：追加/不重叠改动自动合并；rerere 自动重放已人工解决的冲突
+#   - 冲突无法自动解决时不兜底取本地侧（-X ours 会整文件丢弃上游新增符号导致
+#     vet 编译失败），而是中止 merge 并创建/更新 issue 等待人工处理
+#   - go vet 双模块验证关卡：合并结果必须通过 vet 才 push，防止上游必填符号缺失
 # 冲突自动解决后 push（触发 build-image.yml 重建镜像）；上游已包含在 HEAD 则短路不 push。
-# 失败兜底：自动创建带 sync-upstream label 的 issue 通知，不硬失败、不推坏代码。
+# 失败兜底：自动创建或更新带 sync-upstream label 的 issue 通知，不硬失败、不推坏代码。
 
 on:
   schedule:
@@ -36,8 +36,6 @@ jobs:
         run: |
           git config rerere.enabled true
           git config rerere.autoupdate true
-          # 自定义 ours 驱动，使 .gitattributes 中 model/channel.go merge=ours 生效（git 无内置 ours 驱动）
-          git config merge.ours.driver true
 
       - name: Restore rerere seed from repo
         run: |
@@ -73,7 +71,7 @@ jobs:
             echo "skipped=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Merge upstream into main (local-first + rerere)
+      - name: Merge upstream into main (three-way + rerere)
         id: merge
         if: steps.check.outputs.skipped == 'false'
         run: |
@@ -85,24 +83,21 @@ jobs:
           git log --oneline HEAD..upstream/main >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-          # 第一层：默认三方 merge（.gitattributes ours/union + rerere 重放历史方案自动生效）
+          # 默认三方 merge（rerere 命中优先重放已人工解决的方案）。
+          # 冲突无法自动解决时中止并等待人工，绝不 -X ours 兜底：
+          # 整文件取本地侧会静默丢弃上游新增符号，合并结果必然破坏编译。
           if git merge --no-edit upstream/main >/tmp/merge.log 2>&1; then
             echo "merge=success" >> "$GITHUB_OUTPUT"
           else
-            echo "Default merge had conflicts, applying -X ours fallback..."
-            # 先保存冲突文件列表（abort 后 diff 无法再列出未合并路径），供 verify 失败时排查
+            echo "merge=conflicted" >> "$GITHUB_OUTPUT"
             git diff --name-only --diff-filter=U > /tmp/conflicted-files.txt 2>/dev/null || true
+            echo "### Merge conflicts (need manual resolution)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/conflicted-files.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "unknown" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
             git merge --abort 2>/dev/null || true
-            # 第二层：-X ours 全局兜底（rerere 命中优先重放已解决的方案，未命中取本地侧）
-            if git merge --no-edit -X ours upstream/main >/tmp/merge-ours.log 2>&1; then
-              echo "merge=success-ours" >> "$GITHUB_OUTPUT"
-            else
-              echo "merge=failed" >> "$GITHUB_OUTPUT"
-              git diff --name-only --diff-filter=U > /tmp/conflicted-files.txt 2>/dev/null || true
-              git merge --abort 2>/dev/null || true
-              # 必须非零退出：否则 run 显示 success，failure() 兜底（issue 通知）永不触发
-              exit 1
-            fi
+            # 必须非零退出：否则 run 显示 success，failure() 兜底（issue 通知）永不触发
+            exit 1
           fi
 
       - name: Set up Go
@@ -122,7 +117,7 @@ jobs:
 
       - name: Verify build (fail-safe gate)
         id: verify
-        if: steps.merge.outputs.merge == 'success' || steps.merge.outputs.merge == 'success-ours'
+        if: steps.merge.outputs.merge == 'success'
         run: |
           set +e
           GOWORK=off go vet ./... > /tmp/vet-root.log 2>&1
@@ -151,7 +146,7 @@ jobs:
           fi
 
       - name: Save rerere cache
-        if: steps.merge.outputs.merge == 'success' || steps.merge.outputs.merge == 'success-ours'
+        if: steps.merge.outputs.merge == 'success'
         uses: actions/cache/save@v4
         with:
           path: .git/rr-cache
@@ -170,7 +165,7 @@ jobs:
         if: steps.check.outputs.skipped == 'false' && steps.verify.outputs.verify == 'passed'
         run: git push origin main
 
-      - name: Create issue on failure
+      - name: Create or update issue on failure
         if: failure() && steps.check.outputs.skipped == 'false'
         uses: actions/github-script@v7
         with:
@@ -181,10 +176,28 @@ jobs:
               ? fs.readFileSync('/tmp/conflicted-files.txt', 'utf8')
               : 'see run logs';
             const commits = execSync('git log --oneline HEAD..upstream/main 2>/dev/null || echo unknown').toString();
-            await github.rest.issues.create({
+            const body = `每日上游同步无法自动解决冲突。\n\n**上游提交：**\n\`\`\`\n${commits}\`\`\`\n\n**冲突文件：**\n\`\`\`\n${conflicted}\`\`\`\n\n处理：手动合并并解决冲突，push 后重跑本 workflow；rerere 缓存会自动更新。`;
+            // 复用已存在的未关闭 sync-upstream issue，避免每次失败都堆积新 issue
+            const existing = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: 'Sync upstream 失败 - 需人工处理',
-              body: `每日上游同步无法自动解决冲突。\n\n**上游提交：**\n\`\`\`\n${commits}\`\`\`\n\n**冲突文件：**\n\`\`\`\n${conflicted}\`\`\`\n\n处理：手动合并并解决冲突，push 后重跑本 workflow；rerere 缓存会自动更新。`,
-              labels: ['sync-upstream', 'auto-created']
+              state: 'open',
+              labels: 'sync-upstream',
             });
+            const found = existing.data.find((i) => i.labels.some((l) => l.name === 'sync-upstream'));
+            if (found) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: found.number,
+                body: body + `\n\n---\n更新于 ${new Date().toISOString()}：${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Sync upstream 失败 - 需人工处理',
+                body,
+                labels: ['sync-upstream', 'auto-created'],
+              });
+            }
