@@ -220,7 +220,7 @@ func TestCacheGetRandomWithPriorityKeepsCrossGroupRetryState(t *testing.T) {
 	require.NotNil(t, ch1)
 	require.Equal(t, 2, ch1.Id, "未命中亲和 retry=1 应选中 default 组层 1 的渠道 2")
 
-		// 关键断言：priorityRetry 偏移只影响层索引、不写回 param；内部跨组状态机变异
+	// 关键断言：priorityRetry 偏移只影响层索引、不写回 param；内部跨组状态机变异
 	// （SetRetry(0) + ResetRetryNextTry）仍作用在原始 param 上（复现既有行为）。
 	// fixture 中 common.RetryTimes=0 且 crossGroupRetry=true，auto 命中路径
 	// priorityRetry(=1) >= RetryTimes(=0) 恒成立，因此调用后 param.Retry 被状态机
