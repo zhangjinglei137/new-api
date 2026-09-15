@@ -33,6 +33,8 @@ type SystemVersion = {
   stage: number
   sequence: bigint
   revision: bigint
+  /** Fork 构建时间戳（YYYYMMDDHHMM，如 202609151514）；上游原始 tag 为 0。 */
+  timestamp: bigint
 }
 
 const releaseStages: Record<string, number> = {
@@ -50,7 +52,7 @@ export function parseSystemVersion(
   const match = value
     ?.trim()
     .match(
-      /^v?(\d+(?:\.\d+){2,})(?:-(alpha|beta|rc|patch)(?:\.(\d+))?(?:-i18nfix\.(\d+))?)?(?:\+[\da-zA-Z.-]+)?$/
+      /^v?(\d+(?:\.\d+){2,})(?:-(alpha|beta|rc|patch)(?:\.(\d+))?(?:-i18nfix\.(\d+))?)?(?:-(\d{12}))?(?:\+[\da-zA-Z.-]+)?$/
     )
   if (!match || (match[4] && match[2] !== 'rc')) return null
 
@@ -62,6 +64,7 @@ export function parseSystemVersion(
     stage: releaseStages[match[2] ?? 'stable'],
     sequence: BigInt(match[3] ?? '0'),
     revision: BigInt(match[4] ?? '0'),
+    timestamp: BigInt(match[5] ?? '0'),
   }
 }
 
@@ -81,6 +84,7 @@ export function compareSystemVersions(
   if (a.stage !== b.stage) return a.stage < b.stage ? -1 : 1
   if (a.sequence !== b.sequence) return a.sequence < b.sequence ? -1 : 1
   if (a.revision !== b.revision) return a.revision < b.revision ? -1 : 1
+  if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? -1 : 1
   return 0
 }
 
@@ -111,5 +115,5 @@ export function selectLatestRelease(payload: unknown): SystemRelease | null {
 }
 
 export function getSystemReleaseUrl(release: SystemRelease): string {
-  return `https://github.com/QuantumNous/new-api/releases/tag/${encodeURIComponent(release.tag_name)}`
+  return `https://github.com/zhangjinglei137/new-api/releases/tag/${encodeURIComponent(release.tag_name)}`
 }

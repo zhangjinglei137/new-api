@@ -42,6 +42,11 @@ describe('system release ordering', () => {
     ['', 'v1.0.0', null],
     ['v1.0.0-custom.1', 'v1.0.0', null],
     ['v1.0.0-rc.36-2-gabcdef', 'v1.0.0', null],
+    // Fork 构建版式：上游 tag + 时间戳（YYYYMMDDHHMM）
+    ['v1.0.0-rc.37-202609151514', 'v1.0.0-rc.37', 1],
+    ['v1.0.0-rc.37-202609151426', 'v1.0.0-rc.37-202609151514', -1],
+    ['v1.0.0-rc.37-202609151514', 'v1.0.0-rc.37-202609151514', 0],
+    ['v1.0.0-rc.36-202609121652', 'v1.0.0-rc.37-202609151514', -1],
   ])('compares %s against %s as %s', (current, latest, expected) => {
     expect(compareSystemVersions(current, latest)).toBe(expected)
   })
@@ -52,9 +57,10 @@ describe('system release ordering', () => {
       { tag_name: 'v0.13.2', draft: false, prerelease: false },
       { tag_name: 'v2.0.0', draft: true, prerelease: false },
       { tag_name: 'v1.0.0-rc.36', draft: false, prerelease: true },
+      { tag_name: 'v1.0.0-rc.37-202609151514', draft: false, prerelease: true },
       { tag_name: 'nightly', draft: false, prerelease: true },
     ]
-    expect(selectLatestRelease(releases)?.tag_name).toBe('v1.0.0-rc.36')
+    expect(selectLatestRelease(releases)?.tag_name).toBe('v1.0.0-rc.37-202609151514')
   })
 
   test('returns no release for an empty list or a list containing only drafts', () => {
