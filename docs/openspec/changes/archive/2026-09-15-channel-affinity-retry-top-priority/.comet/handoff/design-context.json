@@ -1,0 +1,14 @@
+{
+  "change": "channel-affinity-retry-top-priority",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "0547d0a7ea1a4014986e6d6547800c1d01159ba3ea50f04484aa5c9b916b5568",
+  "files": [
+    { "path": "docs/openspec/changes/channel-affinity-retry-top-priority/proposal.md", "sha256": "70c2b55d8e988e879b4d60ea3beb39e4b4389693cafd90580f1a58df4ce8c9f7" },
+    { "path": "docs/openspec/changes/channel-affinity-retry-top-priority/design.md", "sha256": "f51f51a48ce83202273f4a05d389e36c7d30942406cc40c20c317df6cd2e8b64" },
+    { "path": "docs/openspec/changes/channel-affinity-retry-top-priority/tasks.md", "sha256": "375c05e1661746dd9d962de9b46f21162ae16cdc60128d72b77cf6ce37d7aad1" },
+    { "path": "docs/openspec/changes/channel-affinity-retry-top-priority/specs/channels/spec.md", "sha256": "778089f8e800dec72faf06ab6ae4aef4059f929f58a55162d421ee3eb42ba21a" }
+  ]
+}
