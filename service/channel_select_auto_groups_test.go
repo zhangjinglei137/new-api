@@ -191,3 +191,71 @@ func intPtr(v int) *int {
 func int64Ptr(v int64) *int64 {
 	return &v
 }
+
+func TestCacheGetRandomWithPriorityKeepsCrossGroupRetryState(t *testing.T) {
+	setupChannelSelectAutoGroupsTest(t)
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	common.SetContextKey(ctx, constant.ContextKeyTokenCrossGroupRetry, true)
+	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+
+	// 组 default：渠道 1(pri 20)、渠道 2(pri 19)；组 vip：渠道 3(pri 18)、渠道 4(pri 17)
+	channels := []model.Channel{
+		{Id: 1, Type: 1, Key: "k1", Models: "m1", Group: "default", Status: common.ChannelStatusEnabled, Priority: int64Ptr(20)},
+		{Id: 2, Type: 1, Key: "k2", Models: "m1", Group: "default", Status: common.ChannelStatusEnabled, Priority: int64Ptr(19)},
+		{Id: 3, Type: 1, Key: "k3", Models: "m1", Group: "vip", Status: common.ChannelStatusEnabled, Priority: int64Ptr(18)},
+		{Id: 4, Type: 1, Key: "k4", Models: "m1", Group: "vip", Status: common.ChannelStatusEnabled, Priority: int64Ptr(17)},
+	}
+	require.NoError(t, model.DB.Create(&channels).Error)
+	// 为两个组播种 Ability（group 集合）
+	require.NoError(t, model.DB.Create(&model.Ability{Group: "default", Model: "m1", ChannelId: 1, Enabled: true, Priority: int64Ptr(20)}).Error)
+	require.NoError(t, model.DB.Create(&model.Ability{Group: "vip", Model: "m1", ChannelId: 3, Enabled: true, Priority: int64Ptr(18)}).Error)
+	model.InitChannelCache()
+	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`["default","vip"]`))
+
+	param := &RetryParam{Ctx: ctx, TokenGroup: "auto", ModelName: "m1", Retry: intPtr(1)}
+	// 未命中亲和：WithPriority(param, 1) 与 CacheGetRandomSatisfiedChannel(param) 等价
+	ch1, _, err1 := CacheGetRandomSatisfiedChannelWithPriority(param, 1)
+	require.NoError(t, err1)
+	require.NotNil(t, ch1)
+	require.Equal(t, 2, ch1.Id, "未命中亲和 retry=1 应选中 default 组层 1 的渠道 2")
+
+		// 关键断言：priorityRetry 偏移只影响层索引、不写回 param；内部跨组状态机变异
+	// （SetRetry(0) + ResetRetryNextTry）仍作用在原始 param 上（复现既有行为）。
+	// fixture 中 common.RetryTimes=0 且 crossGroupRetry=true，auto 命中路径
+	// priorityRetry(=1) >= RetryTimes(=0) 恒成立，因此调用后 param.Retry 被状态机
+	// 置 0、resetNextTry 置位——这正是 clone 方案会丢失的变异（回归根因）。
+	// 对照实证：原入口 CacheGetRandomSatisfiedChannel 同一场景下事后状态完全相同
+	// （GetRetry()=0, resetNextTry=true），二者等价。
+	require.Equal(t, 0, param.GetRetry(), "跨组状态机 SetRetry(0) 必须作用在原始 param 上")
+	require.True(t, param.resetNextTry, "ResetRetryNextTry 必须在原始 param 上置位")
+}
+
+func TestCacheGetWithPriorityAffinityOffsetKeepsStateMachine(t *testing.T) {
+	setupChannelSelectAutoGroupsTest(t)
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	common.SetContextKey(ctx, constant.ContextKeyTokenCrossGroupRetry, true)
+	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+
+	channels := []model.Channel{
+		{Id: 1, Type: 1, Key: "k1", Models: "m1", Group: "default", Status: common.ChannelStatusEnabled, Priority: int64Ptr(20)},
+		{Id: 2, Type: 1, Key: "k2", Models: "m1", Group: "default", Status: common.ChannelStatusEnabled, Priority: int64Ptr(19)},
+	}
+	require.NoError(t, model.DB.Create(&channels).Error)
+	require.NoError(t, model.DB.Create(&model.Ability{Group: "default", Model: "m1", ChannelId: 1, Enabled: true, Priority: int64Ptr(20)}).Error)
+	model.InitChannelCache()
+	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`["default"]`))
+
+	// 亲和命中：retry=1 偏移为 0 → 选中 highest priority（渠道 1）
+	affCtx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{RuleName: "r"})
+	MarkChannelAffinityUsed(affCtx, "default", 6)
+	effective := AffinityAdjustedRetry(affCtx, 1)
+	require.Equal(t, 0, effective)
+	param := &RetryParam{Ctx: affCtx, TokenGroup: "default", ModelName: "m1", Retry: intPtr(1)}
+	ch2, _, err2 := CacheGetRandomSatisfiedChannelWithPriority(param, effective)
+	require.NoError(t, err2)
+	require.NotNil(t, ch2)
+	require.Equal(t, 1, ch2.Id, "亲和命中偏移后应选中最高优先级渠道 1")
+	require.Equal(t, 1, param.GetRetry(), "循环计数不被偏移污染")
+}

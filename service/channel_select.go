@@ -73,7 +73,15 @@ func (p *RetryParam) ResetRetryNextTry() {
 }
 
 // CacheGetRandomSatisfiedChannel tries to get a random channel that satisfies the requirements.
-// 尝试获取一个满足要求的随机渠道。
+// 尝试获取一个满足要求的随机渠道。转发包装：优先级层索引默认取 param 当前的循环计数，行为与历史一致。
+func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, error) {
+	return CacheGetRandomSatisfiedChannelWithPriority(param, param.GetRetry())
+}
+
+// CacheGetRandomSatisfiedChannelWithPriority 与 CacheGetRandomSatisfiedChannel 等价，
+// 但优先级层索引由显式参数 priorityRetry 控制，与 param 的循环计数/跨组状态机解耦。
+// 传入的 priorityRetry 只影响优先级层索引；:161/:179 的 SetRetry(0) 与 :180 的
+// ResetRetryNextTry 等跨组状态机变异仍然原样作用于 param 指针（既有行为不变）。
 //
 // For "auto" tokenGroup with cross-group Retry enabled:
 // 对于启用了跨分组重试的 "auto" tokenGroup：
@@ -107,7 +115,7 @@ func (p *RetryParam) ResetRetryNextTry() {
 //
 //	Retry=3: GroupB, priority1 (startRetryIndex=2, priorityRetry=1)
 //	         分组B, 优先级1
-func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, error) {
+func CacheGetRandomSatisfiedChannelWithPriority(param *RetryParam, priorityRetry int) (*model.Channel, string, error) {
 	var channel *model.Channel
 	var err error
 	selectGroup := param.TokenGroup
@@ -133,9 +141,8 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 
 		for i := startGroupIndex; i < len(autoGroups); i++ {
 			autoGroup := autoGroups[i]
-			// Calculate priorityRetry for current group
-			// 计算当前分组的 priorityRetry
-			priorityRetry := param.GetRetry()
+			// priorityRetry 由显式参数控制（解耦优先级层索引与循环计数/跨组状态机）
+			// priorityRetry is controlled by the explicit parameter
 			// If moved to a new group, reset priorityRetry and update startRetryIndex
 			// 如果切换到新分组，重置 priorityRetry 并更新 startRetryIndex
 			if i > startGroupIndex {
@@ -189,7 +196,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 		channel, err = model.GetRandomSatisfiedChannel(
 			param.TokenGroup,
 			param.ModelName,
-			param.GetRetry(),
+			priorityRetry,
 			filters,
 		)
 		if err != nil {
