@@ -6,6 +6,9 @@ name: Sync Upstream
 #   - 冲突无法自动解决时不兜底取本地侧（-X ours 会整文件丢弃上游新增符号导致
 #     vet 编译失败），而是中止 merge 并创建/更新 issue 等待人工处理
 #   - go vet 双模块验证关卡：合并结果必须通过 vet 才 push，防止上游必填符号缺失
+#   - rerere seed 以 .github/rerere-cache/ 为唯一事实源（已入库，每次从仓库恢复；
+#     不使用 actions/cache，避免旧缓存覆盖新种子）。人工解决冲突后需手动把
+#     .git/rr-cache 新记录回填到该目录并提交（CI 上游已含 HEAD 时短路，无法自动收录）。
 # 冲突自动解决后 push（触发 build-image.yml 重建镜像）；上游已包含在 HEAD 则短路不 push。
 # 失败兜底：自动创建或更新带 sync-upstream label 的 issue 通知，不硬失败、不推坏代码。
 
@@ -46,14 +49,6 @@ jobs:
           else
             echo "No rerere seed in repo"
           fi
-
-      - name: Restore rerere cache
-        uses: actions/cache@v4
-        with:
-          path: .git/rr-cache
-          key: rerene-${{ github.run_id }}
-          restore-keys: |
-            rerene-
 
       - name: Fetch upstream
         run: |
@@ -133,27 +128,17 @@ jobs:
             echo '--- relaykit ---' >> "$GITHUB_STEP_SUMMARY"
             tail -40 /tmp/vet-relaykit.log >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            # 记录冲突文件列表，便于人工排查 merge 需要处理的范围
-            echo "### Conflicted files" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            cat /tmp/conflicted-files.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "unknown" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            git merge --abort 2>/dev/null || true
+            # merge 已成功提交（无 in-progress merge），这里只需丢弃未推送的合并
+            # 结果即可；冲突文件列表在 merge=success 时不存在，issue 会附 vet 日志。
+            git reset --hard origin/main 2>/dev/null || true
             # 必须非零退出：否则 run 显示 success，failure() 兜底（issue 通知）永不触发
             exit 1
           else
             echo "verify=passed" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Save rerere cache
-        if: steps.merge.outputs.merge == 'success'
-        uses: actions/cache/save@v4
-        with:
-          path: .git/rr-cache
-          key: rerene-${{ github.run_id }}
-
       - name: Update rerere seed into merge commit
-        if: steps.verify.outputs.verify == 'passed'
+        if: steps.merge.outputs.merge == 'success' && steps.verify.outputs.verify == 'passed'
         run: |
           rm -rf .github/rerere-cache
           mkdir -p .github/rerere-cache
@@ -175,8 +160,10 @@ jobs:
             const conflicted = fs.existsSync('/tmp/conflicted-files.txt')
               ? fs.readFileSync('/tmp/conflicted-files.txt', 'utf8')
               : 'see run logs';
+            const vetLog = (fs.existsSync('/tmp/vet-root.log') ? fs.readFileSync('/tmp/vet-root.log', 'utf8') : '')
+              + (fs.existsSync('/tmp/vet-relaykit.log') ? '\n--- relaykit ---\n' + fs.readFileSync('/tmp/vet-relaykit.log', 'utf8') : '');
             const commits = execSync('git log --oneline HEAD..upstream/main 2>/dev/null || echo unknown').toString();
-            const body = `每日上游同步无法自动解决冲突。\n\n**上游提交：**\n\`\`\`\n${commits}\`\`\`\n\n**冲突文件：**\n\`\`\`\n${conflicted}\`\`\`\n\n处理：手动合并并解决冲突，push 后重跑本 workflow；rerere 缓存会自动更新。`;
+            const body = `每日上游同步无法自动解决冲突。\n\n**上游提交：**\n\`\`\`\n${commits}\`\`\`\n\n**冲突文件：**\n\`\`\`\n${conflicted}\`\`\`\n\n**vet 日志（合并成功但编译失败时）：**\n\`\`\`\n${vetLog.slice(-3000) || '(none)'}\`\`\`\n\n**处理步骤：**\n1. 本地 \`git fetch upstream && git merge --no-edit upstream/main\`，解决冲突并保证 \`GOWORK=off go vet ./...\`（含 relaykit）通过。\n2. 提交合并结果，并**手动回填 rerere 种子**（CI 无法自动收录人工解决方案）：\n   \`\`\`bash\n   cp -r .git/rr-cache/* .github/rerere-cache/ 2>/dev/null || true\n   git add .github/rerere-cache\n   git commit\n   \`\`\`\n3. push 后重跑本 workflow。\n4. 若同一冲突反复失败（旧 seed 已过期），删除 \`.github/rerere-cache/<hash>/\` 中对应的过期 postimage 目录后重试。`;
             // 复用已存在的未关闭 sync-upstream issue，避免每次失败都堆积新 issue
             const existing = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
