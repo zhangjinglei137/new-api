@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import { compareSystemVersions, selectLatestRelease } from '../releases'
+import { compareSystemVersions } from '../releases'
 
 describe('system release ordering', () => {
   test.each([
@@ -49,31 +49,5 @@ describe('system release ordering', () => {
     ['v1.0.0-rc.36-202609121652', 'v1.0.0-rc.37-202609151514', -1],
   ])('compares %s against %s as %s', (current, latest, expected) => {
     expect(compareSystemVersions(current, latest)).toBe(expected)
-  })
-
-  test('selects the highest published version including pre-releases, regardless of order', () => {
-    const releases = [
-      { tag_name: 'v1.0.0-rc.19-i18nfix.2', draft: false, prerelease: true },
-      { tag_name: 'v0.13.2', draft: false, prerelease: false },
-      { tag_name: 'v2.0.0', draft: true, prerelease: false },
-      { tag_name: 'v1.0.0-rc.36', draft: false, prerelease: true },
-      { tag_name: 'v1.0.0-rc.37-202609151514', draft: false, prerelease: true },
-      { tag_name: 'nightly', draft: false, prerelease: true },
-    ]
-    expect(selectLatestRelease(releases)?.tag_name).toBe('v1.0.0-rc.37-202609151514')
-  })
-
-  test('returns no release for an empty list or a list containing only drafts', () => {
-    expect(selectLatestRelease([])).toBeNull()
-    expect(
-      selectLatestRelease([
-        { tag_name: 'v2.0.0', draft: true, prerelease: false },
-      ])
-    ).toBeNull()
-  })
-
-  test('rejects malformed payloads instead of reporting that the system is current', () => {
-    expect(() => selectLatestRelease({ message: 'bad response' })).toThrow()
-    expect(() => selectLatestRelease([{ tag_name: 42 }])).toThrow()
   })
 })

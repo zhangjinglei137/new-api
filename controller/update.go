@@ -26,6 +26,7 @@ type updateCheckRelease struct {
 	Body        string `json:"body"`
 	HTMLURL     string `json:"html_url"`
 	PublishedAt string `json:"published_at"`
+	Prerelease  bool   `json:"prerelease"`
 }
 
 // CheckUpdate 检查最新 release：优先直连 GitHub（可配置代理），失败后回退国内镜像。

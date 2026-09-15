@@ -16,7 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { selectLatestRelease, type SystemRelease } from './releases'
+import { z } from 'zod'
+
+import { systemReleaseSchema, type SystemRelease } from './releases'
 
 export type UpdateCheckErrorCode =
   | 'network'
@@ -31,6 +33,14 @@ export class UpdateCheckError extends Error {
   }
 }
 
+const updateCheckResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+  data: systemReleaseSchema.nullable().optional(),
+})
+
+// 后端在服务端拉起最新 release（本 fork 仓库），支持 UpdateCheckProxy
+// 代理与国内镜像回退，浏览器无需直连 GitHub。详见 controller/update.go。
 export async function fetchLatestSystemRelease(
   signal: AbortSignal
 ): Promise<SystemRelease | null> {
@@ -41,25 +51,25 @@ export async function fetchLatestSystemRelease(
   const timeout = setTimeout(cancel, 10_000)
 
   try {
-    const response = await fetch(
-      'https://api.github.com/repos/zhangjinglei137/new-api/releases?per_page=100',
-      {
-        credentials: 'omit',
-        headers: { Accept: 'application/vnd.github+json' },
-        signal: controller.signal,
-      }
-    )
-    if (response.status === 403 || response.status === 429) {
-      throw new UpdateCheckError('rate-limit')
-    }
+    const response = await fetch('/api/update/check', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    })
     if (!response.ok) throw new UpdateCheckError('network')
 
+    let json: unknown
     try {
-      return selectLatestRelease(await response.json())
-    } catch (error) {
-      if (controller.signal.aborted) throw error
+      json = await response.json()
+    } catch {
       throw new UpdateCheckError('payload')
     }
+    const parsed = updateCheckResponseSchema.safeParse(json)
+    if (parsed.success) {
+      if (!parsed.data.success) throw new UpdateCheckError('network')
+      return parsed.data.data ?? null
+    }
+    throw new UpdateCheckError('payload')
   } catch (error) {
     if (signal.aborted) throw error
     if (controller.signal.aborted) throw new UpdateCheckError('timeout')

@@ -66,9 +66,13 @@ function Wrapper(props: { children: ReactNode }) {
 function respondWithRelease(tag = release.tag_name): void {
   fetchMock.mockImplementation(
     async () =>
-      new Response(JSON.stringify([{ ...release, tag_name: tag }]), {
-        headers: { 'Content-Type': 'application/json' },
-      })
+      new Response(
+        JSON.stringify({ success: true, data: { ...release, tag_name: tag } }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
   )
 }
 
@@ -136,12 +140,10 @@ describe('administrator update entry', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(fetchMock).toHaveBeenCalledTimes(1)
       const [url, options] = fetchMock.mock.calls[0]
-      expect(String(url)).toBe(
-        'https://api.github.com/repos/zhangjinglei137/new-api/releases?per_page=100'
-      )
-      expect(options?.credentials).toBe('omit')
+      expect(String(url)).toBe('/api/update/check')
+      expect(options?.credentials).toBe('same-origin')
       expect(options?.headers).toEqual({
-        Accept: 'application/vnd.github+json',
+        Accept: 'application/json',
       })
     }
   )
@@ -346,7 +348,7 @@ describe('administrator update entry', () => {
     const toastError = vi.spyOn(toast, 'error')
     render(<SystemUpdateAction />, { wrapper: Wrapper })
     await waitFor(() =>
-      expect(useSystemUpdateStore.getState().snapshot?.error).toBe('rate-limit')
+      expect(useSystemUpdateStore.getState().snapshot?.error).toBe('network')
     )
     expect(toastError).not.toHaveBeenCalled()
     await user.click(
@@ -363,7 +365,7 @@ describe('administrator update entry', () => {
     await user.click(screen.getByRole('button', { name: 'Check again' }))
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
     expect(
-      screen.getByText('GitHub rate limit reached. Try again later.')
+      screen.getByText('Failed to check for updates')
     ).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
@@ -389,7 +391,12 @@ describe('version label presentation', () => {
       within(trigger).queryByText('Check for updates')
     ).not.toBeInTheDocument()
     await act(async () => {
-      finishRequest?.(new Response(JSON.stringify([release])))
+      finishRequest?.(
+        new Response(JSON.stringify({ success: true, data: release }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
     })
     await waitFor(() => expect(trigger).toHaveAttribute('aria-busy', 'false'))
     expect(within(trigger).getByText(release.tag_name)).toBeInTheDocument()
@@ -425,7 +432,7 @@ describe('version label presentation', () => {
     )
     await user.click(trigger)
     expect(
-      screen.getByText('GitHub rate limit reached. Try again later.')
+      screen.getByText('Failed to check for updates')
     ).toBeInTheDocument()
   })
 
@@ -513,7 +520,7 @@ describe('version notification preferences', () => {
     fetchMock.mockImplementation(async () => new Response('', { status: 429 }))
     await act(async () => hook.result.current.checkNow())
     await waitFor(() =>
-      expect(hook.result.current.snapshot?.error).toBe('rate-limit')
+      expect(hook.result.current.snapshot?.error).toBe('network')
     )
     expect(hook.result.current.release?.tag_name).toBe(release.tag_name)
     expect(hook.result.current.isIgnored).toBe(true)
@@ -609,7 +616,11 @@ describe('update cache and scheduling', () => {
   test('refreshes the server version during a later automatic check and clears an installed update', async () => {
     vi.useFakeTimers()
     fetchMock.mockImplementation(
-      async () => new Response(JSON.stringify([release]))
+      async () =>
+        new Response(JSON.stringify({ success: true, data: release }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
     )
     const hook = renderHook(useSystemUpdate, { wrapper: Wrapper })
     await act(async () => {
@@ -682,7 +693,11 @@ describe('update cache and scheduling', () => {
   test('waits one hour across multiple consumers and stops polling after logout', async () => {
     vi.useFakeTimers()
     fetchMock.mockImplementation(
-      async () => new Response(JSON.stringify([release]))
+      async () =>
+        new Response(JSON.stringify({ success: true, data: release }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
     )
     const first = renderHook(useSystemUpdate, { wrapper: Wrapper })
     await act(async () => {
@@ -712,7 +727,11 @@ describe('update cache and scheduling', () => {
   test('waits while hidden or offline and checks stale results after visibility or connectivity returns', async () => {
     vi.useFakeTimers()
     fetchMock.mockImplementation(
-      async () => new Response(JSON.stringify([release]))
+      async () =>
+        new Response(JSON.stringify({ success: true, data: release }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
     )
     focusManager.setFocused(false)
     renderHook(useSystemUpdate, { wrapper: Wrapper })
@@ -795,7 +814,6 @@ describe('update cache and scheduling', () => {
   })
 
   test.each([
-    [403, '[]', 'rate-limit'],
     [500, '[]', 'network'],
     [200, '{}', 'payload'],
     [200, '[{"tag_name":42}]', 'payload'],
