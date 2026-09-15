@@ -41,6 +41,7 @@ import {
 import { compareSystemVersions } from './releases'
 import {
   subscribeSystemUpdatePreferences,
+  SYSTEM_UPDATE_CACHE_TTL,
   useSystemUpdatePreferencesStore,
   useSystemUpdateStore,
   type SystemUpdateSnapshot,
@@ -86,10 +87,14 @@ export const systemUpdateQueryOptions = queryOptions({
     } catch (error) {
       if (signal.aborted) throw error
       const previous = useSystemUpdateStore.getState().snapshot
-      // A failed attempt is also cached, so focus changes and remounts cannot
-      // hammer GitHub while it is unavailable or rate limiting this browser.
+      // 仅当上次成功检查结果仍然新鲜时才回退展示，避免 localStorage 中
+      // 过期（或仓库迁移前遗留）的上游旧 release 永久滞留并误导用户；
+      // 过期缓存视为无缓存，只保留错误状态。
+      const freshCache =
+        previous &&
+        Date.now() - previous.lastCheckedAt <= SYSTEM_UPDATE_CACHE_TTL
       snapshot = {
-        release: previous?.release ?? null,
+        release: freshCache ? previous.release : null,
         lastCheckedAt: previous?.lastCheckedAt ?? 0,
         lastAttemptAt: Date.now(),
         error: error instanceof UpdateCheckError ? error.code : 'network',

@@ -26,6 +26,10 @@ import {
 
 import { systemReleaseSchema } from './releases'
 
+// 缓存的新鲜度上限：超过该时长未成功检查，失败时不再回退展示旧 release，
+// 避免仓库迁移 / 上游旧数据在 localStorage 中永久滞留误导用户。
+export const SYSTEM_UPDATE_CACHE_TTL = 24 * 60 * 60 * 1000
+
 const updateSnapshotSchema = z
   .object({
     release: systemReleaseSchema.nullable(),
@@ -78,17 +82,26 @@ export const useSystemUpdateStore = create<SystemUpdateStore>()(
       setSnapshot: (snapshot) => set({ snapshot }),
     }),
     {
-      name: 'system-update:v1',
+      name: 'system-update:v2',
       storage: createJSONStorage(() => updateStorage),
       partialize: (state) => ({ snapshot: state.snapshot }),
       merge: (persisted, current) => {
         const parsed = z
           .object({ snapshot: updateSnapshotSchema.nullable() })
           .safeParse(persisted)
-        return {
-          ...current,
-          snapshot: parsed.success ? parsed.data.snapshot : null,
+        if (!parsed.success) {
+          return { ...current, snapshot: null }
         }
+        const snapshot = parsed.data.snapshot
+        // 缓存卫生：key 升为 v2 使旧 v1（直连上游时代写入）数据整体作废；
+        // 超过 TTL 的新快照也视为过期，不回退展示，避免旧数据永久滞留误导。
+        if (
+          !snapshot ||
+          Date.now() - snapshot.lastCheckedAt > SYSTEM_UPDATE_CACHE_TTL
+        ) {
+          return { ...current, snapshot: null }
+        }
+        return { ...current, snapshot }
       },
     }
   )

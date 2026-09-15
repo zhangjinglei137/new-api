@@ -54,7 +54,6 @@ const release = {
   published_at: '2026-09-08T13:01:00Z',
   body: 'Release notes for administrators.',
 }
-const fetchMock = vi.fn<typeof fetch>()
 let client: QueryClient
 
 function Wrapper(props: { children: ReactNode }) {
@@ -64,16 +63,32 @@ function Wrapper(props: { children: ReactNode }) {
 }
 
 function respondWithRelease(tag = release.tag_name): void {
-  fetchMock.mockImplementation(
-    async () =>
-      new Response(
-        JSON.stringify({ success: true, data: { ...release, tag_name: tag } }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-  )
+  // /api/update/check 走统一 axios 实例（携带 Authorization + 401 刷新），
+  // 这里按 URL 分流 mock：update/check 返回 release，其余（/api/status 等）
+  // 返回默认状态数据。
+  vi.mocked(api.get).mockImplementation(async (url) => {
+    if (url === '/api/update/check') {
+      return { data: { success: true, data: { ...release, tag_name: tag } } }
+    }
+    return { data: { success: true, data: { version: 'v1.0.0-rc.35' } } }
+  })
+}
+
+/** 只统计 /api/update/check 的请求（update/check 与 /api/status 共用 api.get）。 */
+function updateCheckCalls() {
+  return vi
+    .mocked(api.get)
+    .mock.calls.filter(([url]) => url === '/api/update/check')
+}
+
+/** 让 /api/update/check 请求失败（axios reject → network）。 */
+function failUpdateCheck(): void {
+  vi.mocked(api.get).mockImplementation(async (url) => {
+    if (url === '/api/update/check') {
+      throw new Error('Request failed with status code 429')
+    }
+    return { data: { success: true, data: { version: 'v1.0.0-rc.35' } } }
+  })
 }
 
 beforeEach(() => {
@@ -85,14 +100,12 @@ beforeEach(() => {
     .auth.setUser({ id: 1, username: 'admin', role: ROLE.ADMIN })
   focusManager.setFocused(true)
   onlineManager.setOnline(true)
-  fetchMock.mockReset()
-  vi.stubGlobal('fetch', fetchMock)
-  respondWithRelease()
-  client = createAppQueryClient()
-  client.setQueryData(STATUS_QUERY_KEY, { version: 'v1.0.0-rc.35' })
   vi.spyOn(api, 'get').mockResolvedValue({
     data: { success: true, data: { version: 'v1.0.0-rc.35' } },
   })
+  respondWithRelease()
+  client = createAppQueryClient()
+  client.setQueryData(STATUS_QUERY_KEY, { version: 'v1.0.0-rc.35' })
 })
 
 afterEach(() => {
@@ -124,7 +137,7 @@ describe('administrator update entry', () => {
         { wrapper: Wrapper }
       )
       expect(screen.queryByRole('button')).not.toBeInTheDocument()
-      expect(fetchMock).not.toHaveBeenCalled()
+      expect(updateCheckCalls()).toHaveLength(0)
     }
   )
 
@@ -138,13 +151,9 @@ describe('administrator update entry', () => {
       })
       expect(button).toHaveAttribute('aria-haspopup', 'dialog')
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-      const [url, options] = fetchMock.mock.calls[0]
-      expect(String(url)).toBe('/api/update/check')
-      expect(options?.credentials).toBe('same-origin')
-      expect(options?.headers).toEqual({
-        Accept: 'application/json',
-      })
+      expect(updateCheckCalls()).toHaveLength(1)
+      const [url] = updateCheckCalls()[0]
+      expect(url).toBe('/api/update/check')
     }
   )
 
@@ -164,7 +173,7 @@ describe('administrator update entry', () => {
       name: /New version available: v1\.0\.0-rc\.36/,
     })
     expect(buttons).toHaveLength(2)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(updateCheckCalls()).toHaveLength(1)
     expect(within(buttons[0]).getByText('v1.0.0-rc.35')).toHaveClass('truncate')
     expect(within(buttons[0]).getByText('Update available')).toHaveClass(
       'hidden',
@@ -211,7 +220,7 @@ describe('administrator update entry', () => {
       </>,
       { wrapper: Wrapper }
     )
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(updateCheckCalls()).toHaveLength(1))
     await user.click(
       screen.getAllByRole('button', { name: 'Check for updates' })[0]
     )
@@ -225,7 +234,7 @@ describe('administrator update entry', () => {
         selector: 'p',
       })
     ).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(updateCheckCalls()).toHaveLength(2)
     await user.keyboard('{Escape}')
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -344,7 +353,7 @@ describe('administrator update entry', () => {
       lastAttemptAt: oldCheck,
       error: null,
     })
-    fetchMock.mockImplementation(async () => new Response('', { status: 429 }))
+    failUpdateCheck()
     const toastError = vi.spyOn(toast, 'error')
     render(<SystemUpdateAction />, { wrapper: Wrapper })
     await waitFor(() =>
@@ -367,17 +376,25 @@ describe('administrator update entry', () => {
     expect(
       screen.getByText('Failed to check for updates')
     ).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(updateCheckCalls()).toHaveLength(2)
   })
 })
 
 describe('version label presentation', () => {
   test('keeps the current version visible while checking and after finding no newer version', async () => {
-    let finishRequest: ((response: Response) => void) | undefined
-    fetchMock.mockImplementation(
-      () =>
+    let finishRequest:
+      | ((response: { data: { success: boolean; data?: typeof release } }) => void)
+      | undefined
+    vi.mocked(api.get).mockImplementation(
+      (url) =>
         new Promise((resolve) => {
-          finishRequest = resolve
+          if (url === '/api/update/check') {
+            finishRequest = resolve as (
+              response: { data: { success: boolean; data?: typeof release } }
+            ) => void
+          } else {
+            resolve({ data: { success: true, data: { version: 'v1.0.0-rc.35' } } })
+          }
         })
     )
     client.setQueryData(STATUS_QUERY_KEY, { version: release.tag_name })
@@ -391,12 +408,7 @@ describe('version label presentation', () => {
       within(trigger).queryByText('Check for updates')
     ).not.toBeInTheDocument()
     await act(async () => {
-      finishRequest?.(
-        new Response(JSON.stringify({ success: true, data: release }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
+      finishRequest?.({ data: { success: true, data: release } })
     })
     await waitFor(() => expect(trigger).toHaveAttribute('aria-busy', 'false'))
     expect(within(trigger).getByText(release.tag_name)).toBeInTheDocument()
@@ -420,7 +432,7 @@ describe('version label presentation', () => {
 
   test('retains the version after a failed check and exposes the error in its tooltip and details', async () => {
     const user = userEvent.setup()
-    fetchMock.mockResolvedValue(new Response('', { status: 429 }))
+    failUpdateCheck()
     render(<SystemUpdateAction presentation='version' />, { wrapper: Wrapper })
     const trigger = await screen.findByRole('button', {
       name: /System updates, current version: v1\.0\.0-rc\.35.*Failed to check for updates/s,
@@ -476,7 +488,7 @@ describe('version notification preferences', () => {
     await waitFor(() => expect(second.result.current.hasUpdate).toBe(true))
     expect(second.result.current.isIgnored).toBe(true)
     expect(second.result.current.shouldNotify).toBe(false)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(updateCheckCalls()).toHaveLength(2)
   })
 
   test('keeps preferences across logout and isolates ignore and restore actions by administrator', async () => {
@@ -507,7 +519,7 @@ describe('version notification preferences', () => {
     )
     expect(hook.result.current.isIgnored).toBe(true)
     expect(hook.result.current.shouldNotify).toBe(false)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(updateCheckCalls()).toHaveLength(1)
   })
 
   test('retains ignored tags after manual checks and failures while notifying for a different release', async () => {
@@ -517,7 +529,7 @@ describe('version notification preferences', () => {
     await act(async () => hook.result.current.checkNow())
     expect(hook.result.current.isIgnored).toBe(true)
     expect(hook.result.current.shouldNotify).toBe(false)
-    fetchMock.mockImplementation(async () => new Response('', { status: 429 }))
+    failUpdateCheck()
     await act(async () => hook.result.current.checkNow())
     await waitFor(() =>
       expect(hook.result.current.snapshot?.error).toBe('network')
@@ -578,7 +590,7 @@ describe('version notification preferences', () => {
     })
     expect(first.result.current.shouldNotify).toBe(true)
     expect(second.result.current.shouldNotify).toBe(true)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(updateCheckCalls()).toHaveLength(1)
   })
 
   test.each(['corrupt', 'invalid', 'blocked'])(
@@ -615,13 +627,6 @@ describe('version notification preferences', () => {
 describe('update cache and scheduling', () => {
   test('refreshes the server version during a later automatic check and clears an installed update', async () => {
     vi.useFakeTimers()
-    fetchMock.mockImplementation(
-      async () =>
-        new Response(JSON.stringify({ success: true, data: release }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-    )
     const hook = renderHook(useSystemUpdate, { wrapper: Wrapper })
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
@@ -642,27 +647,27 @@ describe('update cache and scheduling', () => {
     await waitFor(() => expect(first.result.current.hasUpdate).toBe(true))
     first.unmount()
     client.clear()
-    const saved = localStorage.getItem('system-update:v1')
+    const saved = localStorage.getItem('system-update:v2')
     expect(saved).not.toBeNull()
     useSystemUpdateStore.setState({ snapshot: null })
-    localStorage.setItem('system-update:v1', String(saved))
+    localStorage.setItem('system-update:v2', String(saved))
     await useSystemUpdateStore.persist.rehydrate()
     client = createAppQueryClient()
     client.setQueryData(STATUS_QUERY_KEY, { version: 'v1.0.0-rc.35' })
     const second = renderHook(useSystemUpdate, { wrapper: Wrapper })
     expect(second.result.current.hasUpdate).toBe(true)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(updateCheckCalls()).toHaveLength(1)
   })
 
   test.each(['corrupt', 'blocked', 'future'])(
     'keeps checking when persisted storage is %s',
     async (state) => {
       if (state === 'corrupt') {
-        localStorage.setItem('system-update:v1', '{bad json')
+        localStorage.setItem('system-update:v2', '{bad json')
         await useSystemUpdateStore.persist.rehydrate()
       } else if (state === 'future') {
         localStorage.setItem(
-          'system-update:v1',
+          'system-update:v2',
           JSON.stringify({
             state: {
               snapshot: {
@@ -686,19 +691,12 @@ describe('update cache and scheduling', () => {
       }
       const hook = renderHook(useSystemUpdate, { wrapper: Wrapper })
       await waitFor(() => expect(hook.result.current.hasUpdate).toBe(true))
-      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(updateCheckCalls()).toHaveLength(1)
     }
   )
 
   test('waits one hour across multiple consumers and stops polling after logout', async () => {
     vi.useFakeTimers()
-    fetchMock.mockImplementation(
-      async () =>
-        new Response(JSON.stringify({ success: true, data: release }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-    )
     const first = renderHook(useSystemUpdate, { wrapper: Wrapper })
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
@@ -708,70 +706,68 @@ describe('update cache and scheduling', () => {
       await vi.advanceTimersByTimeAsync(SYSTEM_UPDATE_INTERVAL / 2)
     })
     renderHook(useSystemUpdate, { wrapper: Wrapper })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(updateCheckCalls()).toHaveLength(1)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SYSTEM_UPDATE_INTERVAL / 2)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(updateCheckCalls()).toHaveLength(2)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SYSTEM_UPDATE_INTERVAL / 2)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(updateCheckCalls()).toHaveLength(2)
     act(() => useAuthStore.getState().auth.reset())
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SYSTEM_UPDATE_INTERVAL)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(updateCheckCalls()).toHaveLength(2)
   })
 
   test('waits while hidden or offline and checks stale results after visibility or connectivity returns', async () => {
     vi.useFakeTimers()
-    fetchMock.mockImplementation(
-      async () =>
-        new Response(JSON.stringify({ success: true, data: release }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-    )
     focusManager.setFocused(false)
     renderHook(useSystemUpdate, { wrapper: Wrapper })
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
     })
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(updateCheckCalls()).toHaveLength(0)
 
     await act(async () => {
       focusManager.setFocused(true)
       await vi.advanceTimersByTimeAsync(1)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(updateCheckCalls()).toHaveLength(1)
     act(() => focusManager.setFocused(false))
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SYSTEM_UPDATE_INTERVAL)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(updateCheckCalls()).toHaveLength(1)
     await act(async () => {
       focusManager.setFocused(true)
       await vi.advanceTimersByTimeAsync(1)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(updateCheckCalls()).toHaveLength(2)
 
     act(() => onlineManager.setOnline(false))
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SYSTEM_UPDATE_INTERVAL)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(updateCheckCalls()).toHaveLength(2)
     await act(async () => {
       onlineManager.setOnline(true)
       await vi.advanceTimersByTimeAsync(1)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(updateCheckCalls()).toHaveLength(3)
   })
 
   test('aborts an in-flight request when the administrator logs out', async () => {
     let requestSignal: AbortSignal | null | undefined
-    fetchMock.mockImplementation((_url, init) => {
-      requestSignal = init?.signal
+    vi.mocked(api.get).mockImplementation((url, config) => {
+      if (url !== '/api/update/check') {
+        return Promise.resolve({
+          data: { success: true, data: { version: 'v1.0.0-rc.35' } },
+        })
+      }
+      requestSignal = config?.signal as AbortSignal | undefined
       return new Promise((_resolve, reject) => {
         requestSignal?.addEventListener('abort', () =>
           reject(new DOMException('Aborted', 'AbortError'))
@@ -779,26 +775,31 @@ describe('update cache and scheduling', () => {
       })
     })
     const view = render(<SystemUpdateAction />, { wrapper: Wrapper })
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(updateCheckCalls()).toHaveLength(1))
     act(() => useAuthStore.getState().auth.reset())
     expect(view.queryByRole('button')).not.toBeInTheDocument()
     await waitFor(() => expect(requestSignal?.aborted).toBe(true))
     expect(useSystemUpdateStore.getState().snapshot).toBeNull()
   })
 
-  test('times out after ten seconds without an immediate retry on focus or remount', async () => {
+  test('times out after twenty seconds without an immediate retry on focus or remount', async () => {
     vi.useFakeTimers()
-    fetchMock.mockImplementation(
-      (_url, init) =>
-        new Promise((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () =>
-            reject(new DOMException('Aborted', 'AbortError'))
-          )
+    vi.mocked(api.get).mockImplementation((url, config) => {
+      if (url !== '/api/update/check') {
+        return Promise.resolve({
+          data: { success: true, data: { version: 'v1.0.0-rc.35' } },
         })
-    )
+      }
+      const signal = config?.signal as AbortSignal | undefined
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () =>
+          reject(new DOMException('Aborted', 'AbortError'))
+        )
+      })
+    })
     const hook = renderHook(useSystemUpdate, { wrapper: Wrapper })
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_001)
+      await vi.advanceTimersByTimeAsync(20_001)
     })
     expect(hook.result.current.snapshot?.error).toBe('timeout')
     expect(hook.result.current.checking).toBe(false)
@@ -810,19 +811,25 @@ describe('update cache and scheduling', () => {
       focusManager.setFocused(true)
       await vi.advanceTimersByTimeAsync(1)
     })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(updateCheckCalls()).toHaveLength(1)
   })
 
-  test.each([
-    [500, '[]', 'network'],
-    [200, '{}', 'payload'],
-    [200, '[{"tag_name":42}]', 'payload'],
-    [200, 'not JSON', 'payload'],
-  ])('records HTTP %s with body %s as %s', async (status, body, error) => {
-    fetchMock.mockResolvedValue(new Response(body, { status }))
-    const hook = renderHook(useSystemUpdate, { wrapper: Wrapper })
-    await waitFor(() => expect(hook.result.current.snapshot?.error).toBe(error))
-    expect(hook.result.current.hasUpdate).toBe(false)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+test.each([
+  ['reject', 'network'],
+  [{ success: false }, 'network'],
+  [{}, 'payload'],
+  [{ success: true, data: 'not-a-release' }, 'payload'],
+])('records API response %j as %s', async (body, error) => {
+  vi.mocked(api.get).mockImplementation(async (url) => {
+    if (url !== '/api/update/check') {
+      return { data: { success: true, data: { version: 'v1.0.0-rc.35' } } }
+    }
+    if (body === 'reject') throw new Error('network')
+    return { data: body }
   })
+  const hook = renderHook(useSystemUpdate, { wrapper: Wrapper })
+  await waitFor(() => expect(hook.result.current.snapshot?.error).toBe(error))
+  expect(hook.result.current.hasUpdate).toBe(false)
+  expect(updateCheckCalls()).toHaveLength(1)
+})
 })

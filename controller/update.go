@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -57,16 +56,20 @@ func CheckUpdate(c *gin.Context) {
 		req.Header.Set("Accept", "application/vnd.github+json")
 		req.Header.Set("User-Agent", "new-api-dashboard")
 		resp, err := client.Do(req)
-		reqCancel()
 		if err != nil {
+			reqCancel()
 			lastErr = err
 			common.SysLog(fmt.Sprintf("update check failed for %s: %v", url, err))
 			continue
 		}
+		// 先读完并关闭 body，再取消请求 ctx：ctx 一旦被 cancel，transport 会
+		// 关闭响应 body，提前 cancel 会导致 io.ReadAll 返回 context canceled。
 		body, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		reqCancel()
 		if readErr != nil {
 			lastErr = readErr
+			common.SysLog(fmt.Sprintf("update check read body failed for %s: %v", url, readErr))
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
@@ -75,7 +78,7 @@ func CheckUpdate(c *gin.Context) {
 			continue
 		}
 		var release updateCheckRelease
-		if err := json.Unmarshal(body, &release); err != nil {
+		if err := common.Unmarshal(body, &release); err != nil {
 			lastErr = err
 			continue
 		}
