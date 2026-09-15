@@ -144,3 +144,50 @@ func TestAffinityAdjustedRetry(t *testing.T) {
 	// nil ctx → 不偏移
 	require.Equal(t, 1, AffinityAdjustedRetry(nil, 1))
 }
+
+func TestAffinityRetrySelectsTopPriorityChannel(t *testing.T) {
+	setupChannelSelectAutoGroupsTest(t)
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+
+	// 构造渠道：priority 20（渠道 1）与 19（渠道 2），同一 model/group
+	channels := []model.Channel{
+		{Id: 1, Type: 1, Key: "k1", Models: "m1", Group: "default", Status: common.ChannelStatusEnabled, Priority: int64Ptr(20)},
+		{Id: 2, Type: 1, Key: "k2", Models: "m1", Group: "default", Status: common.ChannelStatusEnabled, Priority: int64Ptr(19)},
+	}
+	require.NoError(t, model.DB.Create(&channels).Error)
+	// InitChannelCache 用 Ability 表的 group 集合初始化候选池的二级 map，
+	// 测试环境需先为该 group 建立一条 Ability 记录，否则 nil map 赋值会 panic。
+	require.NoError(t, model.DB.Create(&model.Ability{
+		Group: "default", Model: "m1", ChannelId: 1, Enabled: true, Priority: int64Ptr(20),
+	}).Error)
+	model.InitChannelCache()
+
+	// 未命中亲和：retry=1 选中层 1 → 渠道 2（priority 19）
+	param1 := &RetryParam{Ctx: ctx, TokenGroup: "default", ModelName: "m1", Retry: intPtr(1)}
+	ch1, _, err1 := CacheGetRandomSatisfiedChannel(param1)
+	require.NoError(t, err1)
+	require.NotNil(t, ch1)
+	require.Equal(t, 2, ch1.Id, "无亲和时 retry=1 应选中层 1 的渠道 2")
+
+	// 亲和命中：缓存渠道 6（无实际 6 渠道影响，仅设置标志）→ retry=1 偏移为 0 → 选中最高优先级渠道 1
+	affCtx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{RuleName: "r"})
+	MarkChannelAffinityUsed(affCtx, "default", 6)
+	effective := AffinityAdjustedRetry(affCtx, 1)
+	require.Equal(t, 0, effective, "亲和命中时 retry=1 应偏移到 0")
+	// 与 controller/relay.go getChannel 一致：偏移值经 SetRetry 注入后再选择渠道
+	param2 := &RetryParam{Ctx: affCtx, TokenGroup: "default", ModelName: "m1", Retry: intPtr(1)}
+	param2.SetRetry(effective)
+	ch2, _, err2 := CacheGetRandomSatisfiedChannel(param2)
+	require.NoError(t, err2)
+	require.NotNil(t, ch2)
+	require.Equal(t, 1, ch2.Id, "亲和命中时重试应能选中最高优先级渠道 1")
+}
+
+func intPtr(v int) *int {
+	return &v
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
+}
