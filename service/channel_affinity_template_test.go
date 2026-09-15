@@ -332,3 +332,17 @@ func TestChannelAffinityHitCodexTemplatePassHeadersEffective(t *testing.T) {
 	_, exists = info.RuntimeHeadersOverride["x-codex-turn-metadata"]
 	require.False(t, exists)
 }
+
+func TestAffinityConsumedFirstTry(t *testing.T) {
+	// 未设置标志 → false
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{RuleName: "r"})
+	require.False(t, AffinityConsumedFirstTry(ctx))
+
+	// 设置标志 → true
+	ctx2 := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{RuleName: "r2"})
+	MarkChannelAffinityUsed(ctx2, "default", 6)
+	require.True(t, AffinityConsumedFirstTry(ctx2))
+
+	// nil ctx → false
+	require.False(t, AffinityConsumedFirstTry(nil))
+}
