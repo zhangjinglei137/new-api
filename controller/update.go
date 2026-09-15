@@ -18,6 +18,11 @@ const (
 	updateCheckMirrorURL = "https://gh-proxy.com/https://api.github.com/repos/zhangjinglei137/new-api/releases/latest"
 	// UpdateCheckProxyKey 是检查更新使用的出站代理配置项（options 表）。
 	UpdateCheckProxyKey = "UpdateCheckProxy"
+
+	// updateCheckRequestTimeout 是单个候选站点的请求超时。直连 GitHub 在部分
+	// 网络环境会 TLS 挂起或匿名限流(403)，因此每个 URL 用独立超时，避免一个
+	// 站点拖垮整个检查；两者串行最坏耗时不超过前端 fetch 的超时窗口。
+	updateCheckRequestTimeout = 5 * time.Second
 )
 
 type updateCheckRelease struct {
@@ -37,21 +42,25 @@ func CheckUpdate(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
-	defer cancel()
 
 	var lastErr error
 	for _, url := range []string{updateCheckRepoURL, updateCheckMirrorURL} {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		// 每个候选站独立超时：直连 GitHub 在部分网络环境会 TLS 挂起或 403 限流，
+		// 若共享一个总 ctx，直连会耗尽预算导致镜像请求直接 context deadline exceeded。
+		reqCtx, reqCancel := context.WithTimeout(c.Request.Context(), updateCheckRequestTimeout)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 		if err != nil {
+			reqCancel()
 			lastErr = err
 			continue
 		}
 		req.Header.Set("Accept", "application/vnd.github+json")
 		req.Header.Set("User-Agent", "new-api-dashboard")
 		resp, err := client.Do(req)
+		reqCancel()
 		if err != nil {
 			lastErr = err
+			common.SysLog(fmt.Sprintf("update check failed for %s: %v", url, err))
 			continue
 		}
 		body, readErr := io.ReadAll(resp.Body)
@@ -62,6 +71,7 @@ func CheckUpdate(c *gin.Context) {
 		}
 		if resp.StatusCode != http.StatusOK {
 			lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
+			common.SysLog(fmt.Sprintf("update check got %s: %d", url, resp.StatusCode))
 			continue
 		}
 		var release updateCheckRelease
