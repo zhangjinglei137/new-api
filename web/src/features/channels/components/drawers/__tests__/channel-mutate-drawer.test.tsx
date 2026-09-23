@@ -25,6 +25,12 @@ vi.mock('@/lib/lobe-icon', () => ({
 
 const { QueryClient, QueryClientProvider } =
   await import('@tanstack/react-query')
+const {
+  RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+} = await import('@tanstack/react-router')
 const { api } = await import('@/lib/api')
 const { ROLE } = await import('@/lib/roles')
 const { useAuthStore } = await import('@/stores/auth-store')
@@ -119,15 +125,21 @@ async function renderCreateDrawer(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  })
   render(
     <QueryClientProvider client={queryClient}>
-      <ChannelsProvider>
-        <ChannelMutateDrawer
-          open
-          onOpenChange={onOpenChange}
-          currentRow={null}
-        />
-      </ChannelsProvider>
+      <RouterContextProvider router={router}>
+        <ChannelsProvider>
+          <ChannelMutateDrawer
+            open
+            onOpenChange={onOpenChange}
+            currentRow={null}
+          />
+        </ChannelsProvider>
+      </RouterContextProvider>
     </QueryClientProvider>
   )
   // The upstream drawer starts from the provider picker; pick one to reach
