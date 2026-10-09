@@ -20,6 +20,7 @@ import { z } from 'zod'
 
 import {
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
+  CHANNEL_TYPE_CLINE,
   CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_NEW_API,
   CHANNEL_TYPE_OLLAMA,
@@ -335,8 +336,8 @@ export const channelFormSchema = z
     aws_key_type: z.enum(['ak_sk', 'api_key']).optional(), // AWS specific
     azure_responses_version: z.string().optional(), // Azure specific
     endpoint_profile: z
-      .enum(['coding', 'coding-intl', ''])
-      .optional(), // Coding Plan：VolcEngine(45) / ZhipuV4(26) / Moonshot(25)；coding-intl 仅 ZhipuV4 后端支持
+      .enum(['coding', 'coding-intl', 'clinepass', ''])
+      .optional(), // Coding Plan：VolcEngine(45) / ZhipuV4(26) / Moonshot(25)；coding-intl 仅 ZhipuV4 后端支持；ClinePass 仅 Cline(94)
     // Field passthrough controls (stored in settings JSON)
     allow_service_tier: z.boolean().optional(), // OpenAI/Anthropic
     disable_store: z.boolean().optional(), // OpenAI only
@@ -623,7 +624,7 @@ export function transformChannelToFormDefaults(
   // Parse type-specific settings from settings field
   let vertexKeyType: 'json' | 'api_key' = 'json'
   let azureResponsesVersion = ''
-  let endpointProfile: 'coding' | 'coding-intl' | '' = ''
+  let endpointProfile: 'coding' | 'coding-intl' | 'clinepass' | '' = ''
   let isEnterpriseAccount = false
   let awsKeyType: 'ak_sk' | 'api_key' = 'ak_sk'
   let allowServiceTier = false
@@ -649,7 +650,8 @@ export function transformChannelToFormDefaults(
       azureResponsesVersion = parsed.azure_responses_version || ''
       endpointProfile =
         parsed.endpoint_profile === 'coding' ||
-        parsed.endpoint_profile === 'coding-intl'
+        parsed.endpoint_profile === 'coding-intl' ||
+        parsed.endpoint_profile === 'clinepass'
           ? parsed.endpoint_profile
           : ''
       isEnterpriseAccount = parsed.openrouter_enterprise === true
@@ -842,8 +844,8 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
   }
 
   // Add endpoint_profile for Coding Plan capable channels
-  // (VolcEngine 45 / Zhipu V4 26 / Moonshot 25)
-  if ([45, 26, 25].includes(formData.type)) {
+  // (VolcEngine 45 / Zhipu V4 26 / Moonshot 25) and Cline (94, clinepass)
+  if ([45, 26, 25, CHANNEL_TYPE_CLINE].includes(formData.type)) {
     if (formData.endpoint_profile) {
       settingsObj.endpoint_profile = formData.endpoint_profile
     } else if ('endpoint_profile' in settingsObj) {

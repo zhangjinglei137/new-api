@@ -56,6 +56,7 @@ export function getChannelTypeIcon(type: number): string {
     60: 'NewAPI', // New API
     98: 'CommandCode', // CommandCode
     99: 'OpenCode', // OpenCode Go
+    94: 'Cline', // Cline
     97: 'SenseNova', // SenseNova
     95: 'RadeonCloud', // RadeonCloud
     62: 'Vllm', // vLLM

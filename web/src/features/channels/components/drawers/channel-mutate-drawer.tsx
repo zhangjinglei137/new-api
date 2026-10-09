@@ -145,6 +145,7 @@ import {
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
+  CHANNEL_TYPE_CLINE,
   CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_SENSENOVA,
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
@@ -206,6 +207,7 @@ import {
   supportsNewAPIUpstream,
 } from '../../lib/channel-plugin-extensions'
 import { getChannelTypeConfig } from '../../lib/channel-type-config'
+import { channelTypeDefaultsToApply } from '../../lib/channel-type-defaults'
 import {
   collectInvalidStatusCodeEntries,
   collectNewDisallowedStatusCodeRedirects,
@@ -1169,23 +1171,28 @@ export function ChannelMutateDrawer({
     }
   }, [isEditing, channelId, channelData, form, open])
 
-  // Handle type change - set default values for specific types
+  // Handle type change - pre-fill the channel type defaults (base URL, extra
+  // fields, header/param overrides) while each target field is still empty.
   useEffect(() => {
     if (isEditing) return // Don't auto-set defaults when editing
 
-    // Type 45 (VolcEngine) - set default base_url
-    if (currentType === 45) {
-      const currentBaseUrlValue = form.getValues('base_url')
-      if (!currentBaseUrlValue || currentBaseUrlValue === '') {
-        form.setValue('base_url', 'https://ark.cn-beijing.volces.com')
-      }
-    }
-
-    // Type 18 (Xunfei) - set default other (version)
-    if (currentType === 18) {
-      const currentOther = form.getValues('other')
-      if (!currentOther || currentOther === '') {
-        form.setValue('other', 'v2.1')
+    const patch = channelTypeDefaultsToApply(currentType, {
+      base_url: form.getValues('base_url'),
+      other: form.getValues('other'),
+      advanced_custom: form.getValues('advanced_custom'),
+      header_override: form.getValues('header_override'),
+      param_override: form.getValues('param_override'),
+    })
+    for (const field of [
+      'base_url',
+      'other',
+      'advanced_custom',
+      'header_override',
+      'param_override',
+    ] as const) {
+      const value = patch[field]
+      if (value) {
+        form.setValue(field, value)
       }
     }
   }, [currentType, isEditing, form])
@@ -4578,6 +4585,58 @@ export function ChannelMutateDrawer({
                       {currentType === 26
                         ? t('Select the access mode for this Zhipu V4 channel')
                         : t('Select the access mode for this Moonshot channel')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Access mode for Cline (94): pay-as-you-go or ClinePass.
+                Unlike the coding-plan branches above, switching the access
+                mode must not rewrite base_url. */}
+            {currentType === CHANNEL_TYPE_CLINE && (
+              <FormField
+                control={form.control}
+                name='endpoint_profile'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Access Mode')}</FormLabel>
+                    <Select
+                      disabled={sensitiveLocked}
+                      items={[
+                        {
+                          value: 'pay-as-you-go',
+                          label: t('Pay-as-you-go'),
+                        },
+                        {
+                          value: 'clinepass',
+                          label: t('ClinePass'),
+                        },
+                      ]}
+                      onValueChange={(value) => {
+                        field.onChange(value === 'clinepass' ? 'clinepass' : '')
+                      }}
+                      value={field.value === 'clinepass' ? 'clinepass' : 'pay-as-you-go'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          <SelectItem value='pay-as-you-go'>
+                            {t('Pay-as-you-go')}
+                          </SelectItem>
+                          <SelectItem value='clinepass'>
+                            {t('ClinePass')}
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {t('Select the access mode for this Cline channel')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

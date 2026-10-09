@@ -35,6 +35,7 @@ import {
 } from 'react'
 
 import { IconOpencode } from '@/assets/brand-icons/icon-opencode'
+import { IconCline } from '@/assets/custom/icon-cline'
 import { IconCommandcode } from '@/assets/custom/icon-commandcode'
 import { IconRadeonCloud } from '@/assets/custom/icon-radeoncloud'
 import sglangLogo from '@/assets/brand-icons/sglang.svg'
@@ -55,6 +56,7 @@ const CUSTOM_ICONS: Record<string, ComponentType<{ size?: number }>> = {
   Sub2API: IconSub2api,
   OpenCode: IconOpencode,
   CommandCode: IconCommandcode,
+  Cline: IconCline,
   RadeonCloud: IconRadeonCloud,
   Wan: IconWan,
 }

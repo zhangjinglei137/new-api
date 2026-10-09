@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
+  CHANNEL_TYPE_CLINE,
   CHANNEL_TYPE_OPENCODE_GO,
   CHANNEL_TYPE_SENSENOVA,
 } from '../constants'
@@ -39,6 +40,7 @@ export type ChannelTypeDefaults = {
   other?: string
   advanced_custom?: string
   header_override?: string
+  param_override?: string
 }
 
 /**
@@ -59,6 +61,19 @@ const OPENCODE_GO_DEFAULT_HEADER_OVERRIDE = JSON.stringify(
     Accept: '{client_header:Accept}',
     Host: 'opencode.ai',
     'Accept-Encoding': '{client_header:Accept-Encoding}',
+  },
+  null,
+  2
+)
+
+/**
+ * Default request-body param override for Cline channels: the upstream gateway
+ * only exposes the DeepSeek model family by default.
+ */
+const CLINE_DEFAULT_PARAM_OVERRIDE = JSON.stringify(
+  {
+    providerOptions: { gateway: { only: ['deepseek'] } },
+    provider: { only: ['deepseek'] },
   },
   null,
   2
@@ -85,4 +100,36 @@ export const CHANNEL_TYPE_DEFAULTS: Record<number, ChannelTypeDefaults> = {
   [CHANNEL_TYPE_SENSENOVA]: {
     base_url: 'https://token.sensenova.cn',
   },
+  // Cline (94): default gateway endpoint and DeepSeek-only request params.
+  [CHANNEL_TYPE_CLINE]: {
+    base_url: 'https://api.cline.bot/api',
+    param_override: CLINE_DEFAULT_PARAM_OVERRIDE,
+  },
+}
+
+/**
+ * Compute which default values should be pre-filled when the channel type
+ * changes: a default is only applied while its target field is empty, so
+ * existing input (or a deliberately cleared field) is never overwritten.
+ */
+export function channelTypeDefaultsToApply(
+  type: number,
+  currentValues: ChannelTypeDefaults
+): ChannelTypeDefaults {
+  const defaults = CHANNEL_TYPE_DEFAULTS[type]
+  if (!defaults) return {}
+
+  const patch: ChannelTypeDefaults = {}
+  for (const field of [
+    'base_url',
+    'other',
+    'advanced_custom',
+    'header_override',
+    'param_override',
+  ] as const) {
+    if (!currentValues[field] && defaults[field]) {
+      patch[field] = defaults[field]
+    }
+  }
+  return patch
 }
