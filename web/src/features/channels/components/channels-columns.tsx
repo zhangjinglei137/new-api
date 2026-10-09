@@ -54,10 +54,7 @@ import {
 } from '@/lib/currency'
 import { formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
-import {
-  createServerError,
-  translateServerText,
-} from '@/lib/server-error-message'
+import { translateServerText } from '@/lib/server-error-message'
 import { truncateText } from '@/lib/utils'
 
 import {

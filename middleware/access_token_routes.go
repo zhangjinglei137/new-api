@@ -44,6 +44,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	// router/api-router.go: top level
 	"GET /api/models":                     accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
+	"GET /api/update/check":               accessTokenScopeRule("ops:read"),
 	"GET /api/pricing":                    accessTokenAnyRule,
 	"GET /api/perf-metrics/summary":       accessTokenAnyRule,
 	"GET /api/perf-metrics":               accessTokenAnyRule,
@@ -246,6 +247,12 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/data/self":                        accessTokenScopeRule("usage:read"),
 	"GET /api/data/flow":                        accessTokenScopeRule("log:read"),
 	"GET /api/data/flow/self":                   accessTokenScopeRule("usage:read"),
+	"GET /api/data/tokens":                      accessTokenScopeRule("log:read"),
+	"GET /api/data/tokens/self":                 accessTokenScopeRule("usage:read"),
+	"GET /api/data/tokens/trend":                accessTokenScopeRule("log:read"),
+	"GET /api/data/tokens/trend/self":           accessTokenScopeRule("usage:read"),
+	"GET /api/data/channels":                    accessTokenScopeRule("log:read"),
+	"GET /api/data/channels/trend":              accessTokenScopeRule("log:read"),
 
 	// router/api-router.go: /api/group, /api/prefill_group
 	"GET /api/group/":               accessTokenScopeRule("group:read"),
@@ -280,6 +287,10 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/models/":                     accessTokenScopeRule("model:write"),
 	"PUT /api/models/":                      accessTokenScopeRule("model:write"),
 	"DELETE /api/models/:id":                accessTokenScopeRule("model:write"),
+
+	// router/api-router.go: /api/model_setting
+	"GET /api/model_setting/endpoints": accessTokenScopeRule("option:read"),
+	"PUT /api/model_setting/endpoints": accessTokenScopeRule("option:write"),
 
 	// router/api-router.go: /api/deployments
 	"GET /api/deployments/settings":                     accessTokenScopeRule("deployment:read"),

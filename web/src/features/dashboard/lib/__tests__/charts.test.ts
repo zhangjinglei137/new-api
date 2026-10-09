@@ -112,13 +112,14 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
     const result = processChartData(data, scenario.granularity)
 
     for (const key of ['spec_line', 'spec_area', 'spec_model_line'] as const) {
-      const values: Array<{ Time: string; rawQuota: number; Count: number }> =
+      const values: Array<{ Time: string; rawValue?: number; Value?: number }> =
         result[key].data[0].values
       expect(values.map((row) => row.Time)).toEqual(scenario.labels)
       expect(
-        values.map((row) =>
-          key === 'spec_model_line' ? row.Count : row.rawQuota / 500000
-        )
+        values.map((row) => {
+          const raw = key === 'spec_model_line' ? row.Value : row.rawValue
+          return (raw ?? 0) / 500000
+        })
       ).toEqual([11, 2, 3, 4, 5, 6, 7, 8])
     }
     expect(data).toEqual(original)
@@ -143,13 +144,14 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
     const result = processChartData(data, scenario.granularity)
 
     for (const key of ['spec_line', 'spec_area', 'spec_model_line'] as const) {
-      const values: Array<{ Time: string; rawQuota: number; Count: number }> =
+      const values: Array<{ Time: string; rawValue?: number; Value?: number }> =
         result[key].data[0].values
       expect(values.map((row) => row.Time)).toEqual(scenario.labels.slice(1))
       expect(
-        values.map((row) =>
-          key === 'spec_model_line' ? row.Count : row.rawQuota / 500000
-        )
+        values.map((row) => {
+          const raw = key === 'spec_model_line' ? row.Value : row.rawValue
+          return (raw ?? 0) / 500000
+        })
       ).toEqual([0, 0, 0, 0, 0, 0, 8])
     }
   })
