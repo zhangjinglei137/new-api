@@ -94,7 +94,7 @@ func UpdateVendorMeta(c *gin.Context) {
 		return
 	}
 	if v.Id == 0 {
-		common.ApiErrorMsg(c, "缺少供应商 ID")
+		common.ApiErrorT(c, "Missing vendor ID")
 		return
 	}
 	if err := v.Update(); err != nil {
