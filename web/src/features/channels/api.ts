@@ -563,6 +563,44 @@ export async function getOpenCodeGoUsage(
 }
 
 // ============================================================================
+// Cline (type 94) ClinePass Plan Usage Operations
+// ============================================================================
+
+export type ClinePlanLimit = {
+  type: string
+  percentUsed: number
+  resetsAt: string
+}
+
+export type ClinePlanUsageData = {
+  limits?: ClinePlanLimit[]
+}
+
+export type ClineUsageErrorCode =
+  | 'credentials_expired'
+  | 'usage_schema_unknown'
+  | 'fetch_failed'
+  | (string & {})
+
+export type ClineUsageResponse = {
+  success: boolean
+  message?: string
+  upstream_status?: number
+  error_code?: ClineUsageErrorCode
+  data?: ClinePlanUsageData
+}
+
+export async function getClineUsage(
+  channelId: number
+): Promise<ClineUsageResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/cline/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+// ============================================================================
 // AMD Radeon Cloud (type 95) Usage Operations
 // ============================================================================
 

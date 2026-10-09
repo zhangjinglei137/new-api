@@ -57,6 +57,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { truncateText } from '@/lib/utils'
 
 import {
+  getClineUsage,
   getCodexUsage,
   getCommandCodeUsage,
   getMoonshotCodingPlanUsage,
@@ -69,6 +70,7 @@ import {
 } from '../api'
 import {
   CHANNEL_STATUS_CONFIG,
+  CHANNEL_TYPE_CLINE,
   CHANNEL_TYPE_CODEX,
   CHANNEL_TYPE_COMMANDCODE,
   CHANNEL_TYPE_OPENCODE_GO,
@@ -110,6 +112,10 @@ import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './dialogs/codex-usage-dialog'
+import {
+  ClineUsageDialog,
+  type ClineUsageResponse,
+} from './dialogs/cline-usage-dialog'
 import {
   CommandCodeUsageDialog,
   type CommandCodeUsageResponse,
@@ -410,6 +416,9 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const [codexUsageOpen, setCodexUsageOpen] = useState(false)
   const [codexUsageResponse, setCodexUsageResponse] =
     useState<CodexUsageDialogData | null>(null)
+  const [clineUsageOpen, setClineUsageOpen] = useState(false)
+  const [clineUsageResponse, setClineUsageResponse] =
+    useState<ClineUsageResponse | null>(null)
   const [volcCodingPlanUsageOpen, setVolcCodingPlanUsageOpen] = useState(false)
   const [volcCodingPlanUsageResponse, setVolcCodingPlanUsageResponse] =
     useState<VolcCodingPlanUsageResponse | null>(null)
@@ -438,6 +447,9 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     tokenSuffix && value !== '-' ? `${value}${tokenSuffix}` : value
 
   const isCodex = channel.type === CHANNEL_TYPE_CODEX
+  const isClinePlan =
+    channel.type === CHANNEL_TYPE_CLINE &&
+    parseChannelOtherSettings(channel.settings).endpoint_profile === 'clinepass'
   const isVolcCodingPlan =
     channel.type === 45 &&
     parseChannelOtherSettings(channel.settings).endpoint_profile === 'coding'
@@ -456,6 +468,7 @@ export function BalanceCell({ channel }: { channel: Channel }) {
 
   const isUsageDialogType =
     isCodex ||
+    isClinePlan ||
     isVolcCodingPlan ||
     isOpenCodeGo ||
     isCommandCode ||
@@ -557,6 +570,29 @@ export function BalanceCell({ channel }: { channel: Channel }) {
       setCodexUsageResponse(res)
       if (openDialog) {
         setCodexUsageOpen(true)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to fetch usage')
+      )
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const fetchClineUsage = async (openDialog = true) => {
+    if (isUpdating) {
+      return
+    }
+    setIsUpdating(true)
+    try {
+      const res = await getClineUsage(channel.id)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to fetch usage'))
+      }
+      setClineUsageResponse(res)
+      if (openDialog) {
+        setClineUsageOpen(true)
       }
     } catch (error) {
       toast.error(
@@ -730,6 +766,10 @@ export function BalanceCell({ channel }: { channel: Channel }) {
       await fetchCodexUsage()
       return
     }
+    if (isClinePlan) {
+      await fetchClineUsage()
+      return
+    }
     if (isVolcCodingPlan) {
       await fetchVolcCodingPlanUsage()
       return
@@ -808,6 +848,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     remainingTooltipLabel = maskedRemainingLabel
   } else if (isCodex) {
     remainingTooltipLabel = t('Click to view Codex usage')
+  } else if (isClinePlan) {
+    remainingTooltipLabel = t('Click to view Coding Plan usage')
   } else if (isVolcCodingPlan) {
     remainingTooltipLabel = t('Click to view Coding Plan usage')
   } else if (isOpenCodeGo) {
@@ -899,6 +941,15 @@ export function BalanceCell({ channel }: { channel: Channel }) {
         channelDisplayId={sensitiveVisible ? undefined : SENSITIVE_MASK}
         response={codexUsageResponse}
         onRefresh={() => fetchCodexUsage(false)}
+        isRefreshing={isUpdating}
+      />
+      <ClineUsageDialog
+        open={clineUsageOpen}
+        onOpenChange={setClineUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        response={clineUsageResponse}
+        onRefresh={() => fetchClineUsage(false)}
         isRefreshing={isUpdating}
       />
       <VolcCodingPlanUsageDialog

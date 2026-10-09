@@ -118,8 +118,9 @@ export interface ChannelOtherSettings {
   sensenova_username?: string
   sensenova_password?: string
   model_proxy_rules?: { models?: string[]; proxy?: string }[]
-  // Coding Plan access profile for VolcEngine(45) / ZhipuV4(26) / Moonshot(25).
-  endpoint_profile?: 'coding' | 'coding-intl' | string
+  // Coding Plan access profile for VolcEngine(45) / ZhipuV4(26) / Moonshot(25);
+  // Cline(94) uses 'clinepass' for its ClinePass plan channels.
+  endpoint_profile?: 'coding' | 'coding-intl' | 'clinepass' | string
   // VolcEngine Coding Plan usage query credentials (stored encrypted on the
   // backend, never returned to the frontend — type-only fields).
   volc_coding_plan_access_key_id?: string
