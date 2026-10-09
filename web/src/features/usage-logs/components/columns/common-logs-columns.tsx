@@ -543,6 +543,37 @@ export function useCommonLogsColumns(
           },
         },
         {
+          id: 'link-count',
+          header: t('Chain Count'),
+          accessorFn: (row) => {
+            const rawUseChannel = parseLogOther(
+              row.other
+            )?.admin_info?.use_channel
+            const useChannel = Array.isArray(rawUseChannel)
+              ? rawUseChannel.map(String).filter(Boolean)
+              : []
+            return useChannel.length > 0 ? useChannel.length - 1 : undefined
+          },
+          cell: function LinkCountCell({ row }) {
+            const log = row.original
+            if (!isDisplayableLogType(log.type)) return null
+            const rawUseChannel = parseLogOther(
+              log.other
+            )?.admin_info?.use_channel
+            const useChannel = Array.isArray(rawUseChannel)
+              ? rawUseChannel.map(String).filter(Boolean)
+              : []
+            if (useChannel.length === 0) {
+              return <span className='text-muted-foreground'>-</span>
+            }
+            return (
+              <span className='font-mono tabular-nums'>
+                {useChannel.length - 1}
+              </span>
+            )
+          },
+        },
+        {
           id: 'user',
           header: t('User'),
           accessorFn: (row) => row.username,
