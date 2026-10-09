@@ -7012,6 +7012,7 @@
     "Showing {{start}}-{{end}} of {{count}} fields_plural": "顯示第 {{start}}-{{end}} 條，共 {{count}} 個欄位",
     "VolcEngine Coding Plan Usage": "火山方舟 Coding Plan 用量",
     "Moonshot Coding Plan Usage": "Moonshot Coding Plan 用量",
+    "Cline Coding Plan Usage": "Cline Coding Plan 用量",
     "Zhipu Coding Plan Usage": "智譜 Coding Plan 用量",
     "GLM Coding Plan · {{level}}": "GLM Coding Plan · {{level}}",
     "OpenCode Go Usage": "OpenCode Go 用量",

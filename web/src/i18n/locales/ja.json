@@ -7012,6 +7012,7 @@
     "Showing {{start}}-{{end}} of {{count}} fields_plural": "{{start}}-{{end}} / {{count}} フィールドを表示中",
     "VolcEngine Coding Plan Usage": "VolcEngine Coding Plan 使用量",
     "Moonshot Coding Plan Usage": "Moonshot Coding Plan 使用量",
+    "Cline Coding Plan Usage": "Cline Coding Plan 使用量",
     "Zhipu Coding Plan Usage": "Zhipu Coding Plan 使用量",
     "GLM Coding Plan · {{level}}": "GLM Coding Plan · {{level}}",
     "OpenCode Go Usage": "OpenCode Go 使用量",

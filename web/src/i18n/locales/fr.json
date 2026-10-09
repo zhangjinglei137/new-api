@@ -7012,6 +7012,7 @@
     "Showing {{start}}-{{end}} of {{count}} fields_plural": "Affichage de {{start}}-{{end}} sur {{count}} champs",
     "VolcEngine Coding Plan Usage": "Utilisation VolcEngine Coding Plan",
     "Moonshot Coding Plan Usage": "Utilisation Moonshot Coding Plan",
+    "Cline Coding Plan Usage": "Utilisation Cline Coding Plan",
     "Zhipu Coding Plan Usage": "Utilisation Zhipu Coding Plan",
     "GLM Coding Plan · {{level}}": "GLM Coding Plan · {{level}}",
     "OpenCode Go Usage": "Utilisation OpenCode Go",

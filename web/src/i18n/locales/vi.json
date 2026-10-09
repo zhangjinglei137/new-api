@@ -7012,6 +7012,7 @@
     "Showing {{start}}-{{end}} of {{count}} fields_plural": "Hiển thị {{start}}-{{end}} trong {{count}} trường",
     "VolcEngine Coding Plan Usage": "Mức sử dụng VolcEngine Coding Plan",
     "Moonshot Coding Plan Usage": "Mức sử dụng Moonshot Coding Plan",
+    "Cline Coding Plan Usage": "Mức sử dụng Cline Coding Plan",
     "Zhipu Coding Plan Usage": "Mức sử dụng Zhipu Coding Plan",
     "GLM Coding Plan · {{level}}": "GLM Coding Plan · {{level}}",
     "OpenCode Go Usage": "Mức sử dụng OpenCode Go",
