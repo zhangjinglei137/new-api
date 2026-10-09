@@ -61,6 +61,7 @@ const (
 	ChannelTypeTaskPlugin     = 61
 	ChannelTypeVLLM           = 62
 	ChannelTypeSGLang         = 63
+	ChannelTypeCline          = 94
 	ChannelTypeRadeonCloud    = 95
 	ChannelTypeSenseNova      = 97
 	ChannelTypeCommandCode    = 98
@@ -166,7 +167,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //91
 	"",                                          //92
 	"",                                          //93
-	"",                                          //94
+	"https://api.cline.bot/api",                 //94
 	"https://developer.amd.com.cn/radeon",       //95
 	"",                                          //96
 	"https://token.sensenova.cn",                //97
@@ -240,6 +241,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSub2API:        "Sub2API",
 	ChannelTypeNewAPI:         "New API",
 	ChannelTypeTaskPlugin:     "Task Plugin",
+	ChannelTypeCline:          "Cline",
 	ChannelTypeRadeonCloud:    "AMD Radeon Cloud",
 	ChannelTypeSenseNova:      "SenseNova",
 	ChannelTypeCommandCode:    "CommandCode",
@@ -277,6 +279,10 @@ var ChannelSpecialBases = map[string]ChannelSpecialBase{
 		ClaudeBaseURL: "https://ark.cn-beijing.volces.com/api/coding",
 		OpenAIBaseURL: "https://ark.cn-beijing.volces.com/api/coding/v3",
 	},
+	"cline-pass": {
+		ClaudeBaseURL: "https://api.cline.bot/api",
+		OpenAIBaseURL: "https://api.cline.bot/api",
+	},
 }
 
 // ChannelSpecialPlanProfiles 定义各渠道类型支持的套餐端点 profile 到魔法键的映射。
@@ -290,6 +296,9 @@ var ChannelSpecialPlanProfiles = map[int]map[string]string{
 	},
 	ChannelTypeMoonshot: {
 		"coding": "kimi-coding-plan",
+	},
+	ChannelTypeCline: {
+		"clinepass": "cline-pass",
 	},
 }
 

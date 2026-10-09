@@ -128,3 +128,12 @@ func TestGetChannelBaseURLIsBoundsSafe(t *testing.T) {
 	assert.Empty(t, GetChannelBaseURL(ChannelTypeTaskPlugin))
 	assert.Empty(t, GetChannelBaseURL(9999))
 }
+
+func TestClineChannelTypeRegistration(t *testing.T) {
+	require.Equal(t, 94, ChannelTypeCline)
+	require.Equal(t, "Cline", GetChannelTypeName(ChannelTypeCline))
+	require.Equal(t, "https://api.cline.bot/api", GetChannelBaseURL(ChannelTypeCline))
+	profiles, ok := ChannelSpecialPlanProfiles[ChannelTypeCline]
+	require.True(t, ok, "cline must declare special plan profiles")
+	require.Equal(t, "cline-pass", profiles["clinepass"])
+}

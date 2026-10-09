@@ -450,6 +450,7 @@ var streamSupportedChannels = map[int]bool{
 	constant.ChannelTypeSub2API:        true,
 	constant.ChannelTypeNewAPI:         true,
 	constant.ChannelTypeCommandCode:    true,
+	constant.ChannelTypeCline:          true,
 	constant.ChannelTypeOpenCodeGo:     true,
 	constant.ChannelTypeVLLM:           true,
 	constant.ChannelTypeSGLang:         true,

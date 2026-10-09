@@ -89,6 +89,8 @@ func ChannelType2APIType(channelType int) (int, bool) {
 		apiType = constant.APITypeOpenAI
 	case constant.ChannelTypeCommandCode:
 		apiType = constant.APITypeCommandCode
+	case constant.ChannelTypeCline:
+		apiType = constant.APITypeCline
 	}
 	if apiType == -1 {
 		// Task plugin channels are served by the task relay and must never
