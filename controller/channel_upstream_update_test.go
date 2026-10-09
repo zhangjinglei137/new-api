@@ -672,3 +672,16 @@ func TestApplyChannelUpstreamModelUpdatesPersistsLockedReadModifyWrite(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "gpt-4.1", reloaded.Models)
 }
+
+func TestParseClinePassModelIDs(t *testing.T) {
+	body := []byte(`{"recommended":[{"id":"anthropic/claude-sonnet-5.5"}],"free":[{"id":"cline-free/mimo"}],"clinePass":[{"id":"cline-pass/deepseek-v4.1-flash"},{"id":"cline-pass/glm-5.3"}],"clineCloud":[{"id":"cline-cloud/x"}]}`)
+	ids, err := parseClinePassModelIDs(body)
+	require.NoError(t, err)
+	require.Equal(t, []string{"cline-pass/deepseek-v4.1-flash", "cline-pass/glm-5.3"}, ids)
+}
+
+func TestParseClinePassModelIDsEmptyReturnsEmptyWithoutError(t *testing.T) {
+	ids, err := parseClinePassModelIDs([]byte(`{"clinePass":[]}`))
+	require.NoError(t, err)
+	require.Empty(t, ids)
+}

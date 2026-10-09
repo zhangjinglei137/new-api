@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel/advancedcustom"
+	"github.com/QuantumNous/new-api/relay/channel/cline"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -420,6 +421,10 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 
 	if channel.Type == constant.ChannelTypeCodex {
 		return service.FetchCodexChannelModels(channel)
+	}
+
+	if channel.Type == constant.ChannelTypeCline && channel.GetOtherSettings().EndpointProfile == cline.PlanProfile {
+		return fetchClinePassModelIDs(channel, baseURL)
 	}
 
 	var url string
@@ -1227,4 +1232,38 @@ func DetectAllChannelUpstreamModelUpdates(c *gin.Context) {
 			"status":  task.Status,
 		},
 	})
+}
+
+// parseClinePassModelIDs 解析 Cline 计划方式的 recommended-models 响应，
+// 仅采用 clinePass 数组的 id，忽略 recommended/free/clineCloud。
+func parseClinePassModelIDs(body []byte) ([]string, error) {
+	var result struct {
+		ClinePass []OpenAIModel `json:"clinePass"`
+	}
+	if err := common.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("invalid Cline recommended-models response: %w", err)
+	}
+	return normalizeModelNames(lo.Map(result.ClinePass, func(item OpenAIModel, _ int) string {
+		return item.ID
+	})), nil
+}
+
+// fetchClinePassModelIDs 拉取并解析 Cline 计划方式的模型列表。
+func fetchClinePassModelIDs(channel *model.Channel, baseURL string) ([]string, error) {
+	key, _, apiErr := channel.GetNextEnabledKey()
+	if apiErr != nil {
+		return nil, fmt.Errorf("获取渠道密钥失败: %w", apiErr)
+	}
+	key = strings.TrimSpace(key)
+
+	url := fmt.Sprintf("%s/v1/ai/cline/recommended-models", strings.TrimRight(baseURL, "/"))
+	headers, err := buildFetchModelsHeaders(channel, key)
+	if err != nil {
+		return nil, sanitizeFetchModelsError(err, key)
+	}
+	body, err := getFetchModelsResponseBody(http.MethodGet, url, channel, headers)
+	if err != nil {
+		return nil, sanitizeAdvancedCustomRequestError(err, key, url)
+	}
+	return parseClinePassModelIDs(body)
 }
