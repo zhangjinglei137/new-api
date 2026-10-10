@@ -574,6 +574,9 @@ export function useCommonLogsColumns(
               </span>
             )
           },
+          // Keep the column narrow so it does not squeeze the model column:
+          // the cell only shows a single-digit count or '-'.
+          size: 80,
         },
         {
           id: 'user',

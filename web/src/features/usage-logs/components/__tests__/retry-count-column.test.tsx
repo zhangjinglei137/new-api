@@ -110,6 +110,17 @@ describe('usage log retry count column', () => {
     expect(result.current.map((c) => c.id)).not.toContain('link-count')
   })
 
+  test('keeps the retry count column explicitly narrow so it cannot squeeze the model column', () => {
+    const { result } = renderColumns(true)
+    const retryColumn = result.current.find((c) => c.id === 'link-count')
+    const modelColumn = result.current.find(
+      (c) => 'accessorKey' in c && c.accessorKey === 'model_name'
+    )
+    // A single-digit count or '-' needs far less than TanStack's default 150.
+    expect(retryColumn?.size).toBe(80)
+    expect(retryColumn?.size).toBeLessThan(modelColumn?.size ?? 150)
+  })
+
   test.each([
     { useChannel: [3], expected: '0' },
     { useChannel: [3, 5, 7], expected: '2' },
