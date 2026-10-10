@@ -660,12 +660,12 @@ func TestListSenseNovaAPIKeysPaginates(t *testing.T) {
 	t.Cleanup(func() { invalidateSenseNovaToken(channelID, "u", "p") })
 
 	steps := senseNovaSuccessSteps()
-	var pages []string
+	var tokens []string
 	transport := &senseNovaMockTransport{handler: func(m *senseNovaMockTransport, req *http.Request) (*http.Response, error) {
 		if req.Method == http.MethodGet && strings.HasPrefix(req.URL.Path, "/lite/console/v1/metered/api-keys") {
-			page := req.URL.Query().Get("page")
-			pages = append(pages, page)
-			if page == "1" {
+			token := req.URL.Query().Get("page_token")
+			tokens = append(tokens, token)
+			if token == "" {
 				return senseNovaMockResponse(http.StatusOK, nil, senseNovaAPIKeysFixturePage1), nil
 			}
 			return senseNovaMockResponse(http.StatusOK, nil, senseNovaAPIKeysFixturePage2), nil
@@ -676,7 +676,7 @@ func TestListSenseNovaAPIKeysPaginates(t *testing.T) {
 	keys, err := listSenseNovaAPIKeysWithClient(&http.Client{Transport: transport}, channelID, "u", "p")
 	require.NoError(t, err)
 	require.Len(t, keys, 3, "必须跟随 next_page_token 拉全两页")
-	assert.Equal(t, []string{"1", "2"}, pages)
+	assert.Equal(t, []string{"", "page-2"}, tokens, "第二页须以 page_token 游标请求")
 
 	assert.Equal(t, "key-1", keys[0].ID)
 	assert.Equal(t, "默认", keys[0].DisplayName)
@@ -695,7 +695,31 @@ func TestListSenseNovaAPIKeysPaginates(t *testing.T) {
 	q := apiReq.URL.Query()
 	assert.Equal(t, "API_KEY_TYPE_TOKEN_PLAN", q.Get("key_type"))
 	assert.Equal(t, "100", q.Get("page_size"))
-	assert.Equal(t, "1", q.Get("page"))
+	assert.Empty(t, q.Get("page_token"), "首页不带游标")
+	assert.Empty(t, q.Get("page"), "不得再发送被上游忽略的 page 参数")
+}
+
+// TestListSenseNovaAPIKeysStopsOnNoProgress 验证当上游忽略游标、反复返回同一页时，
+// 列表按 key id 去重并以「本页无新增」停止，不会累积重复项或无限循环。
+func TestListSenseNovaAPIKeysStopsOnNoProgress(t *testing.T) {
+	const channelID = 9013
+	t.Cleanup(func() { invalidateSenseNovaToken(channelID, "u", "p") })
+
+	steps := senseNovaSuccessSteps()
+	requests := 0
+	transport := &senseNovaMockTransport{handler: func(m *senseNovaMockTransport, req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodGet && strings.HasPrefix(req.URL.Path, "/lite/console/v1/metered/api-keys") {
+			requests++
+			// 始终返回同一页且带非空 next_page_token，模拟上游不认游标。
+			return senseNovaMockResponse(http.StatusOK, nil, senseNovaAPIKeysFixturePage1), nil
+		}
+		return senseNovaLoginHandler(steps)(m, req)
+	}}
+
+	keys, err := listSenseNovaAPIKeysWithClient(&http.Client{Transport: transport}, channelID, "u", "p")
+	require.NoError(t, err)
+	assert.Len(t, keys, 2, "重复页必须被去重")
+	assert.Equal(t, 2, requests, "首请求 + 一次无新增即停止")
 }
 
 // TestDeleteSenseNovaAPIKeySuccess 验证删除使用 DELETE、key id 经路径转义且
@@ -746,4 +770,34 @@ func TestDeleteSenseNovaAPIKeyRetriesOnTokenInvalid(t *testing.T) {
 	require.NoError(t, deleteSenseNovaAPIKeyWithClient(&http.Client{Transport: transport}, channelID, "u", "p", "key-1"))
 	assert.Equal(t, []string{"Bearer stale", "Bearer access-123"}, auths, "重登后应以新令牌重试")
 	assert.Equal(t, 8, transport.len(), "请求序列：DELETE(401) + 6 步登录 + DELETE(200)")
+}
+
+// TestListSenseNovaAPIKeysRetriesOnTokenInvalid 验证列表 401 时作废缓存、完整重登
+// 并以新令牌重试一次。
+func TestListSenseNovaAPIKeysRetriesOnTokenInvalid(t *testing.T) {
+	const channelID = 9014
+	t.Cleanup(func() { invalidateSenseNovaToken(channelID, "u", "p") })
+	entry := senseNovaTokenEntryFor(channelID, "u", "p")
+	entry.mu.Lock()
+	entry.token = &SenseNovaToken{AccessToken: "stale", RefreshToken: "rt", ExpiresAt: time.Now().Add(2 * time.Hour)}
+	entry.mu.Unlock()
+
+	steps := senseNovaSuccessSteps()
+	var auths []string
+	transport := &senseNovaMockTransport{handler: func(m *senseNovaMockTransport, req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodGet && strings.HasPrefix(req.URL.Path, "/lite/console/v1/metered/api-keys") {
+			auths = append(auths, req.Header.Get("Authorization"))
+			if req.Header.Get("Authorization") == "Bearer stale" {
+				return senseNovaMockResponse(http.StatusUnauthorized, nil, `{}`), nil
+			}
+			return senseNovaMockResponse(http.StatusOK, nil, senseNovaAPIKeysFixturePage2), nil
+		}
+		return senseNovaLoginHandler(steps)(m, req)
+	}}
+
+	keys, err := listSenseNovaAPIKeysWithClient(&http.Client{Transport: transport}, channelID, "u", "p")
+	require.NoError(t, err)
+	require.Len(t, keys, 1)
+	assert.Equal(t, []string{"Bearer stale", "Bearer access-123"}, auths, "重登后应以新令牌重试")
+	assert.Equal(t, 8, transport.len(), "请求序列：api-keys(401) + 6 步登录 + api-keys(200)")
 }

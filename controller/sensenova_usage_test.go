@@ -169,6 +169,20 @@ func TestGetSenseNovaAPIKeysRejectsMissingCredentials(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), `"sensenova 账号未配置"`)
 }
 
+// TestGetSenseNovaAPIKeysRejectsMultiKeyChannel 验证多 key 渠道被拒绝：多 key 时
+// ch.Key 是拼接整串，无法与上游单个 key 比较，in_use 与删除兜底都会失效，故
+// 直接拒绝（与 moonshot/radeoncloud/codex 等用量接口一致）。
+func TestGetSenseNovaAPIKeysRejectsMultiKeyChannel(t *testing.T) {
+	setupSenseNovaUsageControllerTest(t)
+	channel := model.Channel{Type: constant.ChannelTypeSenseNova, Status: common.ChannelStatusEnabled, Name: "sensenova", Key: "k", Models: "deepseek-v4-flash", Group: "default"}
+	channel.ChannelInfo.IsMultiKey = true
+	require.NoError(t, channel.Insert())
+
+	recorder := callGetSenseNovaAPIKeys(t, channel.Id)
+	assert.Contains(t, recorder.Body.String(), `"success":false`)
+	assert.Contains(t, recorder.Body.String(), "multi-key channel is not supported")
+}
+
 // TestGetSenseNovaAPIKeysMarksInUseAndMasksKey 验证列表标记 in_use（等于渠道
 // 当前 key 的项）且对外只返回掩码 api_key，绝不泄露完整明文。
 func TestGetSenseNovaAPIKeysMarksInUseAndMasksKey(t *testing.T) {

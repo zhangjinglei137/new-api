@@ -743,39 +743,48 @@ func listSenseNovaAPIKeysWithClient(client *http.Client, channelID int, username
 	return fetchSenseNovaAllAPIKeysWithClient(client, token.AccessToken)
 }
 
-// fetchSenseNovaAllAPIKeysWithClient 循环翻页拉取账号下全部 API key：优先跟随
-// 响应中的 next_page_token（非空即继续），其次按 total_count 与满页判断是否
-// 还有下一页；达到翻页上限时停止，避免上游异常导致无限循环。
+// fetchSenseNovaAllAPIKeysWithClient 循环翻页拉取账号下全部 API key。上游按游标
+// 分页：请求参数是 page_token（取上一页响应里的 next_page_token），page 参数会被
+// 忽略。按 key id 去重并以「本页无新增」作为终止条件，避免上游异常导致重复或
+// 无限循环；同时保留翻页上限。
 func fetchSenseNovaAllAPIKeysWithClient(client *http.Client, accessToken string) ([]SenseNovaAPIKey, error) {
 	var all []SenseNovaAPIKey
-	for page := 1; page <= senseNovaMaxAPIKeyPages; page++ {
-		keys, nextToken, total, err := fetchSenseNovaAPIKeysPageWithClient(client, accessToken, page, senseNovaAPIKeysPageSize)
+	seen := make(map[string]struct{})
+	pageToken := ""
+	for page := 0; page < senseNovaMaxAPIKeyPages; page++ {
+		keys, nextToken, _, err := fetchSenseNovaAPIKeysPageWithClient(client, accessToken, pageToken, senseNovaAPIKeysPageSize)
 		if err != nil {
 			return nil, err
 		}
-		all = append(all, keys...)
-		if nextToken != "" {
-			continue
+		added := 0
+		for _, k := range keys {
+			if _, ok := seen[k.ID]; ok {
+				continue
+			}
+			seen[k.ID] = struct{}{}
+			all = append(all, k)
+			added++
 		}
-		if len(keys) < senseNovaAPIKeysPageSize {
+		if added == 0 || nextToken == "" {
 			break
 		}
-		if total > 0 && len(all) >= total {
-			break
-		}
+		pageToken = nextToken
 	}
 	return all, nil
 }
 
-// fetchSenseNovaAPIKeysPageWithClient 拉取指定页的 API key 列表；401/403 视为
-// 令牌失效。返回该页 key、下一页 token 与服务端声明的总数。
-func fetchSenseNovaAPIKeysPageWithClient(client *http.Client, accessToken string, page, pageSize int) ([]SenseNovaAPIKey, string, int, error) {
+// fetchSenseNovaAPIKeysPageWithClient 拉取一页 API key 列表；pageToken 非空时作为
+// page_token 游标回传（上游据此翻页），401/403 视为令牌失效。返回该页 key、下一页
+// token 与服务端声明的总数。
+func fetchSenseNovaAPIKeysPageWithClient(client *http.Client, accessToken, pageToken string, pageSize int) ([]SenseNovaAPIKey, string, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), senseNovaPoolUsageTimeout)
 	defer cancel()
 	params := url.Values{}
 	params.Set("key_type", "API_KEY_TYPE_TOKEN_PLAN")
 	params.Set("page_size", strconv.Itoa(pageSize))
-	params.Set("page", strconv.Itoa(page))
+	if pageToken != "" {
+		params.Set("page_token", pageToken)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, senseNovaAPIKeysURL+"?"+params.Encode(), nil)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("获取 API key 列表失败: %w", err)

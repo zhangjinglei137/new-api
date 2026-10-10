@@ -42,6 +42,10 @@ func loadSenseNovaChannelCredentials(c *gin.Context, id int) (*model.Channel, st
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "channel type is not SenseNova"})
 		return nil, "", "", false
 	}
+	if ch.ChannelInfo.IsMultiKey {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "multi-key channel is not supported"})
+		return nil, "", "", false
+	}
 	settings := ch.GetOtherSettings()
 	if strings.TrimSpace(settings.SenseNovaUsername) == "" || strings.TrimSpace(settings.SenseNovaPassword) == "" {
 		respondSenseNovaCredentialsNotConfigured(c)
@@ -67,10 +71,10 @@ func loadSenseNovaChannelCredentials(c *gin.Context, id int) (*model.Channel, st
 }
 
 // maskSenseNovaAPIKey 对 API key 做掩码：保留前缀 8 位与末尾 4 位，中间以 …
-// 代替；过短时整体掩码。对外响应绝不返回完整明文。
+// 代替；当 key 过短（隐藏位数不足 4）时整体掩码。对外响应绝不返回完整明文。
 func maskSenseNovaAPIKey(key string) string {
-	const prefixLen, suffixLen = 8, 4
-	if len(key) <= prefixLen+suffixLen {
+	const prefixLen, suffixLen, minHidden = 8, 4, 4
+	if len(key) < prefixLen+suffixLen+minHidden {
 		return "…"
 	}
 	return key[:prefixLen] + "…" + key[len(key)-suffixLen:]
