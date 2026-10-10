@@ -546,7 +546,7 @@ export function useCommonLogsColumns(
         },
         {
           id: 'link-count',
-          header: t('Chain Count'),
+          header: t('Retry Count'),
           accessorFn: (row) => {
             const rawUseChannel = parseLogOther(
               row.other

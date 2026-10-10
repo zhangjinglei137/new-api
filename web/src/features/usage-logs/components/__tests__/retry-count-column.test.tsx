@@ -94,7 +94,7 @@ function renderCell(log: UsageLog) {
 describe('usage log retry count column', () => {
   beforeAll(() => {
     i18next.addResourceBundle('en', 'translation', {
-      'Chain Count': 'Chain Count',
+      'Retry Count': 'Retry Count',
     })
   })
 
