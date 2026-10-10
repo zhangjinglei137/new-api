@@ -74,6 +74,9 @@ export interface DashboardChartsProps<
   // When provided, the query key and the fetchers carry the admin scope so an
   // admin view never leaks non-own quota data to regular users.
   isAdmin?: boolean
+  // Optional i18n key for the dimension id row shown in the pie tooltip
+  // (e.g. 'Channel ID').
+  idTooltipLabelKey?: string
 }
 
 const CHART_SPEC_KEYS: Record<
@@ -171,6 +174,7 @@ export function DashboardCharts<
         getTrendId: props.getTrendId,
         getTrendName: props.getTrendName,
         chartCornerRadius: chartRadius,
+        idTooltipLabelKey: props.idTooltipLabelKey,
       }),
     [
       props.deletedKey,
@@ -180,6 +184,7 @@ export function DashboardCharts<
       props.metric,
       props.getName,
       props.unknownKey,
+      props.idTooltipLabelKey,
       rows,
       trendRows,
       isLoading,

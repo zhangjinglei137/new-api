@@ -94,11 +94,15 @@ export function buildChartData<
   getTrendId: (row: TTrend) => number
   getTrendName: (row: TTrend) => string | undefined
   chartCornerRadius?: number
+  // When set, the pie tooltip gains an extra row showing the dimension id
+  // (e.g. the channel id) under this i18n label.
+  idTooltipLabelKey?: string
 }): ChartData {
   const otherLabel = args.t('Other')
   const pieTitle = args.t('Call Distribution')
   const rankTitle = args.t('Call Ranking')
   const trendTitle = args.t('Call Trend')
+  const idTooltipLabel = args.idTooltipLabelKey
   const formatValue = (value: number) =>
     formatChartMetricValue(value, args.metric)
   const formatTotal = (value: number) =>
@@ -126,7 +130,9 @@ export function buildChartData<
     })
   })
 
-  const entries = [...totals.values()].sort((a, b) => b.value - a.value)
+  const entries = [...totals.entries()]
+    .map(([id, entry]) => ({ id, ...entry }))
+    .sort((a, b) => b.value - a.value)
   const totalValue = entries.reduce((sum, entry) => sum + entry.value, 0)
   const empty = entries.length === 0
   const subtext = empty ? args.t('No data available') : undefined
@@ -134,6 +140,7 @@ export function buildChartData<
   const pieValues = entries.map((entry) => ({
     type: entry.name,
     value: entry.value,
+    id: entry.id,
   }))
 
   // The series field name is dimension-neutral ("Series") so the shared spec
@@ -255,6 +262,14 @@ export function buildChartData<
               value: (datum: Record<string, unknown>) =>
                 formatValue(Number(datum?.value) || 0),
             },
+            ...(idTooltipLabel
+              ? [
+                  {
+                    key: () => args.t(idTooltipLabel),
+                    value: (datum: Record<string, unknown>) => datum?.id,
+                  },
+                ]
+              : []),
           ],
         },
       },

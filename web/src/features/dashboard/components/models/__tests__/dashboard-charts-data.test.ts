@@ -103,8 +103,8 @@ describe('buildChartData', () => {
       { Series: 'Alpha', Value: 3 },
     ])
     expect(result.spec_pie.data[0].values).toEqual([
-      { type: 'Beta', value: 5 },
-      { type: 'Alpha', value: 3 },
+      { type: 'Beta', value: 5, id: 2 },
+      { type: 'Alpha', value: 3, id: 1 },
     ])
     expect(result.totalDisplay).toBeTruthy()
   })
@@ -230,5 +230,39 @@ describe('buildChartData', () => {
 
     expect(result.spec_pie.title?.subtext).toBe('No data available')
     expect(result.spec_rank.title?.subtext).toBe('No data available')
+  })
+
+  it('adds a dimension id row to the pie tooltip only when a label is provided', () => {
+    const rows: ChannelRow[] = [
+      { channel_id: 42, channel_name: 'Ch-42', count: 3, quota: 30 },
+    ]
+    const baseArgs = {
+      rows,
+      trendRows: [],
+      metric: 'count' as const,
+      timeGranularity: 'day' as const,
+      t,
+      deletedItemLabel: (id: number) => `Deleted #${id}`,
+      unknownItemKey: 'Unknown Channel',
+      getId: channelId,
+      getName: channelName,
+      getTrendId: channelId,
+      getTrendName: channelName,
+    }
+
+    const withId = buildChartData({
+      ...baseArgs,
+      idTooltipLabelKey: 'Channel ID',
+    })
+    const withIdContent = withId.spec_pie.tooltip.mark.content as Array<{
+      key: (datum: Record<string, unknown>) => unknown
+      value: (datum: Record<string, unknown>) => unknown
+    }>
+    expect(withIdContent).toHaveLength(2)
+    expect(withIdContent[1].key({})).toBe('Channel ID')
+    expect(withIdContent[1].value({ id: 42 })).toBe(42)
+
+    const withoutId = buildChartData(baseArgs)
+    expect(withoutId.spec_pie.tooltip.mark.content).toHaveLength(1)
   })
 })

@@ -69,6 +69,7 @@ export function ChannelCharts(props: ChannelChartsProps) {
       titleKey='Channel Call Analytics'
       unknownKey='Unknown Channel'
       deletedKey='Deleted channel ({{id}})'
+      idTooltipLabelKey='Channel ID'
       icon={Network}
       tone='chart-2'
     />
