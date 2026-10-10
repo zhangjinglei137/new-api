@@ -93,6 +93,8 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/:id/radeoncloud/usage", permission: authz.ChannelRead, handler: controller.GetRadeonCloudUsage},
 	{method: http.MethodGet, path: "/:id/commandcode/usage", permission: authz.ChannelRead, handler: controller.GetCommandCodeUsage},
 	{method: http.MethodGet, path: "/:id/sensenova/usage", permission: authz.ChannelRead, handler: controller.GetSenseNovaUsage},
+	{method: http.MethodGet, path: "/:id/sensenova/api-keys", permission: authz.ChannelRead, handler: controller.GetSenseNovaAPIKeys},
+	{method: http.MethodDelete, path: "/:id/sensenova/api-keys/:keyId", permission: authz.ChannelSensitiveWrite, handler: controller.DeleteSenseNovaAPIKey},
 	{method: http.MethodGet, path: "/:id/cline/usage", permission: authz.ChannelRead, handler: controller.GetClinePlanUsage},
 	{method: http.MethodPost, path: "/ollama/pull", permission: authz.ChannelSensitiveWrite, handler: controller.OllamaPullModel},
 	{method: http.MethodPost, path: "/ollama/pull/stream", permission: authz.ChannelSensitiveWrite, handler: controller.OllamaPullModelStream},

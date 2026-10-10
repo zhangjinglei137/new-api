@@ -7430,6 +7430,13 @@
     "The upstream response did not include recognizable usage data.": "Phản hồi thượng nguồn không bao gồm dữ liệu sử dụng nhận dạng được.",
     "{{count}} requests": "{{count}} yêu cầu",
     "{{count}} tokens": "{{count}} tokens",
-    "Status: ": "Trạng thái: "
+    "Status: ": "Trạng thái: ",
+    "API key deleted": "Đã xóa khóa API",
+    "Delete API key": "Xóa khóa API",
+    "Failed to fetch API keys": "Không thể tải khóa API",
+    "Loading API keys...": "Đang tải khóa API...",
+    "No API keys": "Không có khóa API",
+    "In use": "Đang sử dụng",
+    "Are you sure you want to delete the API key \"{{name}}\"? This action cannot be undone.": "Bạn có chắc muốn xóa khóa API \"{{name}}\"? Hành động này không thể hoàn tác."
   }
 }

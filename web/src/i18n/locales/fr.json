@@ -7430,6 +7430,13 @@
     "The upstream response did not include recognizable usage data.": "La réponse en amont ne contenait pas de données d’utilisation reconnaissables.",
     "{{count}} requests": "{{count}} requêtes",
     "{{count}} tokens": "{{count}} tokens",
-    "Status: ": "Statut : "
+    "Status: ": "Statut : ",
+    "API key deleted": "Clé API supprimée",
+    "Delete API key": "Supprimer la clé API",
+    "Failed to fetch API keys": "Échec de la récupération des clés API",
+    "Loading API keys...": "Chargement des clés API...",
+    "No API keys": "Aucune clé API",
+    "In use": "En cours d’utilisation",
+    "Are you sure you want to delete the API key \"{{name}}\"? This action cannot be undone.": "Voulez-vous vraiment supprimer la clé API « {{name}} » ? Cette action est irréversible."
   }
 }

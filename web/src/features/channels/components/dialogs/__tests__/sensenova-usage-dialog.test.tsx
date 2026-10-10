@@ -16,28 +16,82 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, test, vi } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import dayjs from '@/lib/dayjs'
 import { formatDateTimeStr } from '@/lib/format'
 
-import type { SenseNovaUsagePool, SenseNovaUsageWindow } from '../../../api'
+import {
+  deleteSenseNovaAPIKey,
+  getSenseNovaAPIKeys,
+  type SenseNovaAPIKey,
+  type SenseNovaUsagePool,
+  type SenseNovaUsageWindow,
+} from '../../../api'
 import {
   SenseNovaUsageDialog,
   type SenseNovaUsageResponse,
 } from '../sensenova-usage-dialog'
 
+vi.mock('../../../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../api')>()
+  return {
+    ...actual,
+    getSenseNovaAPIKeys: vi.fn(),
+    deleteSenseNovaAPIKey: vi.fn(),
+  }
+})
+
+const getKeysMock = vi.mocked(getSenseNovaAPIKeys)
+const deleteKeyMock = vi.mocked(deleteSenseNovaAPIKey)
+
+const KEYS: SenseNovaAPIKey[] = [
+  {
+    id: 'k1',
+    display_name: 'primary-key',
+    api_key: 'sk-aaaa…1111',
+    key_type: 'API_KEY_TYPE_TOKEN_PLAN',
+    status: 'enabled',
+    is_default: true,
+    create_time: '2026-07-16T06:56:14.816395Z',
+    in_use: true,
+  },
+  {
+    id: 'k2',
+    display_name: 'spare-key',
+    api_key: 'sk-bbbb…2222',
+    key_type: 'API_KEY_TYPE_TOKEN_PLAN',
+    status: 'enabled',
+    is_default: false,
+    create_time: '2026-07-16T06:56:14.816395Z',
+    in_use: false,
+  },
+]
+
+beforeEach(() => {
+  getKeysMock.mockReset()
+  deleteKeyMock.mockReset()
+  getKeysMock.mockResolvedValue({ success: true, data: { keys: [] } })
+  deleteKeyMock.mockResolvedValue({ success: true })
+})
+
 function renderDialog(response: SenseNovaUsageResponse | null, onRefresh?: () => void) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
   render(
-    <SenseNovaUsageDialog
-      open
-      onOpenChange={() => undefined}
-      channelName='SenseNova'
-      channelId={97}
-      response={response}
-      onRefresh={onRefresh}
-    />
+    <QueryClientProvider client={queryClient}>
+      <SenseNovaUsageDialog
+        open
+        onOpenChange={() => undefined}
+        channelName='SenseNova'
+        channelId={97}
+        response={response}
+        onRefresh={onRefresh}
+      />
+    </QueryClientProvider>
   )
 }
 
@@ -374,5 +428,49 @@ describe('SenseNovaUsageDialog', () => {
     expect(screen.getAllByText('Usage percentage unavailable').length).toBe(2)
     expect(screen.getAllByText('Resets at: -').length).toBe(2)
     expect(screen.getAllByText('-').length).toBeGreaterThan(0)
+  })
+
+  test('lists account API keys and marks the in-use key without a delete action', async () => {
+    getKeysMock.mockResolvedValue({ success: true, data: { keys: KEYS } })
+    renderDialog(TWO_POOL_RESPONSE)
+
+    expect(await screen.findByText('primary-key')).toBeInTheDocument()
+    expect(screen.getByText('spare-key')).toBeInTheDocument()
+    // the configured key is flagged as in use
+    expect(screen.getByText('In use')).toBeInTheDocument()
+    // only the non in-use key exposes a delete button
+    expect(
+      screen.getAllByRole('button', { name: 'Delete API key' })
+    ).toHaveLength(1)
+  })
+
+  test('confirms then deletes a non in-use key and calls the delete API', async () => {
+    getKeysMock.mockResolvedValue({ success: true, data: { keys: KEYS } })
+    renderDialog(TWO_POOL_RESPONSE)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Delete API key' })
+    )
+    // the confirm dialog's confirm button is labelled "Delete"
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(deleteKeyMock).toHaveBeenCalledWith(97, 'k2')
+    })
+  })
+
+  test('shows an error state when the API key list request fails', async () => {
+    getKeysMock.mockRejectedValue(new Error('boom'))
+    renderDialog(TWO_POOL_RESPONSE)
+
+    expect(
+      await screen.findByText('Failed to fetch API keys')
+    ).toBeInTheDocument()
+  })
+
+  test('shows an empty state when the account has no API keys', async () => {
+    renderDialog(TWO_POOL_RESPONSE)
+
+    expect(await screen.findByText('No API keys')).toBeInTheDocument()
   })
 })

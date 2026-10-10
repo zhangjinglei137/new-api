@@ -7430,6 +7430,13 @@
     "The upstream response did not include recognizable usage data.": "Ответ вышестоящего сервиса не содержал распознаваемых данных об использовании.",
     "{{count}} requests": "{{count}} запросов",
     "{{count}} tokens": "{{count}} токенов",
-    "Status: ": "Статус: "
+    "Status: ": "Статус: ",
+    "API key deleted": "API-ключ удалён",
+    "Delete API key": "Удалить API-ключ",
+    "Failed to fetch API keys": "Не удалось получить API-ключи",
+    "Loading API keys...": "Загрузка API-ключей...",
+    "No API keys": "Нет API-ключей",
+    "In use": "Используется",
+    "Are you sure you want to delete the API key \"{{name}}\"? This action cannot be undone.": "Удалить API-ключ «{{name}}»? Это действие необратимо."
   }
 }

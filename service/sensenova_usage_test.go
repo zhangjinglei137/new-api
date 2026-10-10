@@ -645,3 +645,105 @@ func TestFetchSenseNovaUsageRetriesOnTokenInvalid(t *testing.T) {
 	require.NotNil(t, entry.token)
 	assert.Equal(t, "access-123", entry.token.AccessToken)
 }
+
+// senseNovaAPIKeysFixturePage1 / Page2 是 api-keys 分页响应：第一页携带
+// next_page_token，第二页 next_page_token 为空，total_count 均为 3。
+const (
+	senseNovaAPIKeysFixturePage1 = `{"api_keys":[{"id":"key-1","displayname":"默认","key_type":"API_KEY_TYPE_TOKEN_PLAN","api_key":"sk-hQAsW1234567890fY1","create_time":"2026-07-16T06:56:14.816395Z","status":"enabled","is_default":true},{"id":"key-2","displayname":"备用","key_type":"API_KEY_TYPE_TOKEN_PLAN","api_key":"sk-AAAAAAAAAAAAAAAbbbb","create_time":"2026-07-17T06:56:14.816395Z","status":"enabled","is_default":false}],"next_page_token":"page-2","total_count":3}`
+	senseNovaAPIKeysFixturePage2 = `{"api_keys":[{"id":"key-3","displayname":"第三","key_type":"API_KEY_TYPE_TOKEN_PLAN","api_key":"sk-CCCCCCCCCCCCCCdddd","create_time":"2026-07-18T06:56:14.816395Z","status":"enabled","is_default":false}],"next_page_token":"","total_count":3}`
+)
+
+// TestListSenseNovaAPIKeysPaginates 验证列表按 next_page_token 翻页并解析全部
+// 字段（key_type/status/create_time/is_default），且首请求 query 参数正确。
+func TestListSenseNovaAPIKeysPaginates(t *testing.T) {
+	const channelID = 9010
+	t.Cleanup(func() { invalidateSenseNovaToken(channelID, "u", "p") })
+
+	steps := senseNovaSuccessSteps()
+	var pages []string
+	transport := &senseNovaMockTransport{handler: func(m *senseNovaMockTransport, req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodGet && strings.HasPrefix(req.URL.Path, "/lite/console/v1/metered/api-keys") {
+			page := req.URL.Query().Get("page")
+			pages = append(pages, page)
+			if page == "1" {
+				return senseNovaMockResponse(http.StatusOK, nil, senseNovaAPIKeysFixturePage1), nil
+			}
+			return senseNovaMockResponse(http.StatusOK, nil, senseNovaAPIKeysFixturePage2), nil
+		}
+		return senseNovaLoginHandler(steps)(m, req)
+	}}
+
+	keys, err := listSenseNovaAPIKeysWithClient(&http.Client{Transport: transport}, channelID, "u", "p")
+	require.NoError(t, err)
+	require.Len(t, keys, 3, "必须跟随 next_page_token 拉全两页")
+	assert.Equal(t, []string{"1", "2"}, pages)
+
+	assert.Equal(t, "key-1", keys[0].ID)
+	assert.Equal(t, "默认", keys[0].DisplayName)
+	assert.Equal(t, "sk-hQAsW1234567890fY1", keys[0].APIKey)
+	assert.Equal(t, "API_KEY_TYPE_TOKEN_PLAN", keys[0].KeyType)
+	assert.Equal(t, "enabled", keys[0].Status)
+	assert.True(t, keys[0].IsDefault)
+	assert.Equal(t, "2026-07-16T06:56:14.816395Z", keys[0].CreateTime)
+	assert.Equal(t, "key-3", keys[2].ID)
+
+	apiReq := transport.request(6) // 前 6 个请求是登录流程
+	assert.Equal(t, http.MethodGet, apiReq.Method)
+	assert.Equal(t, senseNovaAPIKeysURL, apiReq.URL.Scheme+"://"+apiReq.URL.Host+apiReq.URL.Path)
+	assert.Equal(t, "Bearer access-123", apiReq.Header.Get("Authorization"))
+	assert.Equal(t, senseNovaUserAgent, apiReq.Header.Get("User-Agent"))
+	q := apiReq.URL.Query()
+	assert.Equal(t, "API_KEY_TYPE_TOKEN_PLAN", q.Get("key_type"))
+	assert.Equal(t, "100", q.Get("page_size"))
+	assert.Equal(t, "1", q.Get("page"))
+}
+
+// TestDeleteSenseNovaAPIKeySuccess 验证删除使用 DELETE、key id 经路径转义且
+// 携带 Bearer 令牌，2xx 视为成功。
+func TestDeleteSenseNovaAPIKeySuccess(t *testing.T) {
+	const channelID = 9011
+	t.Cleanup(func() { invalidateSenseNovaToken(channelID, "u", "p") })
+
+	steps := senseNovaSuccessSteps()
+	var deletedID, deleteAuth string
+	transport := &senseNovaMockTransport{handler: func(m *senseNovaMockTransport, req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodDelete && strings.HasPrefix(req.URL.Path, "/lite/console/v1/metered/api-keys/") {
+			deletedID = strings.TrimPrefix(req.URL.Path, "/lite/console/v1/metered/api-keys/")
+			deleteAuth = req.Header.Get("Authorization")
+			return senseNovaMockResponse(http.StatusOK, nil, `{}`), nil
+		}
+		return senseNovaLoginHandler(steps)(m, req)
+	}}
+
+	require.NoError(t, deleteSenseNovaAPIKeyWithClient(&http.Client{Transport: transport}, channelID, "u", "p", "key-1"))
+	assert.Equal(t, "key-1", deletedID)
+	assert.Equal(t, "Bearer access-123", deleteAuth)
+}
+
+// TestDeleteSenseNovaAPIKeyRetriesOnTokenInvalid 验证删除 401 时作废缓存、
+// 完整重登并以新令牌重试一次。
+func TestDeleteSenseNovaAPIKeyRetriesOnTokenInvalid(t *testing.T) {
+	const channelID = 9012
+	t.Cleanup(func() { invalidateSenseNovaToken(channelID, "u", "p") })
+	entry := senseNovaTokenEntryFor(channelID, "u", "p")
+	entry.mu.Lock()
+	entry.token = &SenseNovaToken{AccessToken: "stale", RefreshToken: "rt", ExpiresAt: time.Now().Add(2 * time.Hour)}
+	entry.mu.Unlock()
+
+	steps := senseNovaSuccessSteps()
+	var auths []string
+	transport := &senseNovaMockTransport{handler: func(m *senseNovaMockTransport, req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodDelete && strings.HasPrefix(req.URL.Path, "/lite/console/v1/metered/api-keys/") {
+			auths = append(auths, req.Header.Get("Authorization"))
+			if req.Header.Get("Authorization") == "Bearer stale" {
+				return senseNovaMockResponse(http.StatusUnauthorized, nil, `{}`), nil
+			}
+			return senseNovaMockResponse(http.StatusOK, nil, `{}`), nil
+		}
+		return senseNovaLoginHandler(steps)(m, req)
+	}}
+
+	require.NoError(t, deleteSenseNovaAPIKeyWithClient(&http.Client{Transport: transport}, channelID, "u", "p", "key-1"))
+	assert.Equal(t, []string{"Bearer stale", "Bearer access-123"}, auths, "重登后应以新令牌重试")
+	assert.Equal(t, 8, transport.len(), "请求序列：DELETE(401) + 6 步登录 + DELETE(200)")
+}

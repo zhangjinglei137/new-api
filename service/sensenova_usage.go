@@ -29,6 +29,7 @@ const (
 	senseNovaLoginAPIURL    = "https://iam.sensecoreapi.cn/iam/authn/v1/auth/nova/login"
 	senseNovaTokenURL       = "https://signin.sensecore.cn/oauth2/token"
 	senseNovaPoolUsageURL   = "https://platform.sensenova.cn/lite/console/v1/tokenplan/pool-usage"
+	senseNovaAPIKeysURL     = "https://platform.sensenova.cn/lite/console/v1/metered/api-keys"
 	senseNovaClientID       = "nova"
 	senseNovaRedirectURI    = "https://platform.sensenova.cn"
 	senseNovaPlatformHost   = "platform.sensenova.cn"
@@ -37,6 +38,10 @@ const (
 
 	senseNovaLoginTimeout     = 30 * time.Second
 	senseNovaPoolUsageTimeout = 15 * time.Second
+	// senseNovaAPIKeysPageSize 是 API key 列表分页每页条数；
+	// senseNovaMaxAPIKeyPages 是翻页上限，避免上游异常时无限循环。
+	senseNovaAPIKeysPageSize = 100
+	senseNovaMaxAPIKeyPages  = 100
 	// senseNovaDefaultTokenTTL 是上游未返回 expires_in 时的兜底有效期。
 	senseNovaDefaultTokenTTL = 2 * time.Hour
 	// senseNovaRefreshMargin 提前续期余量：令牌剩余有效期不足该值时先尝试续期。
@@ -130,6 +135,17 @@ type SenseNovaPlan struct {
 type SenseNovaUsageInfo struct {
 	Plan  SenseNovaPlan
 	Pools []SenseNovaPoolUsage
+}
+
+// SenseNovaAPIKey 是 SenseNova 账号下的单个 API key。
+type SenseNovaAPIKey struct {
+	ID          string
+	DisplayName string
+	APIKey      string
+	KeyType     string
+	Status      string
+	IsDefault   bool
+	CreateTime  string
 }
 
 // senseNovaPKCE 是一次登录流程使用的 PKCE 材料。
@@ -692,4 +708,196 @@ func parseSenseNovaLoginChallenge(location string) (string, error) {
 		return "", fmt.Errorf("sensenova 登录失败: 授权跳转缺少 login_challenge")
 	}
 	return challenge, nil
+}
+
+// ListSenseNovaAPIKeys 获取渠道账号下的全部 API key：带缓存登录 → 分页列表；
+// token 失效（401/403）时作废缓存重登并重试一次。
+func ListSenseNovaAPIKeys(channelID int, username, password, proxy string) ([]SenseNovaAPIKey, error) {
+	client, err := GetHttpClientWithProxy(proxy)
+	if err != nil {
+		return nil, err
+	}
+	return listSenseNovaAPIKeysWithClient(client, channelID, username, password)
+}
+
+// listSenseNovaAPIKeysWithClient 在给定 client（transport 已按渠道代理配置）上
+// 执行带缓存登录 → 分页列表；token 失效时重登重试一次。
+func listSenseNovaAPIKeysWithClient(client *http.Client, channelID int, username, password string) ([]SenseNovaAPIKey, error) {
+	token, err := getSenseNovaTokenWithClient(client, channelID, username, password)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := fetchSenseNovaAllAPIKeysWithClient(client, token.AccessToken)
+	if err == nil {
+		return keys, nil
+	}
+	if !errors.Is(err, errSenseNovaTokenInvalid) {
+		return nil, err
+	}
+	// 访问令牌失效：作废缓存并完整重登后重试一次。
+	invalidateSenseNovaToken(channelID, username, password)
+	token, err = getSenseNovaTokenWithClient(client, channelID, username, password)
+	if err != nil {
+		return nil, err
+	}
+	return fetchSenseNovaAllAPIKeysWithClient(client, token.AccessToken)
+}
+
+// fetchSenseNovaAllAPIKeysWithClient 循环翻页拉取账号下全部 API key：优先跟随
+// 响应中的 next_page_token（非空即继续），其次按 total_count 与满页判断是否
+// 还有下一页；达到翻页上限时停止，避免上游异常导致无限循环。
+func fetchSenseNovaAllAPIKeysWithClient(client *http.Client, accessToken string) ([]SenseNovaAPIKey, error) {
+	var all []SenseNovaAPIKey
+	for page := 1; page <= senseNovaMaxAPIKeyPages; page++ {
+		keys, nextToken, total, err := fetchSenseNovaAPIKeysPageWithClient(client, accessToken, page, senseNovaAPIKeysPageSize)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, keys...)
+		if nextToken != "" {
+			continue
+		}
+		if len(keys) < senseNovaAPIKeysPageSize {
+			break
+		}
+		if total > 0 && len(all) >= total {
+			break
+		}
+	}
+	return all, nil
+}
+
+// fetchSenseNovaAPIKeysPageWithClient 拉取指定页的 API key 列表；401/403 视为
+// 令牌失效。返回该页 key、下一页 token 与服务端声明的总数。
+func fetchSenseNovaAPIKeysPageWithClient(client *http.Client, accessToken string, page, pageSize int) ([]SenseNovaAPIKey, string, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), senseNovaPoolUsageTimeout)
+	defer cancel()
+	params := url.Values{}
+	params.Set("key_type", "API_KEY_TYPE_TOKEN_PLAN")
+	params.Set("page_size", strconv.Itoa(pageSize))
+	params.Set("page", strconv.Itoa(page))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, senseNovaAPIKeysURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("获取 API key 列表失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", senseNovaUserAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("获取 API key 列表失败: %w", err)
+	}
+	body, err := readSenseNovaBody(resp)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("获取 API key 列表失败: %w", err)
+	}
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return nil, "", 0, fmt.Errorf("%w", errSenseNovaTokenInvalid)
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		return nil, "", 0, fmt.Errorf("获取 API key 列表失败: 接口返回 %d", resp.StatusCode)
+	}
+	keys, nextToken, total, err := parseSenseNovaAPIKeys(body)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("获取 API key 列表失败: %w", err)
+	}
+	return keys, nextToken, total, nil
+}
+
+// senseNovaAPIKeyWire 是 api-keys 列表响应中单个 key 的原始结构。
+type senseNovaAPIKeyWire struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayname"`
+	KeyType     string `json:"key_type"`
+	APIKey      string `json:"api_key"`
+	CreateTime  string `json:"create_time"`
+	Status      string `json:"status"`
+	IsDefault   bool   `json:"is_default"`
+}
+
+// senseNovaAPIKeysWire 是 api-keys 列表响应（含分页信息）。
+type senseNovaAPIKeysWire struct {
+	APIKeys       []senseNovaAPIKeyWire `json:"api_keys"`
+	NextPageToken string                `json:"next_page_token"`
+	TotalCount    int                   `json:"total_count"`
+}
+
+// parseSenseNovaAPIKeys 解析 api-keys 列表响应，返回 key 列表、下一页 token 与
+// 服务端声明的总数；字符串字段做 trim，避免上游多余空白。
+func parseSenseNovaAPIKeys(body []byte) ([]SenseNovaAPIKey, string, int, error) {
+	var wire senseNovaAPIKeysWire
+	if err := common.Unmarshal(body, &wire); err != nil {
+		return nil, "", 0, fmt.Errorf("invalid api-keys json: %w", err)
+	}
+	keys := make([]SenseNovaAPIKey, 0, len(wire.APIKeys))
+	for _, k := range wire.APIKeys {
+		keys = append(keys, SenseNovaAPIKey{
+			ID:          strings.TrimSpace(k.ID),
+			DisplayName: strings.TrimSpace(k.DisplayName),
+			APIKey:      strings.TrimSpace(k.APIKey),
+			KeyType:     strings.TrimSpace(k.KeyType),
+			Status:      strings.TrimSpace(k.Status),
+			IsDefault:   k.IsDefault,
+			CreateTime:  strings.TrimSpace(k.CreateTime),
+		})
+	}
+	return keys, strings.TrimSpace(wire.NextPageToken), wire.TotalCount, nil
+}
+
+// DeleteSenseNovaAPIKey 删除渠道账号下指定 API key：带缓存登录 → DELETE；
+// token 失效（401/403）时作废缓存重登并重试一次；2xx 视为成功。
+func DeleteSenseNovaAPIKey(channelID int, username, password, proxy, keyID string) error {
+	client, err := GetHttpClientWithProxy(proxy)
+	if err != nil {
+		return err
+	}
+	return deleteSenseNovaAPIKeyWithClient(client, channelID, username, password, keyID)
+}
+
+// deleteSenseNovaAPIKeyWithClient 在给定 client（transport 已按渠道代理配置）上
+// 执行带缓存登录 → DELETE；token 失效时重登重试一次。
+func deleteSenseNovaAPIKeyWithClient(client *http.Client, channelID int, username, password, keyID string) error {
+	token, err := getSenseNovaTokenWithClient(client, channelID, username, password)
+	if err != nil {
+		return err
+	}
+	err = doDeleteSenseNovaAPIKeyWithClient(client, token.AccessToken, keyID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, errSenseNovaTokenInvalid) {
+		return err
+	}
+	// 访问令牌失效：作废缓存并完整重登后重试一次。
+	invalidateSenseNovaToken(channelID, username, password)
+	token, err = getSenseNovaTokenWithClient(client, channelID, username, password)
+	if err != nil {
+		return err
+	}
+	return doDeleteSenseNovaAPIKeyWithClient(client, token.AccessToken, keyID)
+}
+
+// doDeleteSenseNovaAPIKeyWithClient 发送单次删除请求；401/403 视为令牌失效。
+func doDeleteSenseNovaAPIKeyWithClient(client *http.Client, accessToken, keyID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), senseNovaPoolUsageTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, senseNovaAPIKeysURL+"/"+url.PathEscape(keyID), nil)
+	if err != nil {
+		return fmt.Errorf("删除 API key 失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", senseNovaUserAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("删除 API key 失败: %w", err)
+	}
+	if _, err := readSenseNovaBody(resp); err != nil {
+		return fmt.Errorf("删除 API key 失败: %w", err)
+	}
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return fmt.Errorf("%w", errSenseNovaTokenInvalid)
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		return fmt.Errorf("删除 API key 失败: 接口返回 %d", resp.StatusCode)
+	}
+	return nil
 }

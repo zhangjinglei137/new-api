@@ -7430,6 +7430,13 @@
     "The upstream response did not include recognizable usage data.": "上流の応答に認識可能な使用量データが含まれていませんでした。",
     "{{count}} requests": "{{count}} リクエスト",
     "{{count}} tokens": "{{count}} トークン",
-    "Status: ": "ステータス："
+    "Status: ": "ステータス：",
+    "API key deleted": "APIキーを削除しました",
+    "Delete API key": "APIキーを削除",
+    "Failed to fetch API keys": "APIキーの取得に失敗しました",
+    "Loading API keys...": "APIキーを読み込み中...",
+    "No API keys": "APIキーがありません",
+    "In use": "使用中",
+    "Are you sure you want to delete the API key \"{{name}}\"? This action cannot be undone.": "APIキー「{{name}}」を削除してもよろしいですか？この操作は元に戻せません。"
   }
 }

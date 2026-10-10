@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown,
   ChevronUp,
@@ -23,10 +24,16 @@ import {
   Info,
   Loader2,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
+import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -34,20 +41,26 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { toIntlLocale } from '@/i18n/languages'
+import { handleServerError } from '@/lib/handle-server-error'
 import dayjs from '@/lib/dayjs'
 import { formatDateTimeStr } from '@/lib/format'
-import { toIntlLocale } from '@/i18n/languages'
 import { cn } from '@/lib/utils'
 
-import type {
-  SenseNovaUsagePool,
-  SenseNovaUsageResponse as BaseSenseNovaUsageResponse,
-  SenseNovaUsageWindow,
+import {
+  deleteSenseNovaAPIKey,
+  getSenseNovaAPIKeys,
+  type SenseNovaAPIKey,
+  type SenseNovaUsagePool,
+  type SenseNovaUsageResponse as BaseSenseNovaUsageResponse,
+  type SenseNovaUsageWindow,
 } from '../../api'
 
 import { UsageDialogShell } from './usage/usage-dialog-shell'
-import type { UsageErrorCopy } from './usage/use-usage-dialog-state'
-import { useUsageDialogState } from './usage/use-usage-dialog-state'
+import {
+  type UsageErrorCopy,
+  useUsageDialogState,
+} from './usage/use-usage-dialog-state'
 
 /**
  * Stable error codes returned by the backend. The dialog branches on these
@@ -310,6 +323,150 @@ function PoolCard(props: {
   )
 }
 
+function APIKeyRow(props: { apiKey: SenseNovaAPIKey; channelId: number }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteSenseNovaAPIKey(props.channelId, props.apiKey.id),
+    onSuccess: (result) => {
+      if (!result.success) {
+        handleServerError(result, t('Failed to delete API key'))
+        return
+      }
+      setConfirmOpen(false)
+      toast.success(t('API key deleted'))
+      void queryClient.invalidateQueries({
+        queryKey: ['sensenova-api-keys', props.channelId],
+      })
+    },
+    onError: (error) => {
+      handleServerError(error, t('Failed to delete API key'))
+    },
+  })
+
+  return (
+    <li className='p-4'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0 flex-1 space-y-1.5'>
+          <div className='flex flex-wrap items-center gap-1.5'>
+            <span className='truncate text-sm font-medium'>
+              {props.apiKey.display_name}
+            </span>
+            {props.apiKey.is_default && (
+              <Badge variant='secondary'>{t('Default')}</Badge>
+            )}
+            {props.apiKey.in_use && (
+              <Badge variant='default'>{t('In use')}</Badge>
+            )}
+          </div>
+          <div className='text-muted-foreground font-mono break-all text-xs'>
+            {props.apiKey.api_key}
+          </div>
+          <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>
+            {props.apiKey.status && (
+              <Badge variant='outline'>{props.apiKey.status}</Badge>
+            )}
+            <span>{formatTime(props.apiKey.create_time)}</span>
+          </div>
+        </div>
+        {!props.apiKey.in_use && (
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            aria-label={t('Delete API key')}
+            onClick={() => setConfirmOpen(true)}
+          >
+            {t('Delete')}
+          </Button>
+        )}
+      </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={t('Delete API key')}
+        desc={t(
+          'Are you sure you want to delete the API key "{{name}}"? This action cannot be undone.',
+          { name: props.apiKey.display_name }
+        )}
+        confirmText={t('Delete')}
+        destructive
+        isLoading={deleteMutation.isPending}
+        handleConfirm={() => deleteMutation.mutate()}
+      />
+    </li>
+  )
+}
+
+function APIKeysSection(props: {
+  open: boolean
+  channelId: number | undefined
+}) {
+  const { t } = useTranslation()
+  const keysQuery = useQuery({
+    queryKey: ['sensenova-api-keys', props.channelId],
+    queryFn: () => getSenseNovaAPIKeys(props.channelId ?? 0),
+    enabled: props.open && props.channelId !== undefined,
+  })
+  const response = keysQuery.data
+  const fetchFailed =
+    keysQuery.isError || (response !== undefined && !response.success)
+  const keys =
+    response?.success && Array.isArray(response.data?.keys)
+      ? response.data.keys
+      : []
+  let failureDescription: string | undefined
+  if (!response?.success && response?.message) {
+    failureDescription = response.message
+  } else if (keysQuery.isError && keysQuery.error instanceof Error) {
+    failureDescription = keysQuery.error.message
+  }
+
+  let body: ReactNode
+  if (keysQuery.isPending) {
+    body = (
+      <LoadingState
+        size='sm'
+        message={t('Loading API keys...')}
+        className='min-h-0 py-8'
+      />
+    )
+  } else if (fetchFailed) {
+    body = (
+      <ErrorState
+        title={t('Failed to fetch API keys')}
+        description={failureDescription}
+        onRetry={() => void keysQuery.refetch()}
+        className='min-h-0 py-8'
+      />
+    )
+  } else if (keys.length === 0) {
+    body = <EmptyState title={t('No API keys')} className='min-h-0 py-8' />
+  } else {
+    body = (
+      <ul className='divide-y'>
+        {keys.map((apiKey) => (
+          <APIKeyRow
+            key={apiKey.id}
+            apiKey={apiKey}
+            channelId={props.channelId ?? 0}
+          />
+        ))}
+      </ul>
+    )
+  }
+
+  return (
+    <Card className='overflow-hidden'>
+      <CardHeader className='border-b bg-muted/20 p-4'>
+        <CardTitle className='text-base'>{t('API keys')}</CardTitle>
+      </CardHeader>
+      <CardContent className='p-0'>{body}</CardContent>
+    </Card>
+  )
+}
+
 /**
  * SenseNova maps failures through the stable backend `error_code` instead of
  * matching Chinese message text.
@@ -397,6 +554,7 @@ export function SenseNovaUsageDialog(props: SenseNovaUsageDialogProps) {
           <span>{t('Using a dedicated pool earns rewards for the general pool.')}</span>
         </div>
       )}
+      <APIKeysSection open={props.open} channelId={props.channelId} />
     </UsageDialogShell>
   )
 }

@@ -7430,6 +7430,13 @@
     "The upstream response did not include recognizable usage data.": "上游响应中未包含可识别的用量数据。",
     "{{count}} requests": "{{count}} 个请求",
     "{{count}} tokens": "{{count}} 个 Token",
-    "Status: ": "状态："
+    "Status: ": "状态：",
+    "API key deleted": "API 密钥已删除",
+    "Delete API key": "删除 API 密钥",
+    "Failed to fetch API keys": "获取 API 密钥失败",
+    "Loading API keys...": "正在加载 API 密钥...",
+    "No API keys": "暂无 API 密钥",
+    "In use": "使用中",
+    "Are you sure you want to delete the API key \"{{name}}\"? This action cannot be undone.": "确定要删除 API 密钥“{{name}}”吗？此操作无法撤销。"
   }
 }

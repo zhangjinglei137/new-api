@@ -7430,6 +7430,13 @@
     "The upstream response did not include recognizable usage data.": "The upstream response did not include recognizable usage data.",
     "{{count}} requests": "{{count}} requests",
     "{{count}} tokens": "{{count}} tokens",
-    "Status: ": "Status: "
+    "Status: ": "Status: ",
+    "API key deleted": "API key deleted",
+    "Delete API key": "Delete API key",
+    "Failed to fetch API keys": "Failed to fetch API keys",
+    "Loading API keys...": "Loading API keys...",
+    "No API keys": "No API keys",
+    "In use": "In use",
+    "Are you sure you want to delete the API key \"{{name}}\"? This action cannot be undone.": "Are you sure you want to delete the API key \"{{name}}\"? This action cannot be undone."
   }
 }

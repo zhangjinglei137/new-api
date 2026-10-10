@@ -712,6 +712,45 @@ export async function getSenseNovaUsage(
   return res.data
 }
 
+export type SenseNovaAPIKey = {
+  id: string
+  display_name: string
+  api_key: string
+  key_type: string
+  status: string
+  is_default: boolean
+  create_time: string
+  in_use: boolean
+}
+
+export type SenseNovaAPIKeysResponse = {
+  success: boolean
+  message?: string
+  error_code?: string
+  data?: { keys: SenseNovaAPIKey[] }
+}
+
+export async function getSenseNovaAPIKeys(
+  channelId: number
+): Promise<SenseNovaAPIKeysResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/sensenova/api-keys`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+export async function deleteSenseNovaAPIKey(
+  channelId: number,
+  keyId: string
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.delete(
+    `/api/channel/${channelId}/sensenova/api-keys/${keyId}`,
+    channelActionConfig()
+  )
+  return res.data
+}
+
 // ============================================================================
 // Multi-Key Management
 // ============================================================================

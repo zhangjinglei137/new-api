@@ -7430,6 +7430,13 @@
     "The upstream response did not include recognizable usage data.": "上游回應中未包含可識別的用量資料。",
     "{{count}} requests": "{{count}} 個請求",
     "{{count}} tokens": "{{count}} 個 Token",
-    "Status: ": "狀態："
+    "Status: ": "狀態：",
+    "API key deleted": "API 金鑰已刪除",
+    "Delete API key": "刪除 API 金鑰",
+    "Failed to fetch API keys": "取得 API 金鑰失敗",
+    "Loading API keys...": "正在載入 API 金鑰...",
+    "No API keys": "沒有 API 金鑰",
+    "In use": "使用中",
+    "Are you sure you want to delete the API key \"{{name}}\"? This action cannot be undone.": "確定要刪除 API 金鑰「{{name}}」嗎？此操作無法復原。"
   }
 }
